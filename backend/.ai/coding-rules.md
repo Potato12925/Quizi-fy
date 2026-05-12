@@ -20,6 +20,7 @@
 - Database access only
 - No business logic
 - Reusable queries
+- If code anything that use database, read .ai/database/README.md
 
 ## ERRORS
 - Use custom exceptions

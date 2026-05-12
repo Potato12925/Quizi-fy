@@ -1,6 +1,6 @@
 ﻿from fastapi import FastAPI
 
-from routes.health_route import router as health_router
+from routes.router_registry import register_routes
 
 app = FastAPI(
     title='Quizi-fy Backend',
@@ -8,7 +8,7 @@ app = FastAPI(
     description='Backend API for Quizi-fy',
 )
 
-app.include_router(health_router, prefix='/api/v1', tags=['Health'])
+register_routes(app)
 
 
 if __name__ == '__main__':

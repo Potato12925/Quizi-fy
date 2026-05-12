@@ -1,4 +1,4 @@
-﻿﻿from fastapi import FastAPI
+﻿from fastapi import FastAPI
 
 from routes.health_route import router as health_router
 

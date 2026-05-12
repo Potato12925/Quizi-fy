@@ -4,9 +4,8 @@
 
 - Python 3.12
 - FastAPI
-- Supabase
+- Supabase (include build ORM of tables)
 - PostgreSQL
-- SQLAlchemy 2.0
 - Pydantic v2
 - Redis
 - Celery

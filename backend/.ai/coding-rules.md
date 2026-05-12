@@ -5,8 +5,6 @@
 - Use type hints
 - Use dependency injection
 - Use Pydantic v2
-- Use SQLAlchemy 2.0 style
-
 ## CONTROLLERS
 - Thin controllers only
 - No business logic

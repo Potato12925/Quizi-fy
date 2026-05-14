@@ -1,23 +1,111 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import type { UserRole } from '@/api/authApi';
+import { supabase } from '@/api/supabaseClient';
 
 type RoleType = 'teacher' | 'student';
+const OAUTH_STATE_KEY = 'google_oauth_state';
+
+const getDashboardByRoles = (roles: UserRole[]): string => {
+  if (roles.includes('student')) {
+    return '/student/dashboard';
+  }
+
+  if (roles.includes('teacher')) {
+    return '/teacher/dashboard';
+  }
+
+  if (roles.includes('admin')) {
+    return '/admin/dashboard';
+  }
+
+  return '/student/dashboard';
+};
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { isAuthenticated, user, isLoading } = useAuth();
+  const { isAuthenticated, user, isLoading, login } = useAuth();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [error, setError] = useState('');
 
   const [selectedRoles, setSelectedRoles] = useState<RoleType[]>([]);
+  const [oauthProcessing, setOauthProcessing] = useState(false);
 
   React.useEffect(() => {
     if (isAuthenticated && user) {
-      navigate(`/${user.role}/dashboard`, { replace: true });
+      navigate(getDashboardByRoles(user.roles), { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
+
+  React.useEffect(() => {
+    const finishGoogleOAuth = async () => {
+      const hasOauthParams =
+        window.location.hash.includes('provider_token') ||
+        window.location.hash.includes('id_token') ||
+        window.location.search.includes('code=');
+
+      if (!hasOauthParams || oauthProcessing || isAuthenticated) {
+        return;
+      }
+
+      setOauthProcessing(true);
+      setError('');
+
+      try {
+        const savedStateRaw = sessionStorage.getItem(OAUTH_STATE_KEY);
+        const savedState = savedStateRaw
+          ? (JSON.parse(savedStateRaw) as { mode: 'login' | 'register'; roles: RoleType[] })
+          : null;
+
+        if (savedState) {
+          setMode(savedState.mode);
+          setSelectedRoles(savedState.roles ?? []);
+        }
+
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError) {
+          throw sessionError;
+        }
+
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        const searchParams = new URLSearchParams(window.location.search);
+
+        const googleToken =
+          hashParams.get('id_token') ||
+          hashParams.get('provider_token') ||
+          searchParams.get('id_token') ||
+          sessionData.session?.provider_token;
+
+        if (!googleToken) {
+          throw new Error('Khong lay duoc Google token tu Supabase session.');
+        }
+
+        const rolesForRequest: UserRole[] =
+          savedState?.mode === 'register' && (savedState.roles?.length ?? 0) > 0
+            ? savedState.roles
+            : ['student'];
+
+        const loggedInUser = await login({
+          token: googleToken,
+          token_type: 'id_token',
+          roles: rolesForRequest,
+        });
+
+        sessionStorage.removeItem(OAUTH_STATE_KEY);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        navigate(getDashboardByRoles(loggedInUser.roles), { replace: true });
+      } catch (err: any) {
+        setError(err.message || 'Google authentication that bai.');
+      } finally {
+        setOauthProcessing(false);
+      }
+    };
+
+    void finishGoogleOAuth();
+  }, [isAuthenticated, login, navigate, oauthProcessing]);
 
   const toggleRole = (role: RoleType) => {
     setSelectedRoles((prev) => {
@@ -33,21 +121,26 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // TODO:
-      // Thay bằng Google OAuth thật của bạn
-      // Ví dụ:
-      // await loginWithGoogle({
-      //    mode,
-      //    roles: selectedRoles
-      // });
+      sessionStorage.setItem(
+        OAUTH_STATE_KEY,
+        JSON.stringify({
+          mode,
+          roles: selectedRoles,
+        })
+      );
 
-      console.log('Mode:', mode);
-      console.log('Selected Roles:', selectedRoles);
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/login`,
+        },
+      });
 
-      // Fake navigate
-      navigate('/student/dashboard');
+      if (oauthError) {
+        throw oauthError;
+      }
     } catch (err: any) {
-      setError(err.message || 'Google authentication thất bại.');
+      setError(err.message || 'Google authentication that bai.');
     }
   };
 

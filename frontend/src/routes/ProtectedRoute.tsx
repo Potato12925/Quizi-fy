@@ -10,6 +10,22 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   const { user, isAuthenticated, isLoading } = useAuth();
 
+  const getDefaultDashboard = (roles: UserRole[]) => {
+    if (roles.includes('student')) {
+      return '/student/dashboard';
+    }
+
+    if (roles.includes('teacher')) {
+      return '/teacher/dashboard';
+    }
+
+    if (roles.includes('admin')) {
+      return '/admin/dashboard';
+    }
+
+    return '/login';
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -25,9 +41,11 @@ export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!allowedRoles.includes(user.role)) {
+  const hasAccess = user.roles.some((role) => allowedRoles.includes(role));
+
+  if (!hasAccess) {
     // Redirect to correct dashboard
-    return <Navigate to={`/${user.role}/dashboard`} replace />;
+    return <Navigate to={getDefaultDashboard(user.roles)} replace />;
   }
 
   return <Outlet />;

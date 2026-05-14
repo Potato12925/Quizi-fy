@@ -1,75 +1,80 @@
-import { api } from './client';
-
+import { api, type ApiResponse } from './client';
 export type UserRole = 'admin' | 'teacher' | 'student';
 
 export interface AuthUser {
-  id: string;
-  name: string;
+  user_id: number;
   email: string;
-  role: UserRole;
-  [key: string]: any; // Allow other fields like avatar, etc.
+  roles: UserRole[];
 }
 
 export interface LoginRequest {
-  email: string;
-  password?: string;
+  token: string;
+  token_type: 'id_token';
+  roles: UserRole[];
+}
+
+interface BackendLoginResponse {
+  success: boolean;
+  message: string;
+  data: {
+    access_token: string;
+    token_type: string;
+    is_new_user: boolean;
+    user: {
+      user_id: number;
+      google_id: string;
+      email: string;
+      full_name: string;
+      is_active: boolean;
+      roles: UserRole[];
+    };
+  };
+  meta: any;
 }
 
 export interface LoginResponse {
   accessToken: string;
   user: AuthUser;
+  isNewUser: boolean;
 }
 
 /**
- * Gọi POST /auth/google-login
+ * POST /auth/google-login
  */
-export const loginApi = async (data: LoginRequest): Promise<LoginResponse> => {
-  try {
-    return await api.post<LoginResponse>('/auth/google-login', data);
-  } catch (error) {
-    console.warn('Backend endpoint /auth/google-login not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        // Simple mock logic based on email
-        const email = data.email.toLowerCase();
-        let role: UserRole = 'student';
-        if (email.includes('admin')) role = 'admin';
-        else if (email.includes('gv')) role = 'teacher';
+export const loginApi = async (
+  payload: LoginRequest
+): Promise<LoginResponse> => {
 
-        resolve({
-          accessToken: 'mock_jwt_token_123',
-          user: {
-            id: 'u_123',
-            name: email.split('@')[0],
-            email: email,
-            role: role
-          }
-        });
-      }, 500);
-    });
-  }
+  const response = await api.post<BackendLoginResponse>(
+    '/auth/google-login',
+    payload
+  );
+
+  const result = response.data;
+
+  return {
+    accessToken: result.access_token,
+
+    isNewUser: result.is_new_user,
+
+    user: {
+      user_id: result.user.user_id,
+      email: result.user.email,
+      roles: result.user.roles,
+    },
+  };
 };
-
 /**
  * Gọi GET /auth/me
  */
 export const getCurrentUserApi = async (): Promise<AuthUser> => {
   try {
-    return await api.get<AuthUser>('/auth/me');
+    const res = await api.get<ApiResponse<AuthUser>>('/auth/me');
+
+    return res.data;
   } catch (error) {
-    console.warn('Backend endpoint /auth/me not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          id: 'u_123',
-          name: 'Mock User',
-          email: 'mock@quizify.local',
-          role: 'student'
-        });
-      }, 500);
-    });
+    console.warn('Failed to fetch current user', error);
+    throw error;
   }
 };
 
@@ -80,8 +85,7 @@ export const logoutApi = async (): Promise<void> => {
   try {
     return await api.post<void>('/auth/logout');
   } catch (error) {
-    console.warn('Backend endpoint /auth/logout not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve) => setTimeout(resolve, 500));
+    console.warn('Failed to logout', error);
+    throw error;
   }
 };

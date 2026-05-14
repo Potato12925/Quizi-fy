@@ -1,5 +1,39 @@
 import { api } from './client';
 
+// Database Schema Models
+export interface DbPracticeSet {
+  practice_set_id: number;
+  student_id: number;
+  subject_id: number;
+  topic_id?: number;
+  difficulty: string;
+  num_questions_requested: number;
+  num_questions_actual?: number;
+  time_limit_minutes?: number;
+  created_at: string;
+}
+
+export interface DbPracticeAttempt {
+  attempt_id: number;
+  practice_set_id: number;
+  started_at: string;
+  submitted_at?: string;
+  score?: number;
+  total_correct?: number;
+  total_wrong?: number;
+  status: string;
+}
+
+export interface DbStudentAnswer {
+  answer_id: number;
+  attempt_id: number;
+  question_id: number;
+  selected_option_id?: number;
+  is_correct?: boolean;
+  answered_at: string;
+}
+
+// UI Models
 export interface SubjectStat {
   id: string;
   name: string;
@@ -134,6 +168,17 @@ export interface StudentResultData {
   questions: ResultQuestion[];
 }
 
+// Mappers
+export const mapDbPracticeAttemptToHistoryItem = (db: DbPracticeAttempt, subjectName: string = 'N/A'): HistoryItem => ({
+  id: db.attempt_id,
+  subject: subjectName,
+  date: new Date(db.started_at).toLocaleDateString('vi-VN'),
+  score: db.total_correct || 0,
+  total: (db.total_correct || 0) + (db.total_wrong || 0),
+  time: db.submitted_at ? '15:00' : '--:--', // Duration calculation or mock
+  status: (db.score || 0) >= 8 ? 'Giỏi' : (db.score || 0) >= 5 ? 'Khá' : 'TB',
+});
+
 /**
  * GET /student/dashboard
  */
@@ -172,19 +217,18 @@ export const getStudentDashboard = async (): Promise<StudentDashboardData> => {
  */
 export const getStudentHistory = async (): Promise<HistoryItem[]> => {
   try {
-    return await api.get<HistoryItem[]>('/student/history');
+    const dbAttempts = await api.get<DbPracticeAttempt[]>('/student/history');
+    return dbAttempts.map(a => mapDbPracticeAttemptToHistoryItem(a, 'Môn học Mock'));
   } catch (error) {
     console.warn('Backend endpoint /student/history not ready. Using fallback mock data.', error);
     // TODO: Replace fallback mock when backend endpoint is ready
     return new Promise((resolve) => {
       setTimeout(() => {
-        resolve([
-          { id: 1, subject: 'Mạng máy tính', date: '25/04/2024', score: 8, total: 10, time: '12:45', status: 'Giỏi' },
-          { id: 2, subject: 'Cấu trúc dữ liệu', date: '24/04/2024', score: 9, total: 10, time: '15:20', status: 'Xuất sắc' },
-          { id: 3, subject: 'Lập trình hướng đối tượng', date: '23/04/2024', score: 6, total: 10, time: '18:10', status: 'Khá' },
-          { id: 4, subject: 'Cơ sở dữ liệu', date: '22/04/2024', score: 7, total: 10, time: '14:30', status: 'Khá' },
-          { id: 5, subject: 'Mạng máy tính', date: '21/04/2024', score: 5, total: 10, time: '20:00', status: 'TB' },
-        ]);
+        const mockAttempts: DbPracticeAttempt[] = [
+          { attempt_id: 1, practice_set_id: 1, started_at: '2024-04-25T10:00:00Z', submitted_at: '2024-04-25T10:12:45Z', score: 8.0, total_correct: 8, total_wrong: 2, status: 'submitted' },
+          { attempt_id: 2, practice_set_id: 2, started_at: '2024-04-24T15:00:00Z', submitted_at: '2024-04-24T15:15:20Z', score: 9.0, total_correct: 9, total_wrong: 1, status: 'submitted' },
+        ];
+        resolve(mockAttempts.map(a => mapDbPracticeAttemptToHistoryItem(a, 'Cấu trúc dữ liệu')));
       }, 500);
     });
   }

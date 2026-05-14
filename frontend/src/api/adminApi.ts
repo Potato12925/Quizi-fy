@@ -1,7 +1,29 @@
 import { api } from './client';
 
 // Types derived from existing UI mock data
+// Database Schema Models
+export interface DbClass {
+  class_id: number;
+  class_code: string;
+  class_name: string;
+  description?: string;
+  owner_id: number;
+  status: string;
+  created_at: string;
+}
+
+export interface DbSubject {
+  subject_id: number;
+  subject_code: string;
+  subject_name: string;
+  description?: string;
+  status: string;
+  created_at: string;
+}
+
+// UI Models (keeping compatible with existing UI)
 export interface AdminUser {
+  id: string;
   name: string;
   email: string;
   role: string;
@@ -9,19 +31,19 @@ export interface AdminUser {
   status: string;
   initial?: string;
   img?: string;
-  code?: string; // from AdminUsers student
-  class?: string; // from AdminUsers student
-  subjects?: string[]; // from AdminUsers teacher
-  id?: string;
+  code?: string;
+  class?: string;
+  subjects?: string[];
 }
 
 export interface AdminClass {
   id: string;
-  dept?: string; // from Dashboard
-  major?: string; // from AdminClasses
+  code: string;
+  name: string;
+  dept?: string;
+  major?: string;
   students: number;
-  name?: string; // from AdminClasses
-  status?: string; // from AdminClasses
+  status: string;
 }
 
 export interface AdminSubject {
@@ -32,6 +54,25 @@ export interface AdminSubject {
   teacher: string;
   classes: number;
 }
+
+// Mappers
+export const mapDbClassToAdminClass = (db: DbClass, studentCount: number = 0): AdminClass => ({
+  id: db.class_id.toString(),
+  code: db.class_code,
+  name: db.class_name,
+  dept: 'Khoa CNTT 1', // Placeholder
+  students: studentCount,
+  status: db.status === 'active' ? 'Hoạt động' : 'Bị khóa',
+});
+
+export const mapDbSubjectToAdminSubject = (db: DbSubject, teacherName: string = 'N/A', classesCount: number = 0): AdminSubject => ({
+  id: db.subject_id.toString(),
+  name: db.subject_name,
+  code: db.subject_code,
+  credits: 3, // Placeholder or from DB if available
+  teacher: teacherName,
+  classes: classesCount,
+});
 
 export interface DashboardStats {
   totalUsers: number;
@@ -61,13 +102,13 @@ export const getAdminDashboardStats = async (): Promise<DashboardStats> => {
           approvedQuestions: '45K+',
           activityGrowth: '+18%',
           users: [
-            { name: 'Nguyễn Văn Hùng', email: 'hung.nv@ptit.edu.vn', role: 'GIẢNG VIÊN', dept: 'Khoa CNTT 1', status: 'Hoạt động', initial: 'NH' },
-            { name: 'Trần Thị Mai', email: 'mai.tt@student.ptit.edu.vn', role: 'SINH VIÊN', dept: 'D21CQCN04-B', status: 'Hoạt động', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBuQl1RZD-kRNkSRTfA1SEFEjdKoYR9214tXXINxvQ9b3Tr5v8IwFvh-8vC1Ig_r65LtOEaDuCRgy4-GW50cYEou0DVtZZcKleHZZSfwiLMP2bjTObt4AscZiomzWzCK1TG5VUm2IYnTmEVKp-FkdHizyYpf-7E_yenOOfMj-X4ST9fc4XZQMbX0htIy63cNYJnAspYPyYE01O71_QR3xFYoPO_cOzMACc5tl0odiUZEdjjMw0A05x8FAC5EbZkVUHanSo3EC5YjSk' },
-            { name: 'Lê Anh Tuấn', email: 'tuan.la@student.ptit.edu.vn', role: 'SINH VIÊN', dept: 'D20CQAT01-N', status: 'Ngoại tuyến', initial: 'LA' },
+            { id: '1', name: 'Nguyễn Văn Hùng', email: 'hung.nv@ptit.edu.vn', role: 'GIẢNG VIÊN', dept: 'Khoa CNTT 1', status: 'Hoạt động', initial: 'NH' },
+            { id: '2', name: 'Trần Thị Mai', email: 'mai.tt@student.ptit.edu.vn', role: 'SINH VIÊN', dept: 'D21CQCN04-B', status: 'Hoạt động', img: 'https://lh3.googleusercontent.com/aida-public/...' },
+            { id: '3', name: 'Lê Anh Tuấn', email: 'tuan.la@student.ptit.edu.vn', role: 'SINH VIÊN', dept: 'D20CQAT01-N', status: 'Ngoại tuyến', initial: 'LA' },
           ],
           classes: [
-            { id: 'D21CQCN04-B', dept: 'Khoa Công nghệ thông tin 1', students: 85 },
-            { id: 'D20CQAT01-N', dept: 'Khoa An toàn thông tin', students: 62 },
+            mapDbClassToAdminClass({ class_id: 1, class_code: 'D21CQCN04-B', class_name: 'D21CQCN04-B', owner_id: 1, status: 'active', created_at: '' }, 85),
+            mapDbClassToAdminClass({ class_id: 2, class_code: 'D20CQAT01-N', class_name: 'D20CQAT01-N', owner_id: 1, status: 'active', created_at: '' }, 62),
           ]
         });
       }, 500);
@@ -80,6 +121,8 @@ export const getAdminDashboardStats = async (): Promise<DashboardStats> => {
  */
 export const getUsers = async (): Promise<{ students: AdminUser[], teachers: AdminUser[] }> => {
   try {
+    // Backend would return { students: DbUser[], teachers: DbUser[] }
+    // We would map them using authApi's mapper or local ones
     return await api.get<{ students: AdminUser[], teachers: AdminUser[] }>('/admin/users');
   } catch (error) {
     console.warn('Backend endpoint /admin/users not ready. Using fallback mock data.', error);
@@ -107,16 +150,17 @@ export const getUsers = async (): Promise<{ students: AdminUser[], teachers: Adm
  */
 export const getClasses = async (): Promise<AdminClass[]> => {
   try {
-    return await api.get<AdminClass[]>('/admin/classes');
+    const dbClasses = await api.get<DbClass[]>('/admin/classes');
+    return dbClasses.map(c => mapDbClassToAdminClass(c, 40));
   } catch (error) {
     console.warn('Backend endpoint /admin/classes not ready. Using fallback mock data.', error);
     // TODO: Replace fallback mock when backend endpoint is ready
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve([
-          { id: '1', name: 'D21CQCN01-B', major: 'Công nghệ thông tin', students: 45, status: 'Đang hoạt động' },
-          { id: '2', name: 'D21CQCN02-B', major: 'Công nghệ thông tin', students: 42, status: 'Đang hoạt động' },
-          { id: '3', name: 'D21CQCN03-B', major: 'An toàn thông tin', students: 38, status: 'Đã khóa' },
+          mapDbClassToAdminClass({ class_id: 1, class_code: 'CN01', class_name: 'D21CQCN01-B', owner_id: 1, status: 'active', created_at: '' }, 45),
+          mapDbClassToAdminClass({ class_id: 2, class_code: 'CN02', class_name: 'D21CQCN02-B', owner_id: 1, status: 'active', created_at: '' }, 42),
+          mapDbClassToAdminClass({ class_id: 3, class_code: 'CN03', class_name: 'D21CQCN03-B', owner_id: 1, status: 'inactive', created_at: '' }, 38),
         ]);
       }, 500);
     });
@@ -128,16 +172,17 @@ export const getClasses = async (): Promise<AdminClass[]> => {
  */
 export const getSubjects = async (): Promise<AdminSubject[]> => {
   try {
-    return await api.get<AdminSubject[]>('/admin/subjects');
+    const dbSubjects = await api.get<DbSubject[]>('/admin/subjects');
+    return dbSubjects.map(s => mapDbSubjectToAdminSubject(s, 'GV Mock', 2));
   } catch (error) {
     console.warn('Backend endpoint /admin/subjects not ready. Using fallback mock data.', error);
     // TODO: Replace fallback mock when backend endpoint is ready
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve([
-          { id: '1', name: 'Mạng máy tính', code: 'INT1339', credits: 3, teacher: 'TS. Nguyễn Văn A', classes: 3 },
-          { id: '2', name: 'Cấu trúc dữ liệu và Giải thuật', code: 'INT1306', credits: 4, teacher: 'ThS. Trần Thị B', classes: 5 },
-          { id: '3', name: 'Hệ điều hành', code: 'INT1313', credits: 3, teacher: 'Chưa gán', classes: 2 },
+          mapDbSubjectToAdminSubject({ subject_id: 1, subject_code: 'INT1339', subject_name: 'Mạng máy tính', status: 'active', created_at: '' }, 'TS. Nguyễn Văn A', 3),
+          mapDbSubjectToAdminSubject({ subject_id: 2, subject_code: 'INT1306', subject_name: 'Cấu trúc dữ liệu và Giải thuật', status: 'active', created_at: '' }, 'ThS. Trần Thị B', 5),
+          mapDbSubjectToAdminSubject({ subject_id: 3, subject_code: 'INT1313', subject_name: 'Hệ điều hành', status: 'active', created_at: '' }, 'Chưa gán', 2),
         ]);
       }, 500);
     });

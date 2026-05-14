@@ -21,13 +21,13 @@ export interface LoginResponse {
 }
 
 /**
- * Gọi POST /auth/login
+ * Gọi POST /auth/google-login
  */
 export const loginApi = async (data: LoginRequest): Promise<LoginResponse> => {
   try {
-    return await api.post<LoginResponse>('/auth/login', data);
+    return await api.post<LoginResponse>('/auth/google-login', data);
   } catch (error) {
-    console.warn('Backend endpoint /auth/login not ready. Using fallback mock data.', error);
+    console.warn('Backend endpoint /auth/google-login not ready. Using fallback mock data.', error);
     // TODO: Replace fallback mock when backend endpoint is ready
     return new Promise((resolve, reject) => {
       setTimeout(() => {

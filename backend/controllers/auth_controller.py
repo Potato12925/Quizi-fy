@@ -96,7 +96,6 @@ async def get_me_route(
   
 
 
-
 @router.post("/set-role", summary="Set role for current user")
 async def post_set_role(
     payload: SetRoleRequest,

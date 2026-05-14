@@ -18,7 +18,7 @@ export class ApiError extends Error {
  */
 export interface ApiResponse<T = any> {
   data: T;
-  status: number;
+  status_code: number;
   message?: string;
 }
 
@@ -30,7 +30,7 @@ export interface RequestOptions extends RequestInit {
   params?: Record<string, string>; // Query parameters
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 /**
  * Core API Client using native fetch

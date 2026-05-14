@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, List
 
 from pydantic import BaseModel, Field
 
@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class GoogleLoginRequest(BaseModel):
     token: str = Field(min_length=1)
     token_type: Literal["id_token", "access_token"] = "id_token"
+    roles: List[Literal["teacher", "student"]] = Field(default_factory=list)
 
 
 class SetRoleRequest(BaseModel):

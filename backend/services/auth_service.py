@@ -51,6 +51,7 @@ def _create_jwt(user: dict, roles: list[str]) -> str:
 
 async def login_with_google(payload: GoogleLoginRequest) -> dict:
     token_payload = await _verify_google_token(payload.token, payload.token_type)
+
     google_id = token_payload.get("sub")
     email = token_payload.get("email")
     full_name = token_payload.get("name") or email
@@ -58,14 +59,49 @@ async def login_with_google(payload: GoogleLoginRequest) -> dict:
     if not google_id or not email:
         raise ValueError("Google token missing required claims")
 
-    user = await find_user_by_google_id_or_email(google_id=google_id, email=email)
+    user = await find_user_by_google_id_or_email(
+        google_id=google_id,
+        email=email,
+    )
+
     is_new_user = False
+
     if not user:
-        user = await create_user(google_id=google_id, email=email, full_name=full_name)
+        user = await create_user(
+            google_id=google_id,
+            email=email,
+            full_name=full_name,
+        )
+
         is_new_user = True
 
-    roles = await find_role_codes_by_user_id(int(user["user_id"]))
-    access_token = _create_jwt(user=user, roles=roles)
+        # =========================
+        # ADD DEFAULT ROLE
+        # =========================
+
+        # nếu frontend không gửi role
+        default_roles = payload.roles or ["student"]
+
+        for role_code in default_roles:
+
+            role_id = await find_role_id_by_code(role_code)
+
+            if role_id is None:
+                continue
+
+            await add_user_role(
+                user_id=int(user["user_id"]),
+                role_id=role_id,
+            )
+
+    roles = await find_role_codes_by_user_id(
+        int(user["user_id"])
+    )
+
+    access_token = _create_jwt(
+        user=user,
+        roles=roles,
+    )
 
     return {
         "access_token": access_token,

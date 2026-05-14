@@ -131,6 +131,11 @@ export interface TeacherResource {
   date: string;
   usage: number;
   subject: string;
+  topic?: string;
+  description?: string;
+  status?: string;
+  subjectId?: number;
+  topicId?: number;
 }
 
 export interface WeakTopic {
@@ -412,31 +417,77 @@ export const getResources = async (): Promise<TeacherResource[]> => {
 /**
  * POST /teacher/resources/upload
  */
-export const uploadResource = async (file: File): Promise<TeacherResource> => {
+export interface UploadResourcePayload {
+  title: string;
+  subject_id: number;
+  topic_id?: number;
+  description?: string;
+  file: File;
+}
+
+export const uploadResource = async (payload: UploadResourcePayload): Promise<TeacherResource> => {
   try {
     const formData = new FormData();
-    formData.append('file', file);
-    return await api.post<TeacherResource>('/teacher/resources/upload', formData, {
-      headers: {
-        // Fetch API automatically sets correct Content-Type with boundary when body is FormData
-        // We just need to make sure we don't accidentally set it to application/json
-        'Content-Type': undefined as any
-      }
+    formData.append('file', payload.file);
+    formData.append('title', payload.title);
+    formData.append('subject_id', payload.subject_id.toString());
+    if (payload.topic_id) formData.append('topic_id', payload.topic_id.toString());
+    if (payload.description) formData.append('description', payload.description);
+
+    const res = await api.post<DbDocument>('/teacher/resources/upload', formData, {
+      headers: { 'Content-Type': undefined as any }
     });
+    return mapDbDocumentToTeacherResource(res, 0, 'Mới tải lên');
   } catch (error) {
     console.warn('Backend endpoint /teacher/resources/upload not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve({
           id: Date.now(),
-          name: file.name,
-          size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+          name: payload.title || payload.file.name,
+          size: `${(payload.file.size / (1024 * 1024)).toFixed(1)} MB`,
           date: new Date().toLocaleDateString('vi-VN'),
           usage: 0,
-          subject: 'Chưa phân loại'
+          subject: 'Kỹ thuật lập trình', // Mock subject name
+          topic: 'Đệ quy' // Mock topic
         });
       }, 1000);
+    });
+  }
+};
+
+/**
+ * PUT /teacher/resources/:id
+ */
+export const updateResource = async (id: number | string, payload: Partial<UploadResourcePayload>): Promise<{ success: boolean; data?: TeacherResource }> => {
+  try {
+    const res = await api.put<{ success: boolean; data: DbDocument }>(`/teacher/resources/${id}`, payload);
+    return { 
+      success: res.success, 
+      data: res.data ? mapDbDocumentToTeacherResource(res.data, 5, 'Cập nhật') : undefined 
+    };
+  } catch (error) {
+    console.warn(`Backend endpoint /teacher/resources/${id} (PUT) not ready. Using fallback mock data.`, error);
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ success: true });
+      }, 500);
+    });
+  }
+};
+
+/**
+ * DELETE /teacher/resources/:id
+ */
+export const deleteResource = async (id: number | string): Promise<{ success: boolean }> => {
+  try {
+    return await api.delete<{ success: boolean }>(`/teacher/resources/${id}`);
+  } catch (error) {
+    console.warn(`Backend endpoint /teacher/resources/${id} (DELETE) not ready. Using fallback mock data.`, error);
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ success: true });
+      }, 500);
     });
   }
 };

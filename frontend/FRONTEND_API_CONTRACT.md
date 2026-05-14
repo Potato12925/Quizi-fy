@@ -53,6 +53,7 @@ Tài liệu này mô tả các giao kèo API (endpoints, format) khớp với Da
 ## 3. Teacher Endpoints
 
 ### POST `/teacher/ai-generator/generate`
+- **Request Body**: `{ "document_id": 50, "num_questions": 10, "difficulty": "medium" }`
 - **Response mẫu (DbQuestion[])**:
   ```json
   [
@@ -67,23 +68,52 @@ Tài liệu này mô tả các giao kèo API (endpoints, format) khớp với Da
   ]
   ```
 
-### GET `/teacher/resources`
-- **Response mẫu (DbDocument[])**:
+### 3.1. Quản lý Tài liệu (Resources)
+
+#### GET `/teacher/resources`
+- **Response**: `DbDocument[]` (Danh sách tài liệu của giáo viên đó).
+
+#### POST `/teacher/resources/upload`
+- **Content-Type**: `multipart/form-data`
+- **Body**: 
+  - `file`: File (PDF, DOCX, TXT) - **Max 20MB**.
+  - `title`: string
+  - `subject_id`: number
+  - `topic_id`: number (optional)
+  - `description`: string (optional)
+- **Validation**: Backend phải kiểm tra dung lượng < 20MB và đuôi file hợp lệ.
+
+#### PUT `/teacher/resources/:id`
+- **Body**: `{ "title": "...", "description": "...", "subject_id": ... }`
+
+#### DELETE `/teacher/resources/:id`
+- **Quy định**: Thực hiện xóa mềm (soft delete) hoặc ẩn nếu tài liệu đã được dùng để tạo câu hỏi.
+
+### 3.2. Ngân hàng câu hỏi (Question Bank)
+
+#### GET `/teacher/question-bank`
+- **Response**: `{ subjects: BankSubject[], questions: DbQuestion[] }`
+
+#### POST `/teacher/question-bank/manual`
+- **Body**: 
   ```json
-  [
-    {
-      "document_id": 50,
-      "title": "Giao trình CSDL.pdf",
-      "file_size": 2048000,
-      "created_at": "2024-05-14T12:00:00Z"
-    }
-  ]
+  {
+    "subjectId": "1",
+    "topicId": "1",
+    "content": "...",
+    "difficulty": "easy/medium/hard",
+    "options": ["A", "B", "C", "D"],
+    "correctOptionLabel": "A",
+    "explanation": "..."
+  }
   ```
+
+#### PUT/DELETE `/teacher/question-bank/:id`
+- Thao tác tương tự CRUD thông thường.
 
 ---
 
 ## 4. Student Endpoints
-
 ### GET `/student/history`
 - **Response mẫu (DbPracticeAttempt[])**:
   ```json
@@ -101,5 +131,11 @@ Tài liệu này mô tả các giao kèo API (endpoints, format) khớp với Da
 
 ---
 
-**Lưu ý về Mapping:**
-Frontend thực hiện mapping tại `src/api/*Api.ts` để giữ cho UI components không bị ảnh hưởng bởi việc đổi tên field DB (ví dụ: `user_id` -> `id`). Các fallback mock data hiện tại cũng đã được cập nhật theo cấu trúc này.
+**Lưu ý quan quan trọng cho Backend:**
+1. **Naming Convention**: Database sử dụng `snake_case` (ví dụ: `document_id`, `file_size`). Frontend sẽ tự động map sang `camelCase` (ví dụ: `id`, `size`).
+2. **File Handling**: Khi upload thành công, trả về đúng object `DbDocument` để frontend cập nhật UI.
+3. **Status Codes**: 
+   - 200/201 cho thành công.
+   - 400 cho lỗi validate (file quá lớn, sai định dạng).
+   - 401/403 cho lỗi quyền truy cập.
+

@@ -1,11 +1,38 @@
 import { api, type ApiResponse } from './client';
 export type UserRole = 'admin' | 'teacher' | 'student';
 
+// Database Schema Model
+export interface DbUser {
+  user_id: number;
+  google_id: string;
+  email: string;
+  full_name: string;
+  avatar_url?: string;
+  is_active: boolean;
+  role_code?: string; // Often joined from roles table
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
+// UI/Frontend Model (keeping compatible with existing UI)
 export interface AuthUser {
   user_id: number;
   email: string;
   roles: UserRole[];
 }
+
+// Mapper: DB -> UI
+export const mapDbUserToAuthUser = (dbUser: DbUser): AuthUser => {
+  return {
+    id: dbUser.user_id.toString(),
+    name: dbUser.full_name,
+    email: dbUser.email,
+    role: (dbUser.role_code as UserRole) || 'student',
+    avatarUrl: dbUser.avatar_url,
+    isActive: dbUser.is_active,
+  };
+};
 
 export interface LoginRequest {
   token: string;

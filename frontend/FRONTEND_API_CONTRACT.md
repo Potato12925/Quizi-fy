@@ -1,185 +1,141 @@
 # Quizi-fy Frontend API Contract
 
-Tài liệu này mô tả cách chạy frontend và các giao kèo API (endpoints, format) mà Backend cần cung cấp để Frontend (hiện đang dùng mock data/fallback) có thể hoạt động hoàn chỉnh với dữ liệu thật.
+Tài liệu này mô tả các giao kèo API (endpoints, format) khớp với Database Schema PostgreSQL. Frontend sử dụng lớp Mapper để chuyển đổi từ DB model (snake_case) sang UI model (camelCase).
 
-## Cách chạy Frontend
-
-1. Đảm bảo đã cài đặt Node.js (khuyến nghị bản LTS).
-2. Chạy lệnh cài đặt dependencies:
-   ```bash
-   npm install
-   ```
-3. Copy file `.env.example` thành `.env` và cấu hình biến môi trường:
-   ```bash
-   cp .env.example .env
-   ```
-4. Chạy môi trường phát triển:
-   ```bash
-   npm run dev
-   ```
-
-## Biến môi trường cần có
-- `VITE_API_BASE_URL`: Địa chỉ của backend API (VD: `http://localhost:8080/api/v1`). Frontend sẽ tự động thêm token vào Authorization header khi gọi API.
+## Biến môi trường
+- `VITE_API_BASE_URL`: API endpoint (VD: `http://localhost:8080/api/v1`).
 
 ---
 
-## 1. Auth Endpoints cần cung cấp
+## 1. Auth Endpoints
 
 ### POST `/auth/login`
-- **Mô tả**: Đăng nhập hệ thống.
 - **Request Body**:
   ```json
-  {
-    "email": "user@quizify.local",
-    "password": "password123"
-  }
+  { "email": "user@ptit.edu.vn", "password": "..." }
   ```
-- **Response mẫu**:
+- **Response (DB-style)**:
   ```json
   {
     "accessToken": "ey...",
     "user": {
-      "id": "1",
-      "name": "Nguyen Van A",
-      "email": "user@quizify.local",
-      "role": "student" // "admin" | "teacher" | "student"
+      "user_id": 1,
+      "full_name": "Nguyen Van A",
+      "email": "a.nv@ptit.edu.vn",
+      "role_code": "student",
+      "is_active": true
     }
   }
   ```
 
 ### GET `/auth/me`
-- **Mô tả**: Lấy thông tin user hiện tại qua JWT token.
-- **Response**: Trả về object `user` như trên.
+- **Response**: Trả về object `user` (DbUser) như trên.
 
 ---
 
-## 2. Admin Endpoints cần cung cấp
-
-### GET `/admin/dashboard/stats`
-- **Response mẫu**:
-  ```json
-  {
-    "totalUsers": 1250,
-    "totalClasses": 45,
-    "totalSubjects": 12,
-    "activePractices": 320
-  }
-  ```
-
-### GET `/admin/users`
-- **Response mẫu**:
-  ```json
-  {
-    "students": [...],
-    "teachers": [...]
-  }
-  ```
+## 2. Admin Endpoints
 
 ### GET `/admin/classes`
-- **Response mẫu**: Danh sách lớp học.
-
-### GET `/admin/subjects`
-- **Response mẫu**: Danh sách môn học.
+- **Response mẫu (DbClass[])**:
+  ```json
+  [
+    {
+      "class_id": 1,
+      "class_code": "D21CQCN01-B",
+      "class_name": "D21CQCN01-B",
+      "status": "active"
+    }
+  ]
+  ```
 
 ---
 
-## 3. Teacher Endpoints cần cung cấp
-
-### GET `/teacher/dashboard/stats`
-- **Response mẫu**:
-  ```json
-  {
-    "totalQuestionsGenerated": 1200,
-    "totalClasses": 3,
-    "totalStudents": 150,
-    "averageScore": 8.5
-  }
-  ```
+## 3. Teacher Endpoints
 
 ### POST `/teacher/ai-generator/generate`
-- **Request Body**:
+- **Request Body**: `{ "document_id": 50, "num_questions": 10, "difficulty": "medium" }`
+- **Response mẫu (DbQuestion[])**:
   ```json
-  {
-    "subject": "CS101",
-    "topic": "Data Structures",
-    "quantity": 10,
-    "level": "Trung bình"
-  }
-  ```
-
-### GET `/teacher/question-bank`
-- **Response mẫu**: Danh sách bộ câu hỏi đã lưu.
-
----
-
-## 4. Student Endpoints cần cung cấp
-
-### GET `/student/dashboard`
-- **Response mẫu**:
-  ```json
-  {
-    "totalPractices": 15,
-    "averageScore": 8.5,
-    "completedQuestions": 300,
-    "recentSubjects": [...]
-  }
-  ```
-
-### POST `/student/practice/setup`
-- **Request Body**:
-  ```json
-  {
-    "subject": "CS101",
-    "quantity": 20,
-    "level": "Trung bình",
-    "mode": "random-all"
-  }
-  ```
-- **Response mẫu**:
-  ```json
-  {
-    "practiceId": "12345"
-  }
-  ```
-
-### GET `/student/practice/:id`
-- **Mô tả**: Lấy chi tiết bộ câu hỏi thi.
-- **Response mẫu**:
-  ```json
-  {
-    "id": "12345",
-    "duration": 3600, // seconds
-    "questions": [
-      {
-        "id": "q1",
-        "content": "What is ...?",
-        "options": ["A", "B", "C", "D"]
-      }
-    ]
-  }
-  ```
-
-### POST `/student/practice/:id/submit`
-- **Request Body**:
-  ```json
-  {
-    "answers": {
-      "q1": 1, // index của đáp án
-      "q2": 0
+  [
+    {
+      "question_id": 101,
+      "content": "Câu hỏi AI?",
+      "difficulty": "medium",
+      "options": [
+        { "option_id": 1, "option_text": "Đáp án A", "is_correct": true, "order_num": 0 }
+      ]
     }
-  }
+  ]
   ```
-- **Response mẫu**:
+
+### 3.1. Quản lý Tài liệu (Resources)
+
+#### GET `/teacher/resources`
+- **Response**: `DbDocument[]` (Danh sách tài liệu của giáo viên đó).
+
+#### POST `/teacher/resources/upload`
+- **Content-Type**: `multipart/form-data`
+- **Body**: 
+  - `file`: File (PDF, DOCX, TXT) - **Max 20MB**.
+  - `title`: string
+  - `subject_id`: number
+  - `topic_id`: number (optional)
+  - `description`: string (optional)
+- **Validation**: Backend phải kiểm tra dung lượng < 20MB và đuôi file hợp lệ.
+
+#### PUT `/teacher/resources/:id`
+- **Body**: `{ "title": "...", "description": "...", "subject_id": ... }`
+
+#### DELETE `/teacher/resources/:id`
+- **Quy định**: Thực hiện xóa mềm (soft delete) hoặc ẩn nếu tài liệu đã được dùng để tạo câu hỏi.
+
+### 3.2. Ngân hàng câu hỏi (Question Bank)
+
+#### GET `/teacher/question-bank`
+- **Response**: `{ subjects: BankSubject[], questions: DbQuestion[] }`
+
+#### POST `/teacher/question-bank/manual`
+- **Body**: 
   ```json
   {
-    "success": true,
-    "resultId": "res_123"
+    "subjectId": "1",
+    "topicId": "1",
+    "content": "...",
+    "difficulty": "easy/medium/hard",
+    "options": ["A", "B", "C", "D"],
+    "correctOptionLabel": "A",
+    "explanation": "..."
   }
   ```
 
-### GET `/student/results/:id`
-- **Mô tả**: Lấy kết quả bài thi.
+#### PUT/DELETE `/teacher/question-bank/:id`
+- Thao tác tương tự CRUD thông thường.
 
 ---
 
-**Lưu ý:** Hiện tại FE đang sử dụng fallback mock data trong `src/api/` vì backend chưa có thực tế. Các logic này đã được cấu trúc để dễ dàng tháo gỡ `TODO: Replace fallback mock when backend endpoint is ready` và gọi thẳng đến API thật khi sẵn sàng.
+## 4. Student Endpoints
+### GET `/student/history`
+- **Response mẫu (DbPracticeAttempt[])**:
+  ```json
+  [
+    {
+      "attempt_id": 500,
+      "started_at": "2024-05-14T08:00:00Z",
+      "score": 9.5,
+      "total_correct": 19,
+      "total_wrong": 1,
+      "status": "submitted"
+    }
+  ]
+  ```
+
+---
+
+**Lưu ý quan quan trọng cho Backend:**
+1. **Naming Convention**: Database sử dụng `snake_case` (ví dụ: `document_id`, `file_size`). Frontend sẽ tự động map sang `camelCase` (ví dụ: `id`, `size`).
+2. **File Handling**: Khi upload thành công, trả về đúng object `DbDocument` để frontend cập nhật UI.
+3. **Status Codes**: 
+   - 200/201 cho thành công.
+   - 400 cho lỗi validate (file quá lớn, sai định dạng).
+   - 401/403 cho lỗi quyền truy cập.
+

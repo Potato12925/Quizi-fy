@@ -1,5 +1,46 @@
 import { api } from './client';
 
+// Database Schema Models
+export interface DbDocument {
+  document_id: number;
+  teacher_id: number;
+  subject_id: number;
+  topic_id?: number;
+  title: string;
+  description?: string;
+  file_url: string;
+  file_type: string;
+  file_size: number;
+  status: string;
+  created_at: string;
+}
+
+export interface DbOption {
+  option_id: number;
+  question_id: number;
+  option_label: string;
+  option_text: string;
+  is_correct: boolean;
+  order_num: number;
+}
+
+export interface DbQuestion {
+  question_id: number;
+  teacher_id: number;
+  subject_id: number;
+  topic_id: number;
+  document_id?: number;
+  ai_request_id?: number;
+  content: string;
+  difficulty: string;
+  source: string;
+  status: string;
+  explanation?: string;
+  options?: DbOption[];
+  created_at: string;
+}
+
+// UI Models
 export interface TeacherStatItem {
   label: string;
   value: string;
@@ -34,15 +75,43 @@ export interface GeneratedQuestion {
   id: string;
   text: string;
   options: string[];
-  correctAnswer: number;
-  sourceSnippet: string;
-  confidence: number;
+  correctAnswer: number; // index
+  sourceSnippet?: string;
+  confidence?: number;
   isApproved: boolean;
   type?: string;
   level?: string;
   source?: string;
   status?: string;
+  explanation?: string;
 }
+
+// Mappers
+export const mapDbQuestionToGeneratedQuestion = (db: DbQuestion): GeneratedQuestion => {
+  const options = db.options || [];
+  const correctAnswerIndex = options.findIndex(o => o.is_correct);
+
+  return {
+    id: db.question_id.toString(),
+    text: db.content,
+    options: options.map(o => o.option_text),
+    correctAnswer: correctAnswerIndex >= 0 ? correctAnswerIndex : 0,
+    isApproved: db.status === 'approved',
+    level: db.difficulty,
+    source: db.source,
+    status: db.status,
+    explanation: db.explanation,
+  };
+};
+
+export const mapDbDocumentToTeacherResource = (db: DbDocument, usage: number = 0, subjectName: string = 'N/A'): TeacherResource => ({
+  id: db.document_id,
+  name: db.title,
+  size: `${(db.file_size / (1024 * 1024)).toFixed(1)} MB`,
+  date: new Date(db.created_at || Date.now()).toLocaleDateString('vi-VN'),
+  usage: usage,
+  subject: subjectName,
+});
 
 export interface BankSubject {
   id: string;
@@ -62,6 +131,11 @@ export interface TeacherResource {
   date: string;
   usage: number;
   subject: string;
+  topic?: string;
+  description?: string;
+  status?: string;
+  subjectId?: number;
+  topicId?: number;
 }
 
 export interface WeakTopic {
@@ -133,32 +207,50 @@ export const getTeacherDashboardStats = async (): Promise<TeacherDashboardStats>
  */
 export const generateQuestions = async (payload: any): Promise<GeneratedQuestion[]> => {
   try {
-    return await api.post<GeneratedQuestion[]>('/teacher/ai-generator/generate', payload);
+    const dbQuestions = await api.post<DbQuestion[]>('/teacher/ai-generator/generate', payload);
+    return dbQuestions.map(mapDbQuestionToGeneratedQuestion);
   } catch (error) {
     console.warn('Backend endpoint /teacher/ai-generator/generate not ready. Using fallback mock data.', error);
     // TODO: Replace fallback mock when backend endpoint is ready
     return new Promise((resolve) => {
       setTimeout(() => {
-        resolve([
+        const mockQuestions: DbQuestion[] = [
           {
-            id: '1',
-            text: 'Trong một cây nhị phân đầy đủ, nếu cây có độ cao là h, thì số lượng nút tối đa là bao nhiêu?',
-            options: ['2^(h+1) - 1', '2^h - 1', '2^(h-1)', 'h^2'],
-            correctAnswer: 0,
-            sourceSnippet: '...Theo định lý về cây nhị phân đầy đủ, số nút tối đa ở mức h là 2^h, và tổng số nút của cây độ cao h là 2^(h+1)-1...',
-            confidence: 98,
-            isApproved: false
+            question_id: 1,
+            teacher_id: 1,
+            subject_id: 1,
+            topic_id: 1,
+            content: 'Trong một cây nhị phân đầy đủ, nếu cây có độ cao là h, thì số lượng nút tối đa là bao nhiêu?',
+            difficulty: 'medium',
+            source: 'ai',
+            status: 'draft',
+            created_at: new Date().toISOString(),
+            options: [
+              { option_id: 1, question_id: 1, option_label: 'A', option_text: '2^(h+1) - 1', is_correct: true, order_num: 0 },
+              { option_id: 2, question_id: 1, option_label: 'B', option_text: '2^h - 1', is_correct: false, order_num: 1 },
+              { option_id: 3, question_id: 1, option_label: 'C', option_text: '2^(h-1)', is_correct: false, order_num: 2 },
+              { option_id: 4, question_id: 1, option_label: 'D', option_text: 'h^2', is_correct: false, order_num: 3 },
+            ]
           },
           {
-            id: '2',
-            text: 'Độ phức tạp thời gian trung bình của thao tác tìm kiếm trên Cây nhị phân tìm kiếm (BST) là bao nhiêu?',
-            options: ['O(n)', 'O(log n)', 'O(n log n)', 'O(1)'],
-            correctAnswer: 1,
-            sourceSnippet: '...Trên một cây BST cân bằng, các thao tác tìm kiếm, chèn, xóa đều có độ phức tạp trung bình là O(log n)...',
-            confidence: 95,
-            isApproved: false
+            question_id: 2,
+            teacher_id: 1,
+            subject_id: 1,
+            topic_id: 1,
+            content: 'Độ phức tạp thời gian trung bình của thao tác tìm kiếm trên Cây nhị phân tìm kiếm (BST) là bao nhiêu?',
+            difficulty: 'medium',
+            source: 'ai',
+            status: 'draft',
+            created_at: new Date().toISOString(),
+            options: [
+              { option_id: 5, question_id: 2, option_label: 'A', option_text: 'O(n)', is_correct: false, order_num: 0 },
+              { option_id: 6, question_id: 2, option_label: 'B', option_text: 'O(log n)', is_correct: true, order_num: 1 },
+              { option_id: 7, question_id: 2, option_label: 'C', option_text: 'O(n log n)', is_correct: false, order_num: 2 },
+              { option_id: 8, question_id: 2, option_label: 'D', option_text: 'O(1)', is_correct: false, order_num: 3 },
+            ]
           }
-        ]);
+        ];
+        resolve(mockQuestions.map(mapDbQuestionToGeneratedQuestion));
       }, 2000); // 2 second delay to simulate AI processing
     });
   }
@@ -169,23 +261,42 @@ export const generateQuestions = async (payload: any): Promise<GeneratedQuestion
  */
 export const getQuestionBank = async (): Promise<QuestionBankData> => {
   try {
-    return await api.get<QuestionBankData>('/teacher/question-bank');
+    const response = await api.get<{ subjects: BankSubject[], questions: DbQuestion[] }>('/teacher/question-bank');
+    return {
+      subjects: response.subjects,
+      questions: response.questions.map(mapDbQuestionToGeneratedQuestion)
+    };
   } catch (error) {
     console.warn('Backend endpoint /teacher/question-bank not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
     return new Promise((resolve) => {
       setTimeout(() => {
+        const mockQuestions: DbQuestion[] = [
+          {
+            question_id: 1,
+            teacher_id: 1,
+            subject_id: 1,
+            topic_id: 1,
+            content: 'Giao thức HTTP hoạt động ở tầng nào của mô hình OSI?',
+            difficulty: 'easy',
+            source: 'manual',
+            status: 'approved',
+            explanation: 'HTTP là giao thức tầng ứng dụng, cung cấp giao diện cho người dùng.',
+            created_at: new Date().toISOString(),
+            options: [
+              { option_id: 1, question_id: 1, option_label: 'A', option_text: 'Ứng dụng', is_correct: true, order_num: 0 },
+              { option_id: 2, question_id: 1, option_label: 'B', option_text: 'Giao thức', is_correct: false, order_num: 1 },
+              { option_id: 3, question_id: 1, option_label: 'C', option_text: 'Mạng', is_correct: false, order_num: 2 },
+              { option_id: 4, question_id: 1, option_label: 'D', option_text: 'Vật lý', is_correct: false, order_num: 3 }
+            ]
+          },
+        ];
         resolve({
           subjects: [
             { id: '1', name: 'Mạng máy tính', count: 156 },
             { id: '2', name: 'Cấu trúc dữ liệu', count: 84 },
             { id: '3', name: 'Hệ điều hành', count: 42 },
           ],
-          questions: [
-            { id: '1', text: 'Giao thức HTTP hoạt động ở tầng nào của mô hình OSI?', type: 'Trắc nghiệm', level: 'Dễ', source: 'Giao trình MMT - Ch3', status: 'Đã duyệt', options: [], correctAnswer: 0, sourceSnippet: '', confidence: 100, isApproved: true },
-            { id: '2', text: 'Trình bày sự khác biệt giữa TCP và UDP?', type: 'Tự luận (AI chấm)', level: 'Khó', source: 'Slide bài giảng 2', status: 'Đã duyệt', options: [], correctAnswer: 0, sourceSnippet: '', confidence: 100, isApproved: true },
-            { id: '3', text: 'Độ dài tối đa của một khung hình Ethernet là bao nhiêu?', type: 'Trắc nghiệm', level: 'Trung bình', source: 'Tài liệu bổ trợ', status: 'Đã duyệt', options: [], correctAnswer: 0, sourceSnippet: '', confidence: 100, isApproved: true },
-          ]
+          questions: mockQuestions.map(mapDbQuestionToGeneratedQuestion)
         });
       }, 500);
     });
@@ -209,22 +320,95 @@ export const saveGeneratedQuestions = async (payload: { questions: GeneratedQues
   }
 };
 
+export interface ManualQuestionPayload {
+  subjectId: string;
+  topicId: string;
+  content: string;
+  difficulty: string;
+  options: string[];
+  correctOptionLabel: string; // A, B, C, D
+  explanation?: string;
+}
+
+/**
+ * POST /teacher/question-bank/manual
+ */
+export const createManualQuestion = async (payload: ManualQuestionPayload): Promise<{ success: boolean; question?: GeneratedQuestion }> => {
+  try {
+    return await api.post<{ success: boolean; question?: GeneratedQuestion }>('/teacher/question-bank/manual', payload);
+  } catch (error) {
+    console.warn('Backend endpoint /teacher/question-bank/manual not ready. Using fallback mock data.', error);
+    // TODO: Replace fallback mock when backend endpoint is ready
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const newQuestion: GeneratedQuestion = {
+          id: Date.now().toString(),
+          text: payload.content,
+          options: payload.options,
+          correctAnswer: payload.options.indexOf(payload.options.find((_, i) => ['A', 'B', 'C', 'D'][i] === payload.correctOptionLabel) || '') || 0,
+          isApproved: true,
+          level: payload.difficulty,
+          source: 'manual',
+          status: 'approved',
+          explanation: payload.explanation
+        };
+        resolve({ success: true, question: newQuestion });
+      }, 800);
+    });
+  }
+};
+
+/**
+ * PUT /teacher/question-bank/:id
+ */
+export const updateQuestion = async (id: string, payload: ManualQuestionPayload): Promise<{ success: boolean }> => {
+  try {
+    return await api.put<{ success: boolean }>(`/teacher/question-bank/${id}`, payload);
+  } catch (error) {
+    console.warn(`Backend endpoint /teacher/question-bank/${id} (PUT) not ready. Using fallback mock data.`, error);
+    // TODO: Replace fallback mock when backend endpoint is ready
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ success: true });
+      }, 500);
+    });
+  }
+};
+
+/**
+ * DELETE /teacher/question-bank/:id
+ */
+export const deleteQuestion = async (id: string): Promise<{ success: boolean }> => {
+  try {
+    return await api.delete<{ success: boolean }>(`/teacher/question-bank/${id}`);
+  } catch (error) {
+    console.warn(`Backend endpoint /teacher/question-bank/${id} (DELETE) not ready. Using fallback mock data.`, error);
+    // TODO: Replace fallback mock when backend endpoint is ready
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ success: true });
+      }, 500);
+    });
+  }
+};
+
 /**
  * GET /teacher/resources
  */
 export const getResources = async (): Promise<TeacherResource[]> => {
   try {
-    return await api.get<TeacherResource[]>('/teacher/resources');
+    const dbDocs = await api.get<DbDocument[]>('/teacher/resources');
+    return dbDocs.map(d => mapDbDocumentToTeacherResource(d, 10, 'Môn học Mock'));
   } catch (error) {
     console.warn('Backend endpoint /teacher/resources not ready. Using fallback mock data.', error);
     // TODO: Replace fallback mock when backend endpoint is ready
     return new Promise((resolve) => {
       setTimeout(() => {
-        resolve([
-          { id: 1, name: 'Giao trinh Mang may tinh - Chuong 3.pdf', size: '2.4 MB', date: '20/04/2026', usage: 45, subject: 'Mạng máy tính' },
-          { id: 2, name: 'Slide Bai giang Co so du lieu.pptx', size: '12.8 MB', date: '18/04/2026', usage: 12, subject: 'Cơ sở dữ liệu' },
-          { id: 3, name: 'Tai lieu on tap He dieu hanh.docx', size: '1.1 MB', date: '15/04/2026', usage: 0, subject: 'Hệ điều hành' },
-        ]);
+        const mockDocs: DbDocument[] = [
+          { document_id: 1, teacher_id: 1, subject_id: 1, title: 'Giao trinh Mang may tinh - Chuong 3.pdf', file_url: '', file_type: 'pdf', file_size: 2516582, status: 'active', created_at: '2026-04-20T00:00:00Z' },
+          { document_id: 2, teacher_id: 1, subject_id: 1, title: 'Slide Bai giang Co so du lieu.pptx', file_url: '', file_type: 'pptx', file_size: 13421772, status: 'active', created_at: '2026-04-18T00:00:00Z' },
+        ];
+        resolve(mockDocs.map(d => mapDbDocumentToTeacherResource(d, 45, 'Mạng máy tính')));
       }, 500);
     });
   }
@@ -233,31 +417,77 @@ export const getResources = async (): Promise<TeacherResource[]> => {
 /**
  * POST /teacher/resources/upload
  */
-export const uploadResource = async (file: File): Promise<TeacherResource> => {
+export interface UploadResourcePayload {
+  title: string;
+  subject_id: number;
+  topic_id?: number;
+  description?: string;
+  file: File;
+}
+
+export const uploadResource = async (payload: UploadResourcePayload): Promise<TeacherResource> => {
   try {
     const formData = new FormData();
-    formData.append('file', file);
-    return await api.post<TeacherResource>('/teacher/resources/upload', formData, {
-      headers: {
-        // Fetch API automatically sets correct Content-Type with boundary when body is FormData
-        // We just need to make sure we don't accidentally set it to application/json
-        'Content-Type': undefined as any
-      }
+    formData.append('file', payload.file);
+    formData.append('title', payload.title);
+    formData.append('subject_id', payload.subject_id.toString());
+    if (payload.topic_id) formData.append('topic_id', payload.topic_id.toString());
+    if (payload.description) formData.append('description', payload.description);
+
+    const res = await api.post<DbDocument>('/teacher/resources/upload', formData, {
+      headers: { 'Content-Type': undefined as any }
     });
+    return mapDbDocumentToTeacherResource(res, 0, 'Mới tải lên');
   } catch (error) {
     console.warn('Backend endpoint /teacher/resources/upload not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve({
           id: Date.now(),
-          name: file.name,
-          size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+          name: payload.title || payload.file.name,
+          size: `${(payload.file.size / (1024 * 1024)).toFixed(1)} MB`,
           date: new Date().toLocaleDateString('vi-VN'),
           usage: 0,
-          subject: 'Chưa phân loại'
+          subject: 'Kỹ thuật lập trình', // Mock subject name
+          topic: 'Đệ quy' // Mock topic
         });
       }, 1000);
+    });
+  }
+};
+
+/**
+ * PUT /teacher/resources/:id
+ */
+export const updateResource = async (id: number | string, payload: Partial<UploadResourcePayload>): Promise<{ success: boolean; data?: TeacherResource }> => {
+  try {
+    const res = await api.put<{ success: boolean; data: DbDocument }>(`/teacher/resources/${id}`, payload);
+    return { 
+      success: res.success, 
+      data: res.data ? mapDbDocumentToTeacherResource(res.data, 5, 'Cập nhật') : undefined 
+    };
+  } catch (error) {
+    console.warn(`Backend endpoint /teacher/resources/${id} (PUT) not ready. Using fallback mock data.`, error);
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ success: true });
+      }, 500);
+    });
+  }
+};
+
+/**
+ * DELETE /teacher/resources/:id
+ */
+export const deleteResource = async (id: number | string): Promise<{ success: boolean }> => {
+  try {
+    return await api.delete<{ success: boolean }>(`/teacher/resources/${id}`);
+  } catch (error) {
+    console.warn(`Backend endpoint /teacher/resources/${id} (DELETE) not ready. Using fallback mock data.`, error);
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ success: true });
+      }, 500);
     });
   }
 };

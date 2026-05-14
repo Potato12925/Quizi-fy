@@ -1,12 +1,32 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getResources } from '@/api/teacherApi';
+import type { TeacherResource } from '@/api/teacherApi';
+
+import LoadingState from '@/components/common/LoadingState';
+import ErrorState from '@/components/common/ErrorState';
 
 export default function TeacherResourcesPage() {
-  const resources = [
-    { id: 1, name: 'Giao trinh Mang may tinh - Chuong 3.pdf', size: '2.4 MB', date: '20/04/2026', usage: 45, subject: 'Mạng máy tính' },
-    { id: 2, name: 'Slide Bai giang Co so du lieu.pptx', size: '12.8 MB', date: '18/04/2026', usage: 12, subject: 'Cơ sở dữ liệu' },
-    { id: 3, name: 'Tai lieu on tap He dieu hanh.docx', size: '1.1 MB', date: '15/04/2026', usage: 0, subject: 'Hệ điều hành' },
-  ];
+  const [resources, setResources] = useState<TeacherResource[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const data = await getResources();
+        setResources(data);
+      } catch {
+        setError('Không thể tải dữ liệu');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">

@@ -1,11 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getClasses } from '@/api/adminApi';
+import type { AdminClass } from '@/api/adminApi';
+
+import LoadingState from '@/components/common/LoadingState';
+import ErrorState from '@/components/common/ErrorState';
+import EmptyState from '@/components/common/EmptyState';
 
 export default function AdminClassesPage() {
-  const [classes, setClasses] = useState([
-    { id: '1', name: 'D21CQCN01-B', major: 'Công nghệ thông tin', students: 45, status: 'Đang hoạt động' },
-    { id: '2', name: 'D21CQCN02-B', major: 'Công nghệ thông tin', students: 42, status: 'Đang hoạt động' },
-    { id: '3', name: 'D21CQCN03-B', major: 'An toàn thông tin', students: 38, status: 'Đã khóa' },
-  ]);
+  const [classes, setClasses] = useState<AdminClass[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const data = await getClasses();
+        setClasses(data);
+      } catch {
+        setError('Không thể tải dữ liệu');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">

@@ -1,8 +1,23 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
+import { getStudentDashboard } from '@/api/studentApi';
+import LoadingState from '@/components/common/LoadingState';
+import ErrorState from '@/components/common/ErrorState';
+
 export default function StudentDashboard() {
-  const subjects = [
+  const [data, setData] = React.useState<any>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    getStudentDashboard().then(setData).catch((e: any) => setError(e.message)).finally(() => setIsLoading(false));
+  }, []);
+
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
+  
+  const subjects = data?.recentSubjects || [
     { id: '1', name: 'Mạng máy tính', questions: 150, color: 'text-[#b20112]', icon: 'language' },
     { id: '2', name: 'Cấu trúc dữ liệu', questions: 200, color: 'text-emerald-600', icon: 'account_tree' },
     { id: '3', name: 'Hệ điều hành', questions: 120, color: 'text-blue-600', icon: 'terminal' },
@@ -92,7 +107,7 @@ export default function StudentDashboard() {
       <div className="space-y-8 pt-6">
          <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight">Bắt đầu ôn tập môn học</h3>
          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {subjects.map((s) => (
+            {subjects.map((s: any) => (
               <Link key={s.id} to={`/student/practice/setup?subjectId=${s.id}`} className="group">
                 <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm transition-all hover:shadow-2xl hover:shadow-red-900/10 hover:-translate-y-2 relative overflow-hidden">
                    <div className="absolute top-0 right-0 p-8 opacity-0 group-hover:opacity-10 transition-opacity">

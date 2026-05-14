@@ -1,19 +1,35 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { getTeacherStats } from '@/api/teacherApi';
+import type { TeacherStatsData } from '@/api/teacherApi';
+
+import LoadingState from '@/components/common/LoadingState';
+import ErrorState from '@/components/common/ErrorState';
+import EmptyState from '@/components/common/EmptyState';
 
 export default function TeacherStatsPage() {
-  const classStats = [
-    { label: 'Điểm trung bình lớp', value: '7.8', icon: 'auto_graph', color: 'text-[#b20112]', bg: 'bg-red-50' },
-    { label: 'Tỉ lệ hoàn thành', value: '92%', icon: 'checklist', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-    { label: 'Số giờ tự học', value: '142h', icon: 'timer', color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Bài tập đã làm', value: '1,240', icon: 'quiz', color: 'text-amber-600', bg: 'bg-amber-50' },
-  ];
+  const [data, setData] = useState<TeacherStatsData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const weakTopics = [
-    { name: 'Giao thức TCP/UDP', errorRate: 45, count: 120 },
-    { name: 'Định tuyến IP', errorRate: 38, count: 95 },
-    { name: 'Mô hình OSI', errorRate: 25, count: 210 },
-    { name: 'Tầng vật lý', errorRate: 12, count: 180 },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const stats = await getTeacherStats();
+        setData(stats);
+      } catch {
+        setError('Không thể tải dữ liệu');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
+  if (!data) return <EmptyState />;
+
+  const { classStats, weakTopics } = data;
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-32">

@@ -1,26 +1,36 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getTeacherDashboardStats } from '@/api/teacherApi';
+import type { TeacherDashboardStats } from '@/api/teacherApi';
+
+import LoadingState from '@/components/common/LoadingState';
+import ErrorState from '@/components/common/ErrorState';
+import EmptyState from '@/components/common/EmptyState';
 
 export default function TeacherDashboard() {
-  const stats = [
-    { label: 'Tổng số câu hỏi', value: '1,248', growth: '+12% tháng này', icon: 'quiz', color: 'text-[#b20112]', bg: 'bg-red-50' },
-    { label: 'Tài liệu đã tải', value: '56', sub: 'Dung lượng: 245MB', icon: 'description', color: 'text-amber-600', bg: 'bg-amber-50' },
-    { label: 'Lớp đang dạy', value: '04', sub: '320 Sinh viên', icon: 'groups', color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Lượt làm bài của SV', value: '8,902', growth: '+8% tuần này', icon: 'task_alt', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-  ];
+  const [data, setData] = useState<TeacherDashboardStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const recentQuizzes = [
-    { title: 'Cơ sở dữ liệu - Chương 3', info: '20 câu hỏi • 2 phút trước', icon: 'auto_awesome', bg: 'bg-[#b20112]' },
-    { title: 'Mạng máy tính - Lab 02', info: '15 câu hỏi • 1 giờ trước', icon: 'lan', bg: 'bg-slate-400' },
-    { title: 'An toàn thông tin - Final', info: '50 câu hỏi • 3 giờ trước', icon: 'security', bg: 'bg-[#d62828]' },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const stats = await getTeacherDashboardStats();
+        setData(stats);
+      } catch {
+        setError('Không thể tải dữ liệu');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
-  const materials = [
-    { name: 'Giao-trinh-CSDL.pdf', date: '12/10/2023', status: 'Đã xử lý AI', statusColor: 'text-emerald-600 bg-emerald-50' },
-    { name: 'De-cuong-MMT.docx', date: '14/10/2023', status: 'Đang chờ', statusColor: 'text-amber-600 bg-amber-50' },
-    { name: 'Bai-tap-lon-ATTT.pdf', date: '15/10/2023', status: 'Đã xử lý AI', statusColor: 'text-emerald-600 bg-emerald-50' },
-    { name: 'Tai-lieu-Java-Nang-cao.pdf', date: '15/10/2023', status: 'Đang chờ', statusColor: 'text-amber-600 bg-amber-50' },
-  ];
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
+  if (!data) return <EmptyState />;
+
+  const { stats, recentQuizzes, materials } = data;
 
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">

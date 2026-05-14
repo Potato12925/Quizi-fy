@@ -1,20 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getQuestionBank } from '@/api/teacherApi';
+import type { QuestionBankData } from '@/api/teacherApi';
+
+import LoadingState from '@/components/common/LoadingState';
+import ErrorState from '@/components/common/ErrorState';
+import EmptyState from '@/components/common/EmptyState';
 
 export default function QuestionBankPage() {
   const [activeSubject, setActiveSubject] = useState('1');
+  const [data, setData] = useState<QuestionBankData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const subjects = [
-    { id: '1', name: 'Mạng máy tính', count: 156 },
-    { id: '2', name: 'Cấu trúc dữ liệu', count: 84 },
-    { id: '3', name: 'Hệ điều hành', count: 42 },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const bankData = await getQuestionBank();
+        setData(bankData);
+        if (bankData.subjects.length > 0) {
+          setActiveSubject(bankData.subjects[0].id);
+        }
+      } catch {
+        setError('Không thể tải dữ liệu');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
-  const questions = [
-    { id: 1, text: 'Giao thức HTTP hoạt động ở tầng nào của mô hình OSI?', type: 'Trắc nghiệm', level: 'Dễ', source: 'Giao trình MMT - Ch3', status: 'Đã duyệt' },
-    { id: 2, text: 'Trình bày sự khác biệt giữa TCP và UDP?', type: 'Tự luận (AI chấm)', level: 'Khó', source: 'Slide bài giảng 2', status: 'Đã duyệt' },
-    { id: 3, text: 'Độ dài tối đa của một khung hình Ethernet là bao nhiêu?', type: 'Trắc nghiệm', level: 'Trung bình', source: 'Tài liệu bổ trợ', status: 'Đã duyệt' },
-  ];
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
+  if (!data) return <EmptyState />;
+
+  const { subjects, questions } = data;
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">

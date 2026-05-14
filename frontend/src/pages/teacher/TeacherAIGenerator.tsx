@@ -1,15 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-
-interface Question {
-  id: string;
-  text: string;
-  options: string[];
-  correctAnswer: number;
-  sourceSnippet: string;
-  confidence: number;
-  isApproved: boolean;
-}
+import { Link, useNavigate } from 'react-router-dom';
+import { generateQuestions, saveGeneratedQuestions } from '@/api/teacherApi';
+import type { GeneratedQuestion } from '@/api/teacherApi';
 
 export default function AiGeneratorPage() {
   const [step, setStep] = useState(1);
@@ -21,31 +13,68 @@ export default function AiGeneratorPage() {
     language: 'Tiếng Việt'
   });
 
-  const [questions, setQuestions] = useState<Question[]>([
-    {
-      id: '1',
-      text: 'Trong một cây nhị phân đầy đủ, nếu cây có độ cao là h, thì số lượng nút tối đa là bao nhiêu?',
-      options: ['2^(h+1) - 1', '2^h - 1', '2^(h-1)', 'h^2'],
-      correctAnswer: 0,
-      sourceSnippet: '...Theo định lý về cây nhị phân đầy đủ, số nút tối đa ở mức h là 2^h, và tổng số nút của cây độ cao h là 2^(h+1)-1...',
-      confidence: 98,
-      isApproved: false
-    },
-    {
-      id: '2',
-      text: 'Độ phức tạp thời gian trung bình của thao tác tìm kiếm trên Cây nhị phân tìm kiếm (BST) là bao nhiêu?',
-      options: ['O(n)', 'O(log n)', 'O(n log n)', 'O(1)'],
-      correctAnswer: 1,
-      sourceSnippet: '...Trên một cây BST cân bằng, các thao tác tìm kiếm, chèn, xóa đều có độ phức tạp trung bình là O(log n)...',
-      confidence: 95,
-      isApproved: false
-    }
-  ]);
-
+  const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
   const [expandedSource, setExpandedSource] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   const nextStep = () => setStep(step + 1);
   const prevStep = () => setStep(step - 1);
+
+  const handleGenerate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.subject || formData.subject.trim() === '') {
+      setError('Vui lòng chọn môn học / chủ đề');
+      return;
+    }
+
+    if (!formData.level) {
+      setError('Vui lòng chọn mức độ khó');
+      return;
+    }
+
+    if (!formData.quantity || formData.quantity < 1 || formData.quantity > 100) {
+      setError('Số lượng câu hỏi phải từ 1 đến 100');
+      return;
+    }
+
+    setError('');
+    setStep(3); // Show processing UI
+    setIsGenerating(true);
+
+    try {
+      const result = await generateQuestions(formData);
+      setQuestions(result);
+      setStep(4); // Move to review step
+    } catch {
+        setError('Lỗi tạo câu hỏi');
+      setStep(2); // Go back if error
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleSave = async () => {
+    const approvedQuestions = questions.filter(q => q.isApproved);
+    if (approvedQuestions.length === 0) {
+      alert('Chưa có câu hỏi nào được duyệt!');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await saveGeneratedQuestions({ questions: approvedQuestions });
+      alert('Đã lưu câu hỏi thành công!');
+      navigate('/teacher/question-bank');
+    } catch {
+      alert('Lỗi lưu câu hỏi');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const toggleApprove = (id: string) => {
     setQuestions(questions.map(q => q.id === id ? { ...q, isApproved: !q.isApproved } : q));
@@ -56,7 +85,7 @@ export default function AiGeneratorPage() {
     if (optIdx !== undefined) {
       newQuestions[idx].options[optIdx] = value;
     } else {
-      (newQuestions[idx] as any)[field] = value;
+      newQuestions[idx] = { ...newQuestions[idx], [field]: value };
     }
     newQuestions[idx].isApproved = false;
     setQuestions(newQuestions);
@@ -166,7 +195,8 @@ export default function AiGeneratorPage() {
             </aside>
             <section className="lg:col-span-9">
               <div className="bg-white rounded-[2rem] p-8 md:p-12 shadow-[0px_12px_32px_rgba(147,0,10,0.06)]">
-                <form className="space-y-10" onSubmit={(e) => { e.preventDefault(); nextStep(); }}>
+                {error && <div className="mb-6 p-4 bg-red-50 text-red-500 rounded-xl font-bold">{error}</div>}
+                <form className="space-y-10" onSubmit={handleGenerate}>
                   <div className="space-y-4">
                     <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Chọn môn học</label>
                     <select className="w-full bg-[#f3f3f3] border-none rounded-xl px-6 py-4 text-on-surface focus:ring-2 focus:ring-[#d62828] outline-none">
@@ -195,8 +225,8 @@ export default function AiGeneratorPage() {
                     <button type="button" onClick={prevStep} className="flex-1 py-4 text-sm font-bold border-2 border-[#e5bdb9] text-[#b20112] rounded-xl hover:bg-red-50 transition-all flex items-center justify-center gap-2">
                       Quay lại
                     </button>
-                    <button type="submit" className="flex-[2] py-4 text-sm font-bold bg-gradient-to-r from-[#d62828] to-[#ffb3b3] text-white rounded-xl shadow-lg uppercase tracking-widest flex items-center justify-center gap-2 hover:brightness-110">
-                      Bắt đầu tạo <span className="material-symbols-outlined text-base" style={{fontVariationSettings: "'FILL' 1"}}>bolt</span>
+                    <button type="submit" disabled={isGenerating} className="flex-[2] py-4 text-sm font-bold bg-gradient-to-r from-[#d62828] to-[#ffb3b3] text-white rounded-xl shadow-lg uppercase tracking-widest flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed">
+                      {isGenerating ? 'Đang tạo...' : <>Bắt đầu tạo <span className="material-symbols-outlined text-base" style={{fontVariationSettings: "'FILL' 1"}}>bolt</span></>}
                     </button>
                   </div>
                 </form>
@@ -308,16 +338,16 @@ export default function AiGeneratorPage() {
                   </div>
                 </div>
                 <button 
-                  disabled={!isAllApproved}
-                  onClick={() => window.location.href = '/teacher/dashboard'} 
+                  disabled={!isAllApproved || isSaving}
+                  onClick={handleSave} 
                   className={`flex-1 md:flex-none md:min-w-[400px] h-14 rounded-xl font-bold text-lg shadow-lg transition-all flex items-center justify-center gap-3 active:scale-95 ${
-                    isAllApproved 
-                    ? 'bg-gradient-to-r from-[#d62828] to-[#ffb3b3] text-white' 
+                    isAllApproved && !isSaving
+                    ? 'bg-gradient-to-r from-[#d62828] to-[#ffb3b3] text-white hover:brightness-110' 
                     : 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none border border-slate-200'
                   }`}
                 >
                   <span className="material-symbols-outlined">database</span> 
-                  {isAllApproved ? 'Lưu vào ngân hàng câu hỏi' : 'Vui lòng duyệt hết các câu'}
+                  {isSaving ? 'Đang lưu...' : isAllApproved ? 'Lưu vào ngân hàng câu hỏi' : 'Vui lòng duyệt hết các câu'}
                 </button>
               </div>
             </div>

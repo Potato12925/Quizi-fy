@@ -1,16 +1,35 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { getAdminDashboardStats } from '@/api/adminApi';
+import type { DashboardStats } from '@/api/adminApi';
+
+import LoadingState from '@/components/common/LoadingState';
+import ErrorState from '@/components/common/ErrorState';
+import EmptyState from '@/components/common/EmptyState';
 
 export default function AdminDashboardPage() {
-  const users = [
-    { name: 'Nguyễn Văn Hùng', email: 'hung.nv@ptit.edu.vn', role: 'GIẢNG VIÊN', dept: 'Khoa CNTT 1', status: 'Hoạt động', initial: 'NH' },
-    { name: 'Trần Thị Mai', email: 'mai.tt@student.ptit.edu.vn', role: 'SINH VIÊN', dept: 'D21CQCN04-B', status: 'Hoạt động', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBuQl1RZD-kRNkSRTfA1SEFEjdKoYR9214tXXINxvQ9b3Tr5v8IwFvh-8vC1Ig_r65LtOEaDuCRgy4-GW50cYEou0DVtZZcKleHZZSfwiLMP2bjTObt4AscZiomzWzCK1TG5VUm2IYnTmEVKp-FkdHizyYpf-7E_yenOOfMj-X4ST9fc4XZQMbX0htIy63cNYJnAspYPyYE01O71_QR3xFYoPO_cOzMACc5tl0odiUZEdjjMw0A05x8FAC5EbZkVUHanSo3EC5YjSk' },
-    { name: 'Lê Anh Tuấn', email: 'tuan.la@student.ptit.edu.vn', role: 'SINH VIÊN', dept: 'D20CQAT01-N', status: 'Ngoại tuyến', initial: 'LA' },
-  ];
+  const [data, setData] = useState<DashboardStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const classes = [
-    { id: 'D21CQCN04-B', dept: 'Khoa Công nghệ thông tin 1', students: 85 },
-    { id: 'D20CQAT01-N', dept: 'Khoa An toàn thông tin', students: 62 },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const stats = await getAdminDashboardStats();
+        setData(stats);
+      } catch {
+        setError('Không thể tải dữ liệu');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
+  if (!data) return <EmptyState />;
+
+  const { users, classes } = data;
 
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -37,19 +56,19 @@ export default function AdminDashboardPage() {
             <h3 className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-8">Tổng số người dùng</h3>
             <div className="flex flex-col sm:flex-row items-start sm:items-end gap-8">
               <div className="space-y-2">
-                <span className="text-6xl font-black text-slate-900 tracking-tighter">3,650</span>
+                <span className="text-6xl font-black text-slate-900 tracking-tighter">{data.totalUsers.toLocaleString()}</span>
                 <p className="text-[10px] text-emerald-500 font-black uppercase flex items-center gap-1">
-                   <span className="material-symbols-outlined text-xs">trending_up</span> 12% tháng này
+                   <span className="material-symbols-outlined text-xs">trending_up</span> {data.activityGrowth} tháng này
                 </p>
               </div>
               <div className="flex gap-4 w-full sm:w-auto">
                 <div className="flex-1 bg-slate-50 px-6 py-4 rounded-[1.5rem] group-hover:bg-red-50 transition-colors">
                   <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest">Giảng viên</p>
-                  <p className="text-2xl font-black text-[#b20112]">150</p>
+                  <p className="text-2xl font-black text-[#b20112]">{data.teachersCount}</p>
                 </div>
                 <div className="flex-1 bg-slate-50 px-6 py-4 rounded-[1.5rem] group-hover:bg-slate-100 transition-colors">
                   <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest">Sinh viên</p>
-                  <p className="text-2xl font-black text-slate-800">3,500</p>
+                  <p className="text-2xl font-black text-slate-800">{data.studentsCount.toLocaleString()}</p>
                 </div>
               </div>
             </div>
@@ -68,7 +87,7 @@ export default function AdminDashboardPage() {
             <span className="text-[10px] font-black bg-white/20 px-4 py-1.5 rounded-full uppercase tracking-widest border border-white/20">Kho câu hỏi</span>
           </div>
           <div className="relative z-10">
-            <h3 className="text-5xl font-black tracking-tighter">45K+</h3>
+            <h3 className="text-5xl font-black tracking-tighter">{data.approvedQuestions}</h3>
             <p className="text-[11px] font-bold opacity-60 mt-2 uppercase tracking-[0.1em]">Đã được phê duyệt</p>
           </div>
         </div>
@@ -84,7 +103,7 @@ export default function AdminDashboardPage() {
             <span className="text-[10px] font-black bg-red-500 px-4 py-1.5 rounded-full uppercase tracking-widest">Traffic</span>
           </div>
           <div className="relative z-10">
-            <h3 className="text-5xl font-black tracking-tighter">+18%</h3>
+            <h3 className="text-5xl font-black tracking-tighter">{data.activityGrowth}</h3>
             <p className="text-[11px] font-bold opacity-50 mt-2 uppercase tracking-[0.1em]">Hoạt động hôm nay</p>
           </div>
         </div>

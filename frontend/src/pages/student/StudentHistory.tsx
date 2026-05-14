@@ -1,14 +1,33 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getStudentHistory } from '@/api/studentApi';
+import type { HistoryItem } from '@/api/studentApi';
+
+import LoadingState from '@/components/common/LoadingState';
+import ErrorState from '@/components/common/ErrorState';
+import EmptyState from '@/components/common/EmptyState';
 
 export default function HistoryPage() {
-  const attempts = [
-    { id: 1, subject: 'Mạng máy tính', date: '25/04/2024', score: 8, total: 10, time: '12:45', status: 'Giỏi' },
-    { id: 2, subject: 'Cấu trúc dữ liệu', date: '24/04/2024', score: 9, total: 10, time: '15:20', status: 'Xuất sắc' },
-    { id: 3, subject: 'Lập trình hướng đối tượng', date: '23/04/2024', score: 6, total: 10, time: '18:10', status: 'Khá' },
-    { id: 4, subject: 'Cơ sở dữ liệu', date: '22/04/2024', score: 7, total: 10, time: '14:30', status: 'Khá' },
-    { id: 5, subject: 'Mạng máy tính', date: '21/04/2024', score: 5, total: 10, time: '20:00', status: 'TB' },
-  ];
+  const [attempts, setAttempts] = useState<HistoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const historyData = await getStudentHistory();
+        setAttempts(historyData);
+      } catch {
+        setError('Không thể tải dữ liệu');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">

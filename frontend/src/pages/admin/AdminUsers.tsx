@@ -1,18 +1,27 @@
 import React, { useState } from 'react';
 
+import { getUsers } from '@/api/adminApi';
+import LoadingState from '@/components/common/LoadingState';
+import ErrorState from '@/components/common/ErrorState';
+import EmptyState from '@/components/common/EmptyState';
+
 export default function AdminUsersPage() {
-  const [activeTab, setActiveTab] = useState('students');
+  const [activeTab, setActiveTab] = React.useState('students');
+  const [data, setData] = React.useState<any>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
 
-  const students = [
-    { id: '1', name: 'Nguyễn Minh Anh', code: 'B21DCCN001', class: 'D21CQCN01-B', status: 'Hoạt động' },
-    { id: '2', name: 'Trần Hoàng Nam', code: 'B21DCCN002', class: 'D21CQCN01-B', status: 'Hoạt động' },
-    { id: '3', name: 'Lê Thu Thảo', code: 'B21DCCN003', class: 'D21CQCN02-B', status: 'Đã khóa' },
-  ];
+  React.useEffect(() => {
+    getUsers().then(setData).catch((e: any) => setError(e.message)).finally(() => setIsLoading(false));
+  }, []);
 
-  const teachers = [
-    { id: '1', name: 'TS. Nguyễn Văn A', email: 'vanna@ptit.edu.vn', subjects: ['Mạng máy tính', 'An toàn hệ thống'], status: 'Hoạt động' },
-    { id: '2', name: 'ThS. Trần Thị B', email: 'thib@ptit.edu.vn', subjects: ['Cấu trúc dữ liệu'], status: 'Hoạt động' },
-  ];
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
+  if (!data) return <EmptyState />;
+  
+  const { students = [], teachers = [] } = data || {};
+
+
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
@@ -59,7 +68,7 @@ export default function AdminUsersPage() {
                </thead>
                <tbody>
                   {activeTab === 'students' ? (
-                    students.map(s => (
+                    students.map((s: any) => (
                       <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-all group">
                          <td className="px-10 py-8 flex items-center gap-4">
                             <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
@@ -84,7 +93,7 @@ export default function AdminUsersPage() {
                       </tr>
                     ))
                   ) : (
-                    teachers.map(t => (
+                    teachers.map((t: any) => (
                       <tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-all group">
                          <td className="px-10 py-8 flex items-center gap-4">
                             <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
@@ -95,7 +104,7 @@ export default function AdminUsersPage() {
                          <td className="px-6 py-8">
                             <p className="text-xs font-bold text-slate-600 mb-1">{t.email}</p>
                             <div className="flex flex-wrap gap-1">
-                               {t.subjects.map(sub => <span key={sub} className="text-[8px] font-black bg-slate-100 text-slate-400 px-2 py-0.5 rounded-md uppercase tracking-tighter">{sub}</span>)}
+                               {t.subjects.map((sub: any) => <span key={sub} className="text-[8px] font-black bg-slate-100 text-slate-400 px-2 py-0.5 rounded-md uppercase tracking-tighter">{sub}</span>)}
                             </div>
                          </td>
                          <td className="px-6 py-8 text-center">

@@ -1,11 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getSubjects } from '@/api/adminApi';
+import type { AdminSubject } from '@/api/adminApi';
+
+import LoadingState from '@/components/common/LoadingState';
+import ErrorState from '@/components/common/ErrorState';
+import EmptyState from '@/components/common/EmptyState';
 
 export default function AdminSubjectsPage() {
-  const [subjects, setSubjects] = useState([
-    { id: '1', name: 'Mạng máy tính', code: 'INT1339', credits: 3, teacher: 'TS. Nguyễn Văn A', classes: 3 },
-    { id: '2', name: 'Cấu trúc dữ liệu và Giải thuật', code: 'INT1306', credits: 4, teacher: 'ThS. Trần Thị B', classes: 5 },
-    { id: '3', name: 'Hệ điều hành', code: 'INT1313', credits: 3, teacher: 'Chưa gán', classes: 2 },
-  ]);
+  const [subjects, setSubjects] = useState<AdminSubject[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const data = await getSubjects();
+        setSubjects(data);
+      } catch {
+        setError('Không thể tải dữ liệu');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">

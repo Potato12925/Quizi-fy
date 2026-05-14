@@ -1,30 +1,39 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+﻿import React, { useState, useEffect } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { getStudentResultDetail } from '@/api/studentApi';
+import type { StudentResultData } from '@/api/studentApi';
+
+import LoadingState from '@/components/common/LoadingState';
+import ErrorState from '@/components/common/ErrorState';
+import EmptyState from '@/components/common/EmptyState';
 
 export default function ResultsPage() {
-  // Mock results data
-  const results = {
-    score: 8,
-    total: 10,
-    timeTaken: '12:45',
-    accuracy: 80,
-    questions: [
-      {
-        id: 1,
-        text: 'Giao thức nào dưới đây thuộc tầng giao vận (Transport Layer)?',
-        userAnswer: 1, // TCP
-        correctAnswer: 1,
-        explanation: 'TCP (Transmission Control Protocol) là giao thức cốt lõi của tầng giao vận, đảm bảo truyền tải dữ liệu tin cậy.'
-      },
-      {
-        id: 2,
-        text: 'Địa chỉ IPv4 có độ dài bao nhiêu bit?',
-        userAnswer: 0, // 16 bit
-        correctAnswer: 1, // 32 bit
-        explanation: 'Địa chỉ IPv4 có độ dài chuẩn là 32 bit, chia thành 4 octet.'
+  const { id } = useParams();
+  const [data, setData] = useState<StudentResultData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!id) return;
+    const fetchResult = async () => {
+      try {
+        const resultData = await getStudentResultDetail(id);
+        setData(resultData);
+      } catch {
+        setError('Không th? t?i d? li?u k?t qu?');
+      } finally {
+        setIsLoading(false);
       }
-    ]
-  };
+    };
+    fetchResult();
+  }, [id]);
+
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
+  if (!data) return <EmptyState />;
+
+  const results = data.overview;
+  const questions = data.questions;
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
@@ -52,28 +61,28 @@ export default function ResultsPage() {
            </svg>
            <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-6xl font-black text-slate-900 tracking-tighter">{results.score}<span className="text-2xl text-slate-300">/{results.total}</span></span>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Điểm số</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Äiá»ƒm sá»‘</span>
            </div>
         </div>
 
         <div className="flex-1 space-y-8 relative z-10 text-center md:text-left">
            <div>
-              <h2 className="text-4xl font-black text-slate-900 tracking-tighter mb-2">Chúc mừng Minh!</h2>
-              <p className="text-slate-500 font-medium">Bạn đã hoàn thành bài ôn tập với kết quả khá tốt.</p>
+              <h2 className="text-4xl font-black text-slate-900 tracking-tighter mb-2">ChÃºc má»«ng Minh!</h2>
+              <p className="text-slate-500 font-medium">Báº¡n Ä‘Ã£ hoÃ n thÃ nh bÃ i Ã´n táº­p vá»›i káº¿t quáº£ khÃ¡ tá»‘t.</p>
            </div>
            
            <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
               <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
-                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Thời gian</p>
-                 <p className="text-2xl font-black text-slate-900 tracking-tight">{results.timeTaken}</p>
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Thá»i gian</p>
+                 <p className="text-2xl font-black text-slate-900 tracking-tight">{results.time}</p>
               </div>
               <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
-                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Độ chính xác</p>
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Äá»™ chÃ­nh xÃ¡c</p>
                  <p className="text-2xl font-black text-emerald-500 tracking-tight">{results.accuracy}%</p>
               </div>
               <div className="hidden sm:block bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
-                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Xếp hạng</p>
-                 <p className="text-2xl font-black text-amber-500 tracking-tight">Giỏi</p>
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Xáº¿p háº¡ng</p>
+                 <p className="text-2xl font-black text-amber-500 tracking-tight">Giá»i</p>
               </div>
            </div>
         </div>
@@ -82,10 +91,10 @@ export default function ResultsPage() {
       {/* Action Buttons */}
       <section className="flex flex-wrap gap-4 justify-center md:justify-start px-4">
          <button className="px-10 py-5 rounded-2xl bg-[#b20112] text-white text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-red-900/20 hover:bg-[#d62828] active:scale-95 transition-all flex items-center gap-3">
-            <span className="material-symbols-outlined text-xl">refresh</span> Làm bộ đề mới
+            <span className="material-symbols-outlined text-xl">refresh</span> LÃ m bá»™ Ä‘á» má»›i
          </button>
          <button className="px-10 py-5 rounded-2xl bg-white border border-slate-100 text-slate-900 text-xs font-black uppercase tracking-[0.2em] shadow-sm hover:border-[#b20112] transition-all flex items-center gap-3">
-            <span className="material-symbols-outlined text-xl">history</span> Xem lịch sử
+            <span className="material-symbols-outlined text-xl">history</span> Xem lá»‹ch sá»­
          </button>
          <Link to="/student/dashboard">
             <button className="px-10 py-5 rounded-2xl bg-slate-900 text-white text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-slate-900/10 hover:bg-slate-800 transition-all flex items-center gap-3">
@@ -96,16 +105,16 @@ export default function ResultsPage() {
 
       {/* Detailed Review List */}
       <section className="space-y-8 px-2">
-         <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Chi tiết câu trả lời</h3>
+         <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Chi tiáº¿t cÃ¢u tráº£ lá»i</h3>
          <div className="space-y-6">
-            {results.questions.map((q, idx) => (
-              <div key={q.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+            {questions.map((q, idx) => (
+              <div key={idx} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
                  <div className="p-8 md:p-12 space-y-8">
                     <div className="flex justify-between items-center">
                        <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${q.userAnswer === q.correctAnswer ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
-                          {q.userAnswer === q.correctAnswer ? 'Chính xác' : 'Chưa đúng'}
+                          {q.userAnswer === q.correctAnswer ? 'ChÃ­nh xÃ¡c' : 'ChÆ°a Ä‘Ãºng'}
                        </span>
-                       <span className="text-xs font-black text-slate-300 uppercase tracking-widest italic">Câu {idx + 1}</span>
+                       <span className="text-xs font-black text-slate-300 uppercase tracking-widest italic">CÃ¢u {idx + 1}</span>
                     </div>
 
                     <h4 className="text-xl font-black text-slate-800 leading-relaxed tracking-tight">{q.text}</h4>
@@ -126,7 +135,7 @@ export default function ResultsPage() {
                                  {label}
                               </div>
                               <span className={`font-bold text-sm ${isCorrect ? 'text-emerald-700' : isUser ? 'text-[#b20112]' : 'text-slate-500'}`}>
-                                 {i === 0 ? 'HTTP' : i === 1 ? 'TCP' : i === 2 ? 'IP' : 'Ethernet'} {/* Simplified for demo */}
+                                 {q.options[i] || `Option ${i+1}`}
                               </span>
                               {isCorrect && <span className="material-symbols-outlined text-emerald-500 ml-auto">check_circle</span>}
                               {isUser && !isCorrect && <span className="material-symbols-outlined text-[#b20112] ml-auto">cancel</span>}
@@ -140,7 +149,7 @@ export default function ResultsPage() {
                           <span className="material-symbols-outlined text-5xl text-white">psychology</span>
                        </div>
                        <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                          <span className="material-symbols-outlined text-sm">auto_awesome</span> Giải thích từ AI
+                          <span className="material-symbols-outlined text-sm">auto_awesome</span> Giáº£i thÃ­ch tá»« AI
                        </p>
                        <p className="text-white/80 text-xs leading-relaxed font-medium">
                           {q.explanation}
@@ -154,3 +163,6 @@ export default function ResultsPage() {
     </div>
   );
 }
+
+
+

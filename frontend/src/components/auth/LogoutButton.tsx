@@ -1,14 +1,13 @@
-export default function LogoutButton() {
-  const handleLogout = async () => {
-    // TODO: Integrate with Quizi-fy Auth API
-    // await authApi.logout();
-    
-    // Clear all local storage / session storage just in case
-    localStorage.clear();
-    sessionStorage.clear();
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 
-    // Force a hard reload to the login page to clear all server-side cookies
-    window.location.href = '/login';
+export default function LogoutButton() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
   };
 
   return (

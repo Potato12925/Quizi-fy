@@ -22,6 +22,8 @@ class Config:
 
     # JWT
     JWT_SECRET = os.getenv("JWT_SECRET")
+    JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+    JWT_EXPIRES_IN_MINUTES = int(os.getenv("JWT_EXPIRES_IN_MINUTES", 1440))
 
     # OPENAI
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")

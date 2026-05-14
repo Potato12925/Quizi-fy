@@ -1,10 +1,6 @@
 from fastapi import APIRouter
 
-from controllers.health_controller import health_check
+from controllers.health_controller import router as health_controller_router
 
 router = APIRouter()
-
-
-@router.get("/health", summary="Health check")
-async def get_health():
-    return await health_check()
+router.include_router(health_controller_router)

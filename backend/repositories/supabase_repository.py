@@ -1,7 +1,4 @@
 import asyncio
-from urllib import error, request
-
-from core.config import Config
 
 from core.supabase import SupabaseManager
 

@@ -1,7 +1,11 @@
+from fastapi import APIRouter
+
 from core.responses import success_response
 
+router = APIRouter()
 
-async def health_check():
+@router.get("/health", summary="Health check")
+async def get_health():
     return success_response(
         data={"status": "ok"},
         message="Backend is running",

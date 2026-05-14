@@ -1,8 +1,12 @@
+from fastapi import APIRouter
+
 from core.responses import error_response, success_response
 from services.supabase_service import test_supabase_connection
 
+router = APIRouter()
 
-async def check_database_connection():
+@router.get("/databases/connection", summary="Test Supabase database connection")
+async def get_database_connection():
     is_connected, message = await test_supabase_connection()
 
     if not is_connected:

@@ -263,7 +263,6 @@ export const getQuestionBank = async (): Promise<QuestionBankData> => {
     };
   } catch (error) {
     console.warn('Backend endpoint /teacher/question-bank not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
     return new Promise((resolve) => {
       setTimeout(() => {
         const mockQuestions: DbQuestion[] = [
@@ -276,9 +275,14 @@ export const getQuestionBank = async (): Promise<QuestionBankData> => {
             difficulty: 'easy',
             source: 'manual',
             status: 'approved',
-            explanation: 'HTTP là giao thức tầng ứng dụng',
+            explanation: 'HTTP là giao thức tầng ứng dụng, cung cấp giao diện cho người dùng.',
             created_at: new Date().toISOString(),
-            options: [{ option_id: 1, question_id: 1, option_label: 'A', option_text: 'Ứng dụng', is_correct: true, order_num: 0 }]
+            options: [
+              { option_id: 1, question_id: 1, option_label: 'A', option_text: 'Ứng dụng', is_correct: true, order_num: 0 },
+              { option_id: 2, question_id: 1, option_label: 'B', option_text: 'Giao thức', is_correct: false, order_num: 1 },
+              { option_id: 3, question_id: 1, option_label: 'C', option_text: 'Mạng', is_correct: false, order_num: 2 },
+              { option_id: 4, question_id: 1, option_label: 'D', option_text: 'Vật lý', is_correct: false, order_num: 3 }
+            ]
           },
         ];
         resolve({

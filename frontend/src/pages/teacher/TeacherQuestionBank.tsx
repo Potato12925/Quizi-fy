@@ -68,12 +68,16 @@ export default function QuestionBankPage() {
   const handleOpenViewModal = (q: GeneratedQuestion) => {
     setModalMode('view');
     setSelectedQuestionId(q.id);
+    // Ensure always 4 options for the UI grid
+    const fullOptions = [...q.options];
+    while (fullOptions.length < 4) fullOptions.push('');
+    
     setFormData({
       subjectId: activeSubject,
       topicId: '1',
       content: q.text,
       difficulty: q.level || 'medium',
-      options: q.options,
+      options: fullOptions,
       correctOptionLabel: ['A', 'B', 'C', 'D'][q.correctAnswer] || 'A',
       explanation: q.explanation || ''
     });
@@ -83,12 +87,16 @@ export default function QuestionBankPage() {
   const handleOpenEditModal = (q: GeneratedQuestion) => {
     setModalMode('edit');
     setSelectedQuestionId(q.id);
+    // Ensure always 4 options for the UI grid
+    const fullOptions = [...q.options];
+    while (fullOptions.length < 4) fullOptions.push('');
+
     setFormData({
       subjectId: activeSubject,
       topicId: '1',
       content: q.text,
       difficulty: q.level || 'medium',
-      options: q.options,
+      options: fullOptions,
       correctOptionLabel: ['A', 'B', 'C', 'D'][q.correctAnswer] || 'A',
       explanation: q.explanation || ''
     });
@@ -232,12 +240,12 @@ export default function QuestionBankPage() {
                          </div>
                          <h4 className="text-lg font-black text-slate-800 tracking-tight leading-snug">{q.text}</h4>
                          {q.options.length > 0 && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-                               {q.options.map((opt, i) => (
-                                 <div key={i} className={`p-4 rounded-2xl border text-xs font-bold transition-all ${i === q.correctAnswer ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm' : 'bg-slate-50 border-transparent text-slate-500'}`}>
-                                    <span className="opacity-40 mr-2">{['A', 'B', 'C', 'D'][i]}.</span> {opt}
-                                 </div>
-                               ))}
+                            <div className="mt-4">
+                               <div className="p-4 rounded-2xl border bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm text-xs font-bold inline-flex items-center gap-2">
+                                  <span className="material-symbols-outlined text-sm">check_circle</span>
+                                  <span className="opacity-60">Đáp án đúng:</span> 
+                                  {['A', 'B', 'C', 'D'][q.correctAnswer]}. {q.options[q.correctAnswer]}
+                               </div>
                             </div>
                          )}
                       </div>

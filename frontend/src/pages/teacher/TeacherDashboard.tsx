@@ -38,6 +38,23 @@ export default function TeacherDashboard() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Constraints check
+      const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+      const maxSizeBytes = 20 * 1024 * 1024; // 20MB
+
+      if (!allowedTypes.includes(file.type) && !file.name.endsWith('.txt')) {
+        setFormError('Chỉ hỗ trợ định dạng file PDF, DOCX hoặc TXT');
+        setSelectedFile(null);
+        return;
+      }
+
+      if (file.size > maxSizeBytes) {
+        setFormError('Dung lượng file vượt quá giới hạn 20MB');
+        setSelectedFile(null);
+        return;
+      }
+
+      setFormError('');
       setSelectedFile(file);
       if (!uploadFormData.title) {
         setUploadFormData({ ...uploadFormData, title: file.name });
@@ -268,7 +285,7 @@ export default function TeacherDashboard() {
                          ref={fileInputRef}
                          onChange={handleFileChange}
                          className="hidden" 
-                         accept=".pdf,.docx,.pptx"
+                         accept=".pdf,.docx,.txt"
                        />
                        {selectedFile ? (
                          <div className="flex flex-col items-center">
@@ -280,7 +297,7 @@ export default function TeacherDashboard() {
                          <div>
                             <span className="material-symbols-outlined text-4xl text-slate-200 mb-2">cloud_upload</span>
                             <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Kéo thả hoặc click để chọn file</p>
-                            <p className="text-[9px] text-slate-300 uppercase tracking-widest mt-2">Hỗ trợ PDF, DOCX, PPTX</p>
+                            <p className="text-[9px] text-slate-300 uppercase tracking-widest mt-2">Hỗ trợ PDF, DOCX, TXT (Max 20MB)</p>
                          </div>
                        )}
                     </div>

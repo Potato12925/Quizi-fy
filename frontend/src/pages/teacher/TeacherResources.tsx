@@ -158,6 +158,23 @@ export default function TeacherResourcesPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Constraints check
+      const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+      const maxSizeBytes = 20 * 1024 * 1024; // 20MB
+
+      if (!allowedTypes.includes(file.type) && !file.name.endsWith('.txt')) {
+        setFormError('Chỉ hỗ trợ định dạng file PDF, DOCX hoặc TXT');
+        setSelectedFile(null);
+        return;
+      }
+
+      if (file.size > maxSizeBytes) {
+        setFormError('Dung lượng file vượt quá giới hạn 20MB');
+        setSelectedFile(null);
+        return;
+      }
+
+      setFormError('');
       setSelectedFile(file);
       if (!formData.title) {
         setFormData({ ...formData, title: file.name });
@@ -231,10 +248,12 @@ export default function TeacherResourcesPage() {
                    <div className="flex items-center gap-4">
                       <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-sm ${
                          res.name.toLowerCase().endsWith('.pdf') ? 'bg-red-50 text-red-500' : 
+                         res.name.toLowerCase().endsWith('.txt') ? 'bg-slate-50 text-slate-500' : 
                          res.name.toLowerCase().endsWith('.pptx') ? 'bg-amber-50 text-amber-500' : 'bg-blue-50 text-blue-500'
                       }`}>
                          <span className="material-symbols-outlined">
                             {res.name.toLowerCase().endsWith('.pdf') ? 'picture_as_pdf' : 
+                             res.name.toLowerCase().endsWith('.txt') ? 'article' : 
                              res.name.toLowerCase().endsWith('.pptx') ? 'slideshow' : 'description'}
                          </span>
                       </div>
@@ -329,7 +348,7 @@ export default function TeacherResourcesPage() {
                            ref={fileInputRef}
                            onChange={handleFileChange}
                            className="hidden" 
-                           accept=".pdf,.docx,.pptx"
+                           accept=".pdf,.docx,.txt"
                          />
                          {selectedFile ? (
                            <div className="flex flex-col items-center">
@@ -341,7 +360,7 @@ export default function TeacherResourcesPage() {
                            <div>
                               <span className="material-symbols-outlined text-4xl text-slate-200 mb-2">cloud_upload</span>
                               <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Kéo thả hoặc click để chọn file</p>
-                              <p className="text-[9px] text-slate-300 uppercase tracking-widest mt-2">Hỗ trợ PDF, DOCX, PPTX (Max 50MB)</p>
+                              <p className="text-[9px] text-slate-300 uppercase tracking-widest mt-2">Hỗ trợ PDF, DOCX, TXT (Max 20MB)</p>
                            </div>
                          )}
                       </div>

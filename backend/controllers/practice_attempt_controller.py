@@ -1,0 +1,63 @@
+from fastapi import APIRouter, Depends, Query
+
+from core.responses import error_response, success_response
+from middlewares.auth_middleware import CurrentUser, require_roles
+from schemas.practice_attempt_schema import PracticeAttemptCreateRequest, PracticeAttemptUpdateRequest
+from services.practice_attempt_service import create_practice_attempt, delete_practice_attempt, get_practice_attempt_by_id, get_practice_attempts, update_practice_attempt
+
+router = APIRouter(prefix="/practice-attempts", tags=["PracticeAttempts"])
+
+
+@router.post("", summary="Create practice_attempt")
+async def post_practice_attempt(payload: PracticeAttemptCreateRequest, _: CurrentUser = Depends(require_roles("admin"))):
+    try:
+        result = await create_practice_attempt(payload)
+        return success_response(data=result, message="PracticeAttempt created successfully", status_code=201)
+    except ValueError as exc:
+        return error_response(message=str(exc), status_code=400, error_code="PRACTICEATTEMPT_CREATE_INVALID")
+    except Exception:
+        return error_response(message="Unable to create practice_attempt", status_code=500, error_code="PRACTICEATTEMPT_CREATE_FAILED")
+
+
+@router.get("", summary="List practice-attempts")
+async def get_practice_attempt_list(page: int = Query(default=1, ge=1), limit: int = Query(default=20, ge=1, le=100), _: CurrentUser = Depends(require_roles("admin"))):
+    try:
+        result = await get_practice_attempts(page=page, limit=limit)
+        return success_response(data=result["items"], meta=result["pagination"], message="PracticeAttempt loaded successfully", status_code=200)
+    except Exception:
+        return error_response(message="Unable to load practice-attempts", status_code=500, error_code="PRACTICEATTEMPT_LIST_FAILED")
+
+
+@router.get("/{record_id}", summary="Get practice_attempt detail")
+async def get_practice_attempt_detail(record_id: int, _: CurrentUser = Depends(require_roles("admin"))):
+    try:
+        result = await get_practice_attempt_by_id(record_id)
+        return success_response(data=result, message="PracticeAttempt loaded successfully", status_code=200)
+    except ValueError as exc:
+        return error_response(message=str(exc), status_code=404, error_code="PRACTICEATTEMPT_NOT_FOUND")
+    except Exception:
+        return error_response(message="Unable to load practice_attempt", status_code=500, error_code="PRACTICEATTEMPT_GET_FAILED")
+
+
+@router.put("/{record_id}", summary="Update practice_attempt")
+async def put_practice_attempt(record_id: int, payload: PracticeAttemptUpdateRequest, _: CurrentUser = Depends(require_roles("admin"))):
+    try:
+        result = await update_practice_attempt(record_id, payload)
+        return success_response(data=result, message="PracticeAttempt updated successfully", status_code=200)
+    except ValueError as exc:
+        status_code = 404 if str(exc) == "PracticeAttempt not found" else 400
+        return error_response(message=str(exc), status_code=status_code, error_code="PRACTICEATTEMPT_UPDATE_INVALID")
+    except Exception:
+        return error_response(message="Unable to update practice_attempt", status_code=500, error_code="PRACTICEATTEMPT_UPDATE_FAILED")
+
+
+@router.delete("/{record_id}", summary="Delete practice_attempt")
+async def delete_practice_attempt_route(record_id: int, _: CurrentUser = Depends(require_roles("admin"))):
+    try:
+        result = await delete_practice_attempt(record_id)
+        return success_response(data=result, message="PracticeAttempt deleted successfully", status_code=200)
+    except ValueError as exc:
+        status_code = 404 if str(exc) == "PracticeAttempt not found" else 400
+        return error_response(message=str(exc), status_code=status_code, error_code="PRACTICEATTEMPT_DELETE_INVALID")
+    except Exception:
+        return error_response(message="Unable to delete practice_attempt", status_code=500, error_code="PRACTICEATTEMPT_DELETE_FAILED")

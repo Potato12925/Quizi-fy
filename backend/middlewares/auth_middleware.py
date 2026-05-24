@@ -13,7 +13,7 @@ security = HTTPBearer(auto_error=False)
 @dataclass
 class CurrentUser:
     user_id: int
-    email: str
+    username: str
     roles: list[str]
 
 
@@ -47,13 +47,23 @@ async def require_authenticated_user(
         security
     ),
 ) -> CurrentUser:
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication credentials are required",
+        )
 
     token = credentials.credentials
 
     payload = _decode_jwt_token(token)
 
     user_id = int(payload["sub"])
-    email = str(payload["email"])
+    username = str(payload.get("username") or "")
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
 
     roles = await find_role_codes_by_user_id(
         user_id
@@ -61,7 +71,7 @@ async def require_authenticated_user(
 
     current_user = CurrentUser(
         user_id=user_id,
-        email=email,
+        username=username,
         roles=roles,
     )
 

@@ -1,7 +1,18 @@
 -- =========================================================
 -- BKP SYSTEM DATABASE
--- PostgreSQL Initialization Script
+-- FULL RESET + RECREATE
+-- PostgreSQL / Supabase
 -- =========================================================
+
+-- =========================================================
+-- RESET DATABASE
+-- =========================================================
+
+DROP SCHEMA IF EXISTS public CASCADE;
+CREATE SCHEMA public;
+
+GRANT ALL ON SCHEMA public TO postgres;
+GRANT ALL ON SCHEMA public TO public;
 
 -- =========================================================
 -- EXTENSIONS
@@ -57,25 +68,59 @@ CREATE TYPE practice_attempt_status AS ENUM (
 CREATE TABLE users (
     user_id BIGSERIAL PRIMARY KEY,
 
-    google_id VARCHAR(100) UNIQUE NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
+    username VARCHAR(100) UNIQUE NOT NULL,
+
+    password_hash VARCHAR(255) NOT NULL,
 
     full_name VARCHAR(255) NOT NULL,
-    avatar_url TEXT,
 
     is_active BOOLEAN DEFAULT TRUE,
+
+    must_change_password BOOLEAN DEFAULT TRUE,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP
 );
 
-CREATE INDEX idx_users_email
-ON users(email);
+CREATE INDEX idx_users_username
+ON users(username);
 
 CREATE INDEX idx_users_is_active
 ON users(is_active);
+-- =========================================================
+-- DEFAULT USERS
+-- =========================================================
 
+INSERT INTO users (
+    username,
+    password_hash,
+    full_name,
+    is_active,
+    must_change_password
+)
+VALUES
+(
+    'admin',
+    '$2b$12$hRU1YPKZALIRE0F/LgchpeANk4d6z.HxwbxKsC1mV7aQ0WlPzpxRy',
+    'System Administrator',
+    TRUE,
+    FALSE
+),
+(
+    'teacher',
+    '$2b$12$hRU1YPKZALIRE0F/LgchpeANk4d6z.HxwbxKsC1mV7aQ0WlPzpxRy',
+    'Default Teacher',
+    TRUE,
+    FALSE
+),
+(
+    'student',
+    '$2b$12$hRU1YPKZALIRE0F/LgchpeANk4d6z.HxwbxKsC1mV7aQ0WlPzpxRy',
+    'Default Student',
+    TRUE,
+    FALSE
+);
 -- =========================================================
 -- ROLES
 -- =========================================================
@@ -116,7 +161,21 @@ CREATE TABLE user_roles (
     CONSTRAINT uq_user_role
         UNIQUE(user_id, role_id)
 );
+-- =========================================================
+-- DEFAULT USER ROLES
+-- =========================================================
 
+INSERT INTO user_roles (user_id, role_id)
+SELECT u.user_id, r.role_id
+FROM users u
+JOIN roles r
+ON (
+    (u.username = 'admin' AND r.role_code = 'admin')
+    OR
+    (u.username = 'teacher' AND r.role_code = 'teacher')
+    OR
+    (u.username = 'student' AND r.role_code = 'student')
+);
 -- =========================================================
 -- CLASSES
 -- =========================================================
@@ -659,6 +718,62 @@ CREATE TABLE notifications (
 
 CREATE INDEX idx_notifications_user_read
 ON notifications(user_id, is_read);
+
+-- =========================================================
+-- AUTO UPDATE FUNCTION
+-- =========================================================
+
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.updated_at = CURRENT_TIMESTAMP;
+   RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- =========================================================
+-- TRIGGERS
+-- =========================================================
+
+CREATE TRIGGER trg_users_updated_at
+BEFORE UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_classes_updated_at
+BEFORE UPDATE ON classes
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_subjects_updated_at
+BEFORE UPDATE ON subjects
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_topics_updated_at
+BEFORE UPDATE ON topics
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_documents_updated_at
+BEFORE UPDATE ON documents
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_ai_requests_updated_at
+BEFORE UPDATE ON ai_requests
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_questions_updated_at
+BEFORE UPDATE ON questions
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_class_subjects_updated_at
+BEFORE UPDATE ON class_subjects
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
 
 -- =========================================================
 -- DEFAULT ROLES

@@ -1,22 +1,20 @@
-from typing import Literal, List
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 
-class GoogleLoginRequest(BaseModel):
-    token: str = Field(min_length=1)
-    token_type: Literal["id_token", "access_token"] = "id_token"
-    roles: List[Literal["teacher", "student"]] = Field(default_factory=list)
+class UsernamePasswordLoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=255)
 
 
 class SetRoleRequest(BaseModel):
-    role_code: Literal["student", "teacher","admin"]
+    role_code: Literal["student", "teacher", "admin"]
 
 
 class AuthMeResponse(BaseModel):
     user_id: int
-    google_id: str
-    email: str
+    username: str
     full_name: str
     is_active: bool
     roles: list[str]

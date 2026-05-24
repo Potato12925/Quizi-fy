@@ -1,5 +1,23 @@
 import { api } from './client';
 
+export type AdminCreatableRole = 'student' | 'teacher';
+
+export interface CreateAdminUserPayload {
+  username: string;
+  password: string;
+  full_name: string;
+  role_code: AdminCreatableRole;
+}
+
+export interface CreatedAdminUser {
+  user_id: number;
+  username: string;
+  full_name: string;
+  is_active: boolean;
+  must_change_password: boolean;
+  roles: string[];
+}
+
 // Types derived from existing UI mock data
 // Database Schema Models
 export interface DbClass {
@@ -187,4 +205,14 @@ export const getSubjects = async (): Promise<AdminSubject[]> => {
       }, 500);
     });
   }
+};
+
+/**
+ * POST /users
+ * Admin creates a student or teacher account
+ */
+export const createUserByAdmin = async (
+  payload: CreateAdminUserPayload
+): Promise<CreatedAdminUser> => {
+  return await api.post<CreatedAdminUser>('/user', payload);
 };

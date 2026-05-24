@@ -1,4 +1,3 @@
-import jwt
 from fastapi import APIRouter, Depends
 
 from core.responses import error_response, success_response
@@ -7,12 +6,12 @@ from middlewares.auth_middleware import (
     require_authenticated_user,
 )
 from schemas.auth_schema import (
-    GoogleLoginRequest,
     SetRoleRequest,
+    UsernamePasswordLoginRequest,
 )
 from services.auth_service import (
     get_me,
-    login_with_google,
+    login_with_username_password,
     logout_user,
     set_role_for_current_user,
 )
@@ -23,14 +22,14 @@ router = APIRouter(
 )
 
 
-@router.post("/google-login", summary="Login with Google token")
-async def post_google_login(payload: GoogleLoginRequest):
+@router.post("/login", summary="Login with username and password")
+async def post_login(payload: UsernamePasswordLoginRequest):
     try:
-        result = await login_with_google(payload)
+        result = await login_with_username_password(payload)
 
         return success_response(
             data=result,
-            message="Google login successful",
+            message="Login successful",
             status_code=200,
         )
 
@@ -38,14 +37,21 @@ async def post_google_login(payload: GoogleLoginRequest):
         return error_response(
             message=str(exc),
             status_code=401,
-            error_code="AUTH_INVALID_GOOGLE_TOKEN",
+            error_code="AUTH_INVALID_CREDENTIALS",
+        )
+
+    except RuntimeError:
+        return error_response(
+            message="Authentication service is not configured",
+            status_code=500,
+            error_code="AUTH_SERVICE_MISCONFIGURED",
         )
 
     except Exception:
         return error_response(
-            message="Unable to login with Google",
+            message="Unable to login",
             status_code=500,
-            error_code="AUTH_GOOGLE_LOGIN_FAILED",
+            error_code="AUTH_LOGIN_FAILED",
         )
 
 

@@ -3,45 +3,22 @@ import asyncio
 from core.supabase import SupabaseManager
 
 
-async def find_user_by_google_id_or_email(
-    google_id: str,
-    email: str,
+async def find_user_by_username(
+    username: str,
 ) -> dict | None:
     supabase = SupabaseManager.get_client()
-    query = f"google_id.eq.{google_id},email.eq.{email}"
     response = await asyncio.to_thread(
         lambda: supabase.table("users")
-        .select("user_id,google_id,email,full_name,is_active")
-        .or_(query)
+        .select(
+            "user_id,username,password_hash,full_name,is_active,must_change_password"
+        )
+        .eq("username", username)
+        .is_("deleted_at", None)
         .limit(1)
         .execute()
     )
     rows = response.data or []
     return rows[0] if rows else None
-
-
-async def create_user(
-    google_id: str,
-    email: str,
-    full_name: str,
-) -> dict:
-    supabase = SupabaseManager.get_client()
-    response = await asyncio.to_thread(
-        lambda: supabase.table("users")
-        .insert(
-            {
-                "google_id": google_id,
-                "email": email,
-                "full_name": full_name,
-                "is_active": True,
-            }
-        )
-        .execute()
-    )
-    rows = response.data or []
-    if not rows:
-        raise ValueError("Failed to create user")
-    return rows[0]
 
 
 async def find_role_id_by_code(role_code: str) -> int | None:

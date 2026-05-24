@@ -1,36 +1,21 @@
-import asyncio
-import json
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlencode
-from urllib.request import urlopen
-from middlewares.auth_middleware import CurrentUser
-import jwt
 
+import jwt
 from core.config import Config
+from middlewares.auth_middleware import CurrentUser
 from repositories.auth_repository import (
     add_user_role,
-    create_user,
     find_role_codes_by_user_id,
     find_role_id_by_code,
-    find_user_by_google_id_or_email,
+    find_user_by_username,
     has_user_role,
 )
-from schemas.auth_schema import GoogleLoginRequest, SetRoleRequest
+from schemas.auth_schema import SetRoleRequest, UsernamePasswordLoginRequest
 
-
-async def _verify_google_token(token: str, token_type: str) -> dict:
-    query_key = "id_token" if token_type == "id_token" else "access_token"
-    query_string = urlencode({query_key: token})
-    url = f"https://oauth2.googleapis.com/tokeninfo?{query_string}"
-
-    def _fetch() -> dict:
-        with urlopen(url, timeout=10) as response:
-            return json.loads(response.read().decode("utf-8"))
-
-    payload = await asyncio.to_thread(_fetch)
-    if payload.get("error_description"):
-        raise ValueError("Invalid Google token")
-    return payload
+try:
+    import bcrypt
+except ImportError:  # pragma: no cover
+    bcrypt = None
 
 
 def _create_jwt(user: dict, roles: list[str]) -> str:
@@ -41,7 +26,7 @@ def _create_jwt(user: dict, roles: list[str]) -> str:
     exp = now + timedelta(minutes=Config.JWT_EXPIRES_IN_MINUTES)
     payload = {
         "sub": str(user["user_id"]),
-        "email": user["email"],
+        "username": user["username"],
         "roles": roles,
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
@@ -49,50 +34,33 @@ def _create_jwt(user: dict, roles: list[str]) -> str:
     return jwt.encode(payload, Config.JWT_SECRET, algorithm=Config.JWT_ALGORITHM)
 
 
-async def login_with_google(payload: GoogleLoginRequest) -> dict:
-    token_payload = await _verify_google_token(payload.token, payload.token_type)
+def _verify_password(raw_password: str, password_hash: str) -> bool:
+    if bcrypt is None:
+        raise RuntimeError("bcrypt library is required for password authentication")
 
-    google_id = token_payload.get("sub")
-    email = token_payload.get("email")
-    full_name = token_payload.get("name") or email
-
-    if not google_id or not email:
-        raise ValueError("Google token missing required claims")
-
-    user = await find_user_by_google_id_or_email(
-        google_id=google_id,
-        email=email,
+    return bcrypt.checkpw(
+        raw_password.encode("utf-8"),
+        password_hash.encode("utf-8"),
     )
 
-    is_new_user = False
+
+async def login_with_username_password(
+    payload: UsernamePasswordLoginRequest,
+) -> dict:
+    user = await find_user_by_username(payload.username)
 
     if not user:
-        user = await create_user(
-            google_id=google_id,
-            email=email,
-            full_name=full_name,
-        )
+        raise ValueError("Invalid username or password")
 
-        is_new_user = True
+    password_hash = str(user.get("password_hash", ""))
+    if not password_hash:
+        raise ValueError("Invalid username or password")
 
-        # =========================
-        # ADD DEFAULT ROLE
-        # =========================
+    if not _verify_password(payload.password, password_hash):
+        raise ValueError("Invalid username or password")
 
-        # nếu frontend không gửi role
-        default_roles = payload.roles or ["student"]
-
-        for role_code in default_roles:
-
-            role_id = await find_role_id_by_code(role_code)
-
-            if role_id is None:
-                continue
-
-            await add_user_role(
-                user_id=int(user["user_id"]),
-                role_id=role_id,
-            )
+    if not bool(user.get("is_active", True)):
+        raise ValueError("User is inactive")
 
     roles = await find_role_codes_by_user_id(
         int(user["user_id"])
@@ -106,13 +74,14 @@ async def login_with_google(payload: GoogleLoginRequest) -> dict:
     return {
         "access_token": access_token,
         "token_type": "Bearer",
-        "is_new_user": is_new_user,
         "user": {
             "user_id": int(user["user_id"]),
-            "google_id": user["google_id"],
-            "email": user["email"],
+            "username": user["username"],
             "full_name": user["full_name"],
             "is_active": bool(user.get("is_active", True)),
+            "must_change_password": bool(
+                user.get("must_change_password", False)
+            ),
             "roles": roles,
         },
     }
@@ -127,16 +96,12 @@ def _decode_jwt_token(token: str) -> dict:
         algorithms=[Config.JWT_ALGORITHM],
     )
 
-from middlewares.auth_middleware import CurrentUser
-
-
 async def get_me(
     current_user: CurrentUser,
 ) -> dict:
-
     return {
         "user_id": current_user.user_id,
-        "email": current_user.email,
+        "username": current_user.username,
         "roles": current_user.roles,
     }
 
@@ -145,11 +110,11 @@ async def get_me(
 async def logout_user(_: str | None) -> dict:
     return {"logged_out": True}
 
+
 async def set_role_for_current_user(
     current_user: CurrentUser,
     payload: SetRoleRequest,
 ) -> dict:
-
     user_id = current_user.user_id
 
     role_id = await find_role_id_by_code(

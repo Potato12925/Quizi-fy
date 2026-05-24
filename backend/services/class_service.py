@@ -20,6 +20,7 @@ async def create_class(payload: ClassCreateRequest) -> dict:
         {
             "class_code": payload.class_code,
             "class_name": payload.class_name,
+            "description": payload.description,
             "owner_id": payload.owner_id,
             "status": "active",
         }

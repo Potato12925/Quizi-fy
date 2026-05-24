@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 class ClassCreateRequest(BaseModel):
     class_code: str = Field(min_length=1, max_length=50)
     class_name: str = Field(min_length=1, max_length=255)
+    description: str = Field(min_length=1, max_length=255)
     owner_id: int = Field(ge=1)
 
 

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getStudentProgress } from '@/api/studentApi';
 import type { StudentProgressData } from '@/api/studentApi';
@@ -18,7 +18,7 @@ export default function ProgressPage() {
         const result = await getStudentProgress();
         setData(result);
       } catch {
-        setError('Không th? t?i d? li?u');
+        setError('Không thể tải dữ liệu');
       } finally {
         setIsLoading(false);
       }
@@ -37,12 +37,12 @@ export default function ProgressPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 pt-2">
         <div>
-          <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Tiáº¿n Ä‘á»™ <br/><span className="text-[#b20112]">Há»c táº­p</span></h1>
-          <p className="text-slate-500 mt-4 font-medium uppercase text-[10px] tracking-widest">PhÃ¢n tÃ­ch dá»¯ liá»‡u Ã´n luyá»‡n tá»« 01/01/2026 - Nay</p>
+          <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Tiến độ <br/><span className="text-[#b20112]">Học tập</span></h1>
+          <p className="text-slate-500 mt-4 font-medium uppercase text-[10px] tracking-widest">Phân tích dữ liệu ôn luyện từ 01/01/2026 - Nay</p>
         </div>
         <div className="flex gap-4">
            <button className="bg-white border border-slate-100 px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-sm flex items-center gap-2 hover:bg-slate-50">
-              <span className="material-symbols-outlined text-base">file_download</span> Xuáº¥t bÃ¡o cÃ¡o
+              <span className="material-symbols-outlined text-base">file_download</span> Xuất báo cáo
            </button>
         </div>
       </div>
@@ -50,10 +50,10 @@ export default function ProgressPage() {
       {/* Hero Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {[
-          { label: 'Äiá»ƒm trung bÃ¬nh', value: stats.avgScore, icon: 'grade', color: 'text-[#b20112]', bg: 'bg-red-50' },
-          { label: 'Sá»‘ lÆ°á»£t Ã´n táº­p', value: stats.totalAttempts, icon: 'history_edu', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-          { label: 'CÃ¢u há»i Ä‘Ã£ lÃ m', value: stats.totalQuestions, icon: 'quiz', color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'Thá»i gian há»c', value: stats.timeStudied, icon: 'schedule', color: 'text-amber-600', bg: 'bg-amber-50' },
+          { label: 'Điểm trung bình', value: stats.avgScore, icon: 'grade', color: 'text-[#b20112]', bg: 'bg-red-50' },
+          { label: 'Số lượt ôn tập', value: stats.totalAttempts, icon: 'history_edu', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+          { label: 'Câu hỏi đã làm', value: stats.totalQuestions, icon: 'quiz', color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'Thời gian học', value: stats.timeStudied, icon: 'schedule', color: 'text-amber-600', bg: 'bg-amber-50' },
         ].map((s, idx) => (
           <div key={idx} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm transition-all hover:scale-[1.02]">
              <div className={`w-12 h-12 rounded-2xl ${s.bg} ${s.color} flex items-center justify-center mb-6`}>
@@ -69,10 +69,10 @@ export default function ProgressPage() {
         {/* Main Chart Card */}
         <div className="lg:col-span-8 bg-white rounded-[3.5rem] p-10 border border-slate-100 shadow-sm space-y-10">
            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight">Xu hÆ°á»›ng Ä‘iá»ƒm sá»‘</h3>
+              <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight">Xu hướng điểm số</h3>
               <div className="flex gap-2">
-                 <button className="px-4 py-2 rounded-xl bg-slate-900 text-white text-[9px] font-black uppercase">Tuáº§n</button>
-                 <button className="px-4 py-2 rounded-xl bg-slate-50 text-slate-400 text-[9px] font-black uppercase">ThÃ¡ng</button>
+                 <button className="px-4 py-2 rounded-xl bg-slate-900 text-white text-[9px] font-black uppercase">Tuần</button>
+                 <button className="px-4 py-2 rounded-xl bg-slate-50 text-slate-400 text-[9px] font-black uppercase">Tháng</button>
               </div>
            </div>
            
@@ -101,7 +101,7 @@ export default function ProgressPage() {
                 ))}
               </svg>
               <div className="flex justify-between mt-6 text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">
-                 <span>Tuáº§n 1</span><span>Tuáº§n 2</span><span>Tuáº§n 3</span><span>Tuáº§n 4</span><span>Tuáº§n 5</span><span>Tuáº§n 6</span><span>Tuáº§n 7</span><span>Tuáº§n 8</span>
+                 <span>Tuần 1</span><span>Tuần 2</span><span>Tuần 3</span><span>Tuần 4</span><span>Tuần 5</span><span>Tuần 6</span><span>Tuần 7</span><span>Tuần 8</span>
               </div>
            </div>
         </div>
@@ -112,8 +112,8 @@ export default function ProgressPage() {
               <span className="material-symbols-outlined text-[100px]">track_changes</span>
            </div>
            <div className="relative z-10">
-              <h3 className="text-xl font-black uppercase italic tracking-tight mb-2">Äá»™ chÃ­nh xÃ¡c</h3>
-              <p className="text-white/40 text-[10px] font-black uppercase tracking-widest">Tá»‰ lá»‡ tráº£ lá»i Ä‘Ãºng tá»•ng thá»ƒ</p>
+              <h3 className="text-xl font-black uppercase italic tracking-tight mb-2">Độ chính xác</h3>
+              <p className="text-white/40 text-[10px] font-black uppercase tracking-widest">Tỉ lệ trả lời đúng tổng thể</p>
            </div>
            
            <div className="flex flex-col items-center py-10 relative z-10">
@@ -127,7 +127,7 @@ export default function ProgressPage() {
            </div>
 
            <div className="bg-white/5 p-6 rounded-2xl border border-white/10 relative z-10">
-              <p className="text-xs font-medium text-white/60 leading-relaxed italic">"Báº¡n Ä‘ang lÃ m ráº¥t tá»‘t á»Ÿ cÃ¡c cÃ¢u há»i má»©c Ä‘á»™ Trung bÃ¬nh. HÃ£y thá»­ sá»©c thÃªm á»Ÿ má»©c Ä‘á»™ KhÃ³!"</p>
+              <p className="text-xs font-medium text-white/60 leading-relaxed italic">"Bạn đang làm rất tốt ở các câu hỏi mức độ Trung bình. Hãy thử sức thêm ở mức độ Khó!"</p>
            </div>
         </div>
       </div>
@@ -135,7 +135,7 @@ export default function ProgressPage() {
       {/* Subject Performance */}
       <div className="bg-white rounded-[3.5rem] p-12 border border-slate-100 shadow-sm">
          <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight mb-12 flex items-center gap-4">
-            <span className="material-symbols-outlined text-[#b20112]">bar_chart</span> Hiá»‡u suáº¥t theo mÃ´n há»c
+            <span className="material-symbols-outlined text-[#b20112]">bar_chart</span> Hiệu suất theo môn học
          </h3>
          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-20 gap-y-12">
             {subjectPerformance.map((s, idx) => (
@@ -148,8 +148,8 @@ export default function ProgressPage() {
                     <div className={`h-full ${s.color} transition-all duration-1000`} style={{ width: `${s.score}%` }}></div>
                  </div>
                  <div className="flex gap-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                    <span>ÄÃ£ Ã´n: 12 bÃ i</span>
-                    <span>Thá»© háº¡ng: Top 15%</span>
+                    <span>Đã ôn: 12 bài</span>
+                    <span>Thứ hạng: Top 15%</span>
                  </div>
               </div>
             ))}
@@ -158,5 +158,3 @@ export default function ProgressPage() {
     </div>
   );
 }
-
-

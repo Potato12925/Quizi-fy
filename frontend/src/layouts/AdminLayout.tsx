@@ -1,13 +1,15 @@
 import { Outlet } from 'react-router-dom';
 import DashboardSidebar from '@/components/layout/DashboardSidebar';
 import LogoutButton from '@/components/auth/LogoutButton';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function AdminLayout() {
-  // TODO: Fetch profile from Auth Context or API
+  const { user } = useAuth();
+  
   const profile = {
     role: 'admin',
-    full_name: 'Quản trị viên',
-    username: 'admin',
+    full_name: user?.full_name || 'Quản trị viên',
+    username: user?.email ? user.email.split('@')[0] : 'admin',
   };
 
   return (

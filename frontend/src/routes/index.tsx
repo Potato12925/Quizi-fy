@@ -161,7 +161,7 @@ export const router = createBrowserRouter([
             path: 'results/:id',
             element: <StudentResults />,
           },
-          
+
         ]
       }
     ],

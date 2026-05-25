@@ -139,3 +139,5 @@ Tài liệu này mô tả các giao kèo API (endpoints, format) khớp với Da
    - 400 cho lỗi validate (file quá lớn, sai định dạng).
    - 401/403 cho lỗi quyền truy cập.
 
+
+admin/gv/B21DCCN001 pass 123456

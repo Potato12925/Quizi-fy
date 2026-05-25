@@ -306,7 +306,7 @@ export default function TeacherDashboard() {
                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Tên tài liệu hiển thị</label>
                        <input 
                          type="text"
-                         placeholder="Ví dụ: Giáo trình Mạng máy tính - Chương 1"
+                         placeholder="Ví dụ: Tài liệu Toán lớp 12 - Chương 1: Đạo hàm"
                          value={uploadFormData.title}
                          onChange={e => setUploadFormData({ ...uploadFormData, title: e.target.value })}
                          className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold focus:ring-2 focus:ring-red-500/20"
@@ -321,9 +321,9 @@ export default function TeacherDashboard() {
                             onChange={e => setUploadFormData({ ...uploadFormData, subjectId: parseInt(e.target.value) })}
                             className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold focus:ring-2 focus:ring-red-500/20 cursor-pointer"
                           >
-                             <option value={1}>Mạng máy tính</option>
-                             <option value={2}>Cấu trúc dữ liệu</option>
-                             <option value={3}>Hệ điều hành</option>
+                             <option value={1}>Toán học</option>
+                             <option value={2}>Ngữ văn</option>
+                             <option value={3}>Vật lý</option>
                           </select>
                        </div>
                        <div className="space-y-2">
@@ -386,7 +386,7 @@ export default function TeacherDashboard() {
           <span className="bg-white/20 text-white text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-[0.2em] backdrop-blur-md border border-white/20">AI Insights</span>
           <h2 className="text-4xl font-black text-white leading-[1.1] tracking-tighter">Tối ưu hoá nội dung giảng dạy</h2>
           <p className="text-white/70 font-medium leading-relaxed">
-            Dựa trên kết quả làm bài của lớp 'Cấu trúc dữ liệu', AI nhận thấy sinh viên đang gặp khó khăn ở chương 'Cây nhị phân'. Bạn có muốn tạo thêm một bộ câu hỏi ôn tập chuyên sâu không?
+            Dựa trên kết quả làm bài của lớp '12A1', AI nhận thấy học sinh đang gặp khó khăn ở chương 'Đạo hàm'. Bạn có muốn tạo thêm một bộ câu hỏi ôn tập chuyên sâu không?
           </p>
           <div className="flex flex-wrap gap-4 pt-4 justify-center lg:justify-start">
             <button className="bg-white text-[#b20112] px-10 py-4 rounded-2xl font-black text-sm shadow-xl hover:bg-red-50 hover:scale-105 active:scale-95 transition-all uppercase tracking-widest">Tạo ngay</button>

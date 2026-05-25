@@ -6,6 +6,7 @@ export interface AuthUser {
   user_id: number;
   username: string;
   roles: UserRole[];
+  full_name?: string;
 }
 
 export interface LoginRequest {
@@ -52,6 +53,7 @@ export const loginApi = async (payload: LoginRequest): Promise<LoginResponse> =>
       user_id: result.user.user_id,
       username: result.user.username,
       roles: result.user.roles,
+      full_name: result.user.full_name,
     },
   };
 };

@@ -5,7 +5,7 @@ from core.supabase import SupabaseManager
 
 
 SELECT_FIELDS = "attempt_id,practice_set_id,total_correct,total_wrong,status"
-HAS_DELETED = false
+HAS_DELETED = False
 
 
 async def find_practice_attempt_by_id(record_id: int) -> dict | None:

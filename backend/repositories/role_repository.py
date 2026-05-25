@@ -5,7 +5,7 @@ from core.supabase import SupabaseManager
 
 
 SELECT_FIELDS = "role_id,role_code,role_name"
-HAS_DELETED = false
+HAS_DELETED = False
 
 
 async def find_role_by_id(record_id: int) -> dict | None:

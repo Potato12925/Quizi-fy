@@ -5,7 +5,7 @@ from core.supabase import SupabaseManager
 
 
 SELECT_FIELDS = "notification_id,user_id,is_read"
-HAS_DELETED = false
+HAS_DELETED = False
 
 
 async def find_notification_by_id(record_id: int) -> dict | None:

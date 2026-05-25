@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getClasses, getSubjects, getUsers, createClass, updateClass, deleteClass, assignSubjectToClass, assignStudentToClass, removeStudentFromClass, type AdminClass, type AdminSubject, type AdminUser } from '@/api/adminApi';
+import { getClasses, getSubjects, getUsers, createClass, updateClass, deleteClass, assignSubjectToClass, assignStudentToClass, removeStudentFromClass, removeSubjectFromClass, type AdminClass, type AdminSubject, type AdminUser } from '@/api/adminApi';
 import LoadingState from '@/components/common/LoadingState';
 import ErrorState from '@/components/common/ErrorState';
 
@@ -201,15 +201,53 @@ export default function AdminClassesPage() {
       };
 
       const classCode = selectedClass.code;
-      setAssignedSubjects(prev => ({
-        ...prev,
-        [classCode]: [...(prev[classCode] || []), newAssignment]
-      }));
+      const exists = (assignedSubjects[classCode] || []).some(s => s.code === assignForm.subjectCode);
 
-      alert(`Đã gán thành công môn học ${newAssignment.name} cho giáo viên ${teacherObj.name} ở lớp ${selectedClass.name}`);
+      setAssignedSubjects(prev => {
+        const currentList = prev[classCode] || [];
+        const isAlreadyAssigned = currentList.some(s => s.code === assignForm.subjectCode);
+        if (isAlreadyAssigned) {
+          return {
+            ...prev,
+            [classCode]: currentList.map(s => s.code === assignForm.subjectCode ? { ...s, teacher: teacherObj.name } : s)
+          };
+        } else {
+          return {
+            ...prev,
+            [classCode]: [...currentList, newAssignment]
+          };
+        }
+      });
+
+      if (exists) {
+        alert(`Đã thay đổi giáo viên giảng dạy môn ${subObj.name} thành ${teacherObj.name} ở lớp ${selectedClass.name}`);
+      } else {
+        alert(`Đã gán thành công môn học ${newAssignment.name} cho giáo viên ${teacherObj.name} ở lớp ${selectedClass.name}`);
+      }
       setAssignForm({ subjectCode: '', teacherId: '' });
     } catch (err) {
       alert('Lỗi khi gán môn học vào lớp.');
+    }
+  };
+
+  const handleRemoveSubject = async (subjectCode: string) => {
+    if (!selectedClass) return;
+    const subObj = subjects.find(s => s.code === subjectCode);
+    const subName = subObj ? subObj.name : subjectCode;
+    if (!window.confirm(`Bạn có chắc muốn gỡ môn học ${subName} ra khỏi lớp?`)) return;
+
+    try {
+      await removeSubjectFromClass(selectedClass.id, subjectCode);
+
+      const classCode = selectedClass.code;
+      setAssignedSubjects(prev => ({
+        ...prev,
+        [classCode]: (prev[classCode] || []).filter(s => s.code !== subjectCode)
+      }));
+
+      alert(`Đã gỡ môn học ${subName} ra khỏi lớp.`);
+    } catch (err) {
+      alert('Lỗi khi gỡ môn học khỏi lớp.');
     }
   };
 
@@ -473,14 +511,23 @@ export default function AdminClassesPage() {
                       ) : (
                         selectedClassSubjects.map((subject) => (
                           <div key={subject.code} className="rounded-2xl bg-slate-50 px-5 py-4 border border-slate-100">
-                            <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-center justify-between gap-4">
                               <div>
                                 <p className="text-sm font-black text-slate-900">{subject.name}</p>
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{subject.code}</p>
                               </div>
-                              <span className="px-3 py-1 rounded-full text-[9px] font-black bg-white border border-slate-100 text-slate-600">
-                                {subject.teacher}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="px-3 py-1 rounded-full text-[9px] font-black bg-white border border-slate-100 text-slate-600">
+                                  {subject.teacher}
+                                </span>
+                                <button 
+                                  onClick={() => handleRemoveSubject(subject.code)}
+                                  className="w-8 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-[#b20112] hover:border-red-100 transition-all cursor-pointer flex items-center justify-center"
+                                  title="Gỡ môn học khỏi lớp"
+                                >
+                                  <span className="material-symbols-outlined text-base">close</span>
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))

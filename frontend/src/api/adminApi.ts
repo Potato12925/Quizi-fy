@@ -69,9 +69,11 @@ export interface AdminSubject {
   id: string;
   name: string; // subject_name
   code: string; // subject_code
+  description?: string;
   teacher: string; // Assigned teacher's full_name
   teacherId?: string; // Assigned teacher's user_id
   classes: number; // Count of classes studying this subject
+  status: string; // Hoạt động, Tạm khóa
 }
 
 // Mappers
@@ -90,9 +92,11 @@ export const mapDbSubjectToAdminSubject = (db: DbSubject, teacherName: string = 
   id: db.subject_id.toString(),
   name: db.subject_name,
   code: db.subject_code,
+  description: db.description,
   teacher: teacherName,
   teacherId: teacherId,
   classes: classesCount,
+  status: db.status === 'active' ? 'Hoạt động' : 'Tạm khóa',
 });
 
 export interface DashboardStats {
@@ -196,9 +200,9 @@ export const getSubjects = async (): Promise<AdminSubject[]> => {
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve([
-          mapDbSubjectToAdminSubject({ subject_id: 1, subject_code: 'TOAN10', subject_name: 'Toán học 10', status: 'active' }, 'Thầy Nguyễn Văn A', 3, '101'),
-          mapDbSubjectToAdminSubject({ subject_id: 2, subject_code: 'VAN10', subject_name: 'Ngữ Văn 10', status: 'active' }, 'Cô Trần Thị B', 2, '102'),
-          mapDbSubjectToAdminSubject({ subject_id: 3, subject_code: 'LY10', subject_name: 'Vật lý 10', status: 'active' }, 'Chưa gán', 0),
+          mapDbSubjectToAdminSubject({ subject_id: 1, subject_code: 'TOAN10', subject_name: 'Toán học 10', description: 'Môn Toán học khối 10, bám sát chương trình THPT mới của Bộ GD&ĐT.', status: 'active' }, 'Thầy Nguyễn Văn A', 3, '101'),
+          mapDbSubjectToAdminSubject({ subject_id: 2, subject_code: 'VAN10', subject_name: 'Ngữ Văn 10', description: 'Môn Ngữ Văn khối 10, biên soạn chuyên sâu giúp học sinh ôn tập chuẩn quốc gia.', status: 'active' }, 'Cô Trần Thị B', 2, '102'),
+          mapDbSubjectToAdminSubject({ subject_id: 3, subject_code: 'LY10', subject_name: 'Vật lý 10', description: 'Môn Vật lý khối 10 định hướng ban tự nhiên, bồi dưỡng kiến thức thi tốt nghiệp.', status: 'active' }, 'Chưa gán', 0),
         ]);
       }, 500);
     });
@@ -351,14 +355,15 @@ export const deleteClass = async (id: string): Promise<void> => {
 /**
  * POST /admin/subjects
  */
-export const createSubject = async (payload: { code: string; name: string; teacher: string }): Promise<AdminSubject> => {
+export const createSubject = async (payload: { code: string; name: string; description?: string; status?: string }): Promise<AdminSubject> => {
   try {
     const dbSubject = await api.post<DbSubject>('/admin/subjects', {
       subject_code: payload.code,
       subject_name: payload.name,
-      status: 'active'
+      description: payload.description,
+      status: payload.status === 'Tạm khóa' ? 'inactive' : 'active'
     });
-    return mapDbSubjectToAdminSubject(dbSubject, 'Giáo viên phụ trách', 0);
+    return mapDbSubjectToAdminSubject(dbSubject, 'Chưa gán', 0);
   } catch (error) {
     console.warn('Backend endpoint /admin/subjects (POST) not ready. Using fallback mock data.', error);
     return new Promise((resolve) => {
@@ -367,8 +372,10 @@ export const createSubject = async (payload: { code: string; name: string; teach
           id: Date.now().toString(),
           name: payload.name,
           code: payload.code,
+          description: payload.description,
           teacher: 'Chưa gán',
           classes: 0,
+          status: payload.status || 'Hoạt động'
         });
       }, 500);
     });
@@ -382,7 +389,9 @@ export const updateSubject = async (id: string, payload: Partial<AdminSubject>):
   try {
     const dbSubject = await api.put<DbSubject>(`/admin/subjects/${id}`, {
       subject_code: payload.code,
-      subject_name: payload.name
+      subject_name: payload.name,
+      description: payload.description,
+      status: payload.status === 'Tạm khóa' ? 'inactive' : 'active'
     });
     return mapDbSubjectToAdminSubject(dbSubject, payload.teacher || 'Chưa gán', payload.classes || 0);
   } catch (error) {
@@ -393,8 +402,10 @@ export const updateSubject = async (id: string, payload: Partial<AdminSubject>):
           id,
           name: payload.name || 'Môn học Mock',
           code: payload.code || 'MOCK_SUB',
+          description: payload.description,
           teacher: payload.teacher || 'Chưa gán',
           classes: payload.classes || 0,
+          status: payload.status || 'Hoạt động'
         });
       }, 500);
     });
@@ -451,6 +462,20 @@ export const removeStudentFromClass = async (classId: string, studentId: string)
     await api.delete<void>(`/admin/classes/${classId}/students/${studentId}`);
   } catch (error) {
     console.warn(`Backend endpoint /admin/classes/${classId}/students/${studentId} (DELETE) not ready. Using fallback mock data.`, error);
+    return new Promise((resolve) => {
+      setTimeout(resolve, 500);
+    });
+  }
+};
+
+/**
+ * DELETE /admin/classes/:classId/subjects/:subjectCode
+ */
+export const removeSubjectFromClass = async (classId: string, subjectCode: string): Promise<void> => {
+  try {
+    await api.delete<void>(`/admin/classes/${classId}/subjects/${subjectCode}`);
+  } catch (error) {
+    console.warn(`Backend endpoint /admin/classes/${classId}/subjects/${subjectCode} (DELETE) not ready. Using fallback mock data.`, error);
     return new Promise((resolve) => {
       setTimeout(resolve, 500);
     });

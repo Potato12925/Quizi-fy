@@ -5,7 +5,7 @@ from core.supabase import SupabaseManager
 
 
 SELECT_FIELDS = "attempt_id,practice_set_id,total_correct,total_wrong,status"
-HAS_DELETED = false
+HAS_DELETED = False
 
 
 async def find_practice_attempt_by_id(record_id: int) -> dict | None:
@@ -26,6 +26,20 @@ async def create_practice_attempt_record(payload: dict) -> dict:
         raise ValueError("Unable to create practice_attempt")
     return rows[0]
 
+
+async def get_attempt_result_details(attempt_id: int) -> dict | None:
+    supabase = SupabaseManager.get_client()
+    attempt_resp = await asyncio.to_thread(lambda: supabase.table("practice_attempts").select("*, practice_sets(*)").eq("attempt_id", attempt_id).limit(1).execute())
+    if not attempt_resp.data:
+        return None
+    attempt = attempt_resp.data[0]
+    
+    answers_resp = await asyncio.to_thread(lambda: supabase.table("student_answers").select("*, questions(*, question_options(*))").eq("attempt_id", attempt_id).execute())
+    
+    return {
+        "attempt": attempt,
+        "answers": answers_resp.data or []
+    }
 
 async def list_practice_attempts(page: int, limit: int) -> tuple[list[dict], int]:
     supabase = SupabaseManager.get_client()

@@ -2,8 +2,19 @@ from fastapi import APIRouter, Depends, Query
 
 from core.responses import error_response, success_response
 from middlewares.auth_middleware import CurrentUser, require_roles
-from schemas.practice_attempt_schema import PracticeAttemptCreateRequest, PracticeAttemptUpdateRequest
-from services.practice_attempt_service import create_practice_attempt, delete_practice_attempt, get_practice_attempt_by_id, get_practice_attempts, update_practice_attempt
+from schemas.practice_attempt_schema import PracticeAttemptCreateRequest, PracticeAttemptUpdateRequest, PracticeAttemptStartRequest
+from schemas.student_answer_schema import StudentAnswerSaveRequest
+from services.practice_attempt_service import (
+    create_practice_attempt,
+    delete_practice_attempt,
+    get_practice_attempt_by_id,
+    get_practice_attempts,
+    update_practice_attempt,
+    start_attempt,
+    autosave_answers,
+    submit_attempt,
+    get_attempt_result,
+)
 
 router = APIRouter(prefix="/practice-attempts", tags=["PracticeAttempts"])
 
@@ -26,6 +37,43 @@ async def get_practice_attempt_list(page: int = Query(default=1, ge=1), limit: i
         return success_response(data=result["items"], meta=result["pagination"], message="PracticeAttempt loaded successfully", status_code=200)
     except Exception:
         return error_response(message="Unable to load practice-attempts", status_code=500, error_code="PRACTICEATTEMPT_LIST_FAILED")
+
+
+@router.post("/start", summary="Start practice attempt")
+async def start_practice_attempt_route(payload: PracticeAttemptStartRequest, _: CurrentUser = Depends(require_roles("student"))):
+    try:
+        result = await start_attempt(payload)
+        return success_response(data=result, message="Practice attempt started", status_code=201)
+    except Exception:
+        return error_response(message="Unable to start practice attempt", status_code=500, error_code="PRACTICE_ATTEMPT_START_FAILED")
+
+@router.post("/{attempt_id}/answers", summary="Autosave student answers")
+async def autosave_answers_route(attempt_id: int, payload: StudentAnswerSaveRequest, _: CurrentUser = Depends(require_roles("student"))):
+    try:
+        result = await autosave_answers(attempt_id, payload)
+        return success_response(data=result, message="Answers saved successfully", status_code=200)
+    except Exception as e:
+        return error_response(message=f"Unable to save answers: {str(e)}", status_code=500, error_code="ANSWERS_SAVE_FAILED")
+
+@router.post("/{attempt_id}/submit", summary="Submit practice attempt")
+async def submit_practice_attempt_route(attempt_id: int, _: CurrentUser = Depends(require_roles("student"))):
+    try:
+        result = await submit_attempt(attempt_id)
+        return success_response(data=result, message="Practice attempt submitted", status_code=200)
+    except ValueError as exc:
+        return error_response(message=str(exc), status_code=404, error_code="PRACTICE_ATTEMPT_NOT_FOUND")
+    except Exception:
+        return error_response(message="Unable to submit practice attempt", status_code=500, error_code="PRACTICE_ATTEMPT_SUBMIT_FAILED")
+
+@router.get("/{attempt_id}/result", summary="Get attempt result")
+async def get_practice_attempt_result_route(attempt_id: int, _: CurrentUser = Depends(require_roles("student"))):
+    try:
+        result = await get_attempt_result(attempt_id)
+        return success_response(data=result, message="Result loaded successfully", status_code=200)
+    except ValueError as exc:
+        return error_response(message=str(exc), status_code=404, error_code="PRACTICE_ATTEMPT_NOT_FOUND")
+    except Exception:
+        return error_response(message="Unable to load result", status_code=500, error_code="RESULT_GET_FAILED")
 
 
 @router.get("/{record_id}", summary="Get practice_attempt detail")

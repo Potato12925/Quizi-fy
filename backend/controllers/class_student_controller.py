@@ -3,7 +3,14 @@ from fastapi import APIRouter, Depends, Query
 from core.responses import error_response, success_response
 from middlewares.auth_middleware import CurrentUser, require_roles
 from schemas.class_student_schema import ClassStudentCreateRequest, ClassStudentUpdateRequest
-from services.class_student_service import create_class_student, delete_class_student, get_class_student_by_id, get_class_students, update_class_student
+from services.class_student_service import (
+    create_class_student,
+    delete_class_student,
+    get_class_student_by_id,
+    get_class_students,
+    get_my_classes,
+    update_class_student,
+)
 
 router = APIRouter(prefix="/class-students", tags=["ClassStudents"])
 
@@ -26,6 +33,15 @@ async def get_class_student_list(page: int = Query(default=1, ge=1), limit: int 
         return success_response(data=result["items"], meta=result["pagination"], message="ClassStudent loaded successfully", status_code=200)
     except Exception:
         return error_response(message="Unable to load class-students", status_code=500, error_code="CLASSSTUDENT_LIST_FAILED")
+
+
+@router.get("/my-classes", summary="List my classes (for student)")
+async def get_my_classes_route(current_user: CurrentUser = Depends(require_roles("student"))):
+    try:
+        result = await get_my_classes(current_user.user_id)
+        return success_response(data=result, message="My classes loaded successfully", status_code=200)
+    except Exception:
+        return error_response(message="Unable to load my classes", status_code=500, error_code="MY_CLASSES_GET_FAILED")
 
 
 @router.get("/{record_id}", summary="Get class_student detail")

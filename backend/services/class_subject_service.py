@@ -4,6 +4,7 @@ from repositories.class_subject_repository import (
     create_class_subject_record,
     find_class_subject_by_id,
     list_class_subjects,
+    list_my_subjects,
     soft_delete_class_subject_by_id,
     update_class_subject_by_id,
 )
@@ -19,6 +20,20 @@ async def get_class_subject_by_id(record_id: int) -> dict:
     if not data:
         raise ValueError("ClassSubject not found")
     return data
+
+
+async def get_my_subjects(student_id: int) -> list[dict]:
+    data = await list_my_subjects(student_id)
+    seen = set()
+    subjects = []
+    for item in data:
+        subj = item.get("subjects")
+        if subj and subj.get("status") == "active":
+            subj_id = subj["subject_id"]
+            if subj_id not in seen:
+                seen.add(subj_id)
+                subjects.append(subj)
+    return subjects
 
 
 async def get_class_subjects(page: int, limit: int) -> dict:

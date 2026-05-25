@@ -3,7 +3,14 @@ from fastapi import APIRouter, Depends, Query
 from core.responses import error_response, success_response
 from middlewares.auth_middleware import CurrentUser, require_roles
 from schemas.class_subject_schema import ClassSubjectCreateRequest, ClassSubjectUpdateRequest
-from services.class_subject_service import create_class_subject, delete_class_subject, get_class_subject_by_id, get_class_subjects, update_class_subject
+from services.class_subject_service import (
+    create_class_subject,
+    delete_class_subject,
+    get_class_subject_by_id,
+    get_class_subjects,
+    get_my_subjects,
+    update_class_subject,
+)
 
 router = APIRouter(prefix="/class-subjects", tags=["ClassSubjects"])
 
@@ -26,6 +33,15 @@ async def get_class_subject_list(page: int = Query(default=1, ge=1), limit: int 
         return success_response(data=result["items"], meta=result["pagination"], message="ClassSubject loaded successfully", status_code=200)
     except Exception:
         return error_response(message="Unable to load class-subjects", status_code=500, error_code="CLASSSUBJECT_LIST_FAILED")
+
+
+@router.get("/my-subjects", summary="List my subjects (for student)")
+async def get_my_subjects_route(current_user: CurrentUser = Depends(require_roles("student"))):
+    try:
+        result = await get_my_subjects(current_user.user_id)
+        return success_response(data=result, message="My subjects loaded successfully", status_code=200)
+    except Exception:
+        return error_response(message="Unable to load my subjects", status_code=500, error_code="MY_SUBJECTS_GET_FAILED")
 
 
 @router.get("/{record_id}", summary="Get class_subject detail")

@@ -5,7 +5,7 @@ from core.supabase import SupabaseManager
 
 
 SELECT_FIELDS = "practice_set_question_id,practice_set_id,question_id,order_num"
-HAS_DELETED = false
+HAS_DELETED = False
 
 
 async def find_practice_set_question_by_id(record_id: int) -> dict | None:
@@ -26,6 +26,13 @@ async def create_practice_set_question_record(payload: dict) -> dict:
         raise ValueError("Unable to create practice_set_question")
     return rows[0]
 
+
+async def bulk_insert_practice_set_questions(payloads: list[dict]) -> list[dict]:
+    if not payloads:
+        return []
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(lambda: supabase.table("practice_set_questions").insert(payloads).execute())
+    return response.data or []
 
 async def list_practice_set_questions(page: int, limit: int) -> tuple[list[dict], int]:
     supabase = SupabaseManager.get_client()

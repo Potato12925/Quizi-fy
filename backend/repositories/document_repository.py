@@ -5,7 +5,7 @@ from core.supabase import SupabaseManager
 
 
 SELECT_FIELDS = "document_id,teacher_id,subject_id,title,file_url,file_type,file_size,status"
-HAS_DELETED = true
+HAS_DELETED = True
 
 
 async def find_document_by_id(record_id: int) -> dict | None:

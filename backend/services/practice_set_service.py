@@ -7,7 +7,9 @@ from repositories.practice_set_repository import (
     soft_delete_practice_set_by_id,
     update_practice_set_by_id,
 )
-from schemas.practice_set_schema import PracticeSetCreateRequest, PracticeSetUpdateRequest
+from schemas.practice_set_schema import PracticeSetCreateRequest, PracticeSetUpdateRequest, PracticeSetGenerateRequest
+from repositories.question_repository import get_random_question_ids
+from repositories.practice_set_question_repository import bulk_insert_practice_set_questions
 
 
 async def create_practice_set(payload: PracticeSetCreateRequest) -> dict:
@@ -19,6 +21,36 @@ async def get_practice_set_by_id(record_id: int) -> dict:
     if not data:
         raise ValueError("PracticeSet not found")
     return data
+
+
+async def generate_practice_set(student_id: int, payload: PracticeSetGenerateRequest) -> dict:
+    question_ids = await get_random_question_ids(
+        subject_id=payload.subject_id,
+        topic_id=payload.topic_id,
+        difficulty=payload.difficulty,
+        limit=payload.num_questions
+    )
+    if not question_ids:
+        raise ValueError("Not enough questions in bank for this criteria")
+        
+    ps_payload = {
+        "student_id": student_id,
+        "subject_id": payload.subject_id,
+        "topic_id": payload.topic_id,
+        "difficulty": payload.difficulty if payload.difficulty != "mix" else None,
+        "num_questions_requested": payload.num_questions,
+        "num_questions_actual": len(question_ids),
+        "prioritize_unanswered": payload.prioritize_unanswered
+    }
+    practice_set = await create_practice_set_record(ps_payload)
+    ps_id = practice_set["practice_set_id"]
+    
+    psq_payloads = [
+        {"practice_set_id": ps_id, "question_id": qid, "order_num": idx + 1}
+        for idx, qid in enumerate(question_ids)
+    ]
+    await bulk_insert_practice_set_questions(psq_payloads)
+    return practice_set
 
 
 async def get_practice_sets(page: int, limit: int) -> dict:

@@ -12,3 +12,7 @@ class PracticeAttemptUpdateRequest(BaseModel):
     total_correct: int | None = Field(default=None, ge=0)
     total_wrong: int | None = Field(default=None, ge=0)
     status: str | None = None
+
+
+class PracticeAttemptStartRequest(BaseModel):
+    practice_set_id: int = Field(ge=1)

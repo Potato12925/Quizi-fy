@@ -5,7 +5,7 @@ from core.supabase import SupabaseManager
 
 
 SELECT_FIELDS = "class_teacher_id,class_id,teacher_id,added_by"
-HAS_DELETED = false
+HAS_DELETED = False
 
 
 async def find_class_teacher_by_id(record_id: int) -> dict | None:

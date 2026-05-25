@@ -5,7 +5,7 @@ from core.supabase import SupabaseManager
 
 
 SELECT_FIELDS = "question_id,teacher_id,subject_id,topic_id,content,difficulty,source,status"
-HAS_DELETED = true
+HAS_DELETED = True
 
 
 async def find_question_by_id(record_id: int) -> dict | None:
@@ -17,6 +17,24 @@ async def find_question_by_id(record_id: int) -> dict | None:
     rows = response.data or []
     return rows[0] if rows else None
 
+
+async def get_random_question_ids(subject_id: int, topic_id: int | None, difficulty: str | None, limit: int) -> list[int]:
+    supabase = SupabaseManager.get_client()
+    query = supabase.table("questions").select("question_id").eq("subject_id", subject_id).eq("status", "approved")
+    if topic_id:
+        query = query.eq("topic_id", topic_id)
+    if difficulty and difficulty != "mix":
+        query = query.eq("difficulty", difficulty)
+    if HAS_DELETED:
+        query = query.is_("deleted_at", None)
+    
+    response = await asyncio.to_thread(lambda: query.execute())
+    questions = response.data or []
+    
+    import random
+    random.shuffle(questions)
+    
+    return [q["question_id"] for q in questions[:limit]]
 
 async def create_question_record(payload: dict) -> dict:
     supabase = SupabaseManager.get_client()

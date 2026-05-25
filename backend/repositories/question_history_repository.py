@@ -5,7 +5,7 @@ from core.supabase import SupabaseManager
 
 
 SELECT_FIELDS = "history_id,question_id,changed_by"
-HAS_DELETED = false
+HAS_DELETED = False
 
 
 async def find_question_history_by_id(record_id: int) -> dict | None:

@@ -4,6 +4,7 @@ from repositories.class_student_repository import (
     create_class_student_record,
     find_class_student_by_id,
     list_class_students,
+    list_my_classes,
     soft_delete_class_student_by_id,
     update_class_student_by_id,
 )
@@ -19,6 +20,12 @@ async def get_class_student_by_id(record_id: int) -> dict:
     if not data:
         raise ValueError("ClassStudent not found")
     return data
+
+
+async def get_my_classes(student_id: int) -> list[dict]:
+    data = await list_my_classes(student_id)
+    classes = [item["classes"] for item in data if item.get("classes") and item["classes"].get("status") == "active"]
+    return classes
 
 
 async def get_class_students(page: int, limit: int) -> dict:

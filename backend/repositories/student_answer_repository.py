@@ -5,7 +5,7 @@ from core.supabase import SupabaseManager
 
 
 SELECT_FIELDS = "answer_id,attempt_id,question_id,selected_option_id"
-HAS_DELETED = false
+HAS_DELETED = False
 
 
 async def find_student_answer_by_id(record_id: int) -> dict | None:
@@ -26,6 +26,13 @@ async def create_student_answer_record(payload: dict) -> dict:
         raise ValueError("Unable to create student_answer")
     return rows[0]
 
+
+async def upsert_student_answers(payloads: list[dict]) -> list[dict]:
+    if not payloads:
+        return []
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(lambda: supabase.table("student_answers").upsert(payloads, on_conflict="attempt_id,question_id").execute())
+    return response.data or []
 
 async def list_student_answers(page: int, limit: int) -> tuple[list[dict], int]:
     supabase = SupabaseManager.get_client()

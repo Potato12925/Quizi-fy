@@ -47,10 +47,12 @@ async def upload_document_route(
 
 
 @router.post("", summary="Create document")
-async def post_document(payload: DocumentCreateRequest, _: CurrentUser = Depends(require_roles("admin", "teacher"))):
+async def post_document(payload: DocumentCreateRequest, current_user: CurrentUser = Depends(require_roles("admin", "teacher"))):
     try:
-        result = await create_document(payload)
+        result = await create_document(payload, current_user=current_user)
         return success_response(data=result, message="Document created successfully", status_code=201)
+    except DocumentAuthorizationError as exc:
+        return error_response(message=str(exc), status_code=403, error_code="DOCUMENT_CREATE_FORBIDDEN")
     except ValueError as exc:
         return error_response(message=str(exc), status_code=400, error_code="DOCUMENT_CREATE_INVALID")
     except Exception:
@@ -58,19 +60,25 @@ async def post_document(payload: DocumentCreateRequest, _: CurrentUser = Depends
 
 
 @router.get("", summary="List documents")
-async def get_document_list(page: int = Query(default=1, ge=1), limit: int = Query(default=20, ge=1, le=100), _: CurrentUser = Depends(require_roles("admin", "teacher"))):
+async def get_document_list(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: CurrentUser = Depends(require_roles("admin", "teacher")),
+):
     try:
-        result = await get_documents(page=page, limit=limit)
+        result = await get_documents(page=page, limit=limit, current_user=current_user)
         return success_response(data=result["items"], meta=result["pagination"], message="Document loaded successfully", status_code=200)
     except Exception:
         return error_response(message="Unable to load documents", status_code=500, error_code="DOCUMENT_LIST_FAILED")
 
 
 @router.get("/{record_id}", summary="Get document detail")
-async def get_document_detail(record_id: int, _: CurrentUser = Depends(require_roles("admin", "teacher"))):
+async def get_document_detail(record_id: int, current_user: CurrentUser = Depends(require_roles("admin", "teacher"))):
     try:
-        result = await get_document_by_id(record_id)
+        result = await get_document_by_id(record_id, current_user=current_user)
         return success_response(data=result, message="Document loaded successfully", status_code=200)
+    except DocumentAuthorizationError as exc:
+        return error_response(message=str(exc), status_code=403, error_code="DOCUMENT_GET_FORBIDDEN")
     except ValueError as exc:
         return error_response(message=str(exc), status_code=404, error_code="DOCUMENT_NOT_FOUND")
     except Exception:
@@ -78,10 +86,12 @@ async def get_document_detail(record_id: int, _: CurrentUser = Depends(require_r
 
 
 @router.put("/{record_id}", summary="Update document")
-async def put_document(record_id: int, payload: DocumentUpdateRequest, _: CurrentUser = Depends(require_roles("admin", "teacher"))):
+async def put_document(record_id: int, payload: DocumentUpdateRequest, current_user: CurrentUser = Depends(require_roles("admin", "teacher"))):
     try:
-        result = await update_document(record_id, payload)
+        result = await update_document(record_id, payload, current_user=current_user)
         return success_response(data=result, message="Document updated successfully", status_code=200)
+    except DocumentAuthorizationError as exc:
+        return error_response(message=str(exc), status_code=403, error_code="DOCUMENT_UPDATE_FORBIDDEN")
     except ValueError as exc:
         status_code = 404 if str(exc) == "Document not found" else 400
         return error_response(message=str(exc), status_code=status_code, error_code="DOCUMENT_UPDATE_INVALID")
@@ -90,10 +100,12 @@ async def put_document(record_id: int, payload: DocumentUpdateRequest, _: Curren
 
 
 @router.delete("/{record_id}", summary="Delete document")
-async def delete_document_route(record_id: int, _: CurrentUser = Depends(require_roles("admin", "teacher"))):
+async def delete_document_route(record_id: int, current_user: CurrentUser = Depends(require_roles("admin", "teacher"))):
     try:
-        result = await delete_document(record_id)
+        result = await delete_document(record_id, current_user=current_user)
         return success_response(data=result, message="Document deleted successfully", status_code=200)
+    except DocumentAuthorizationError as exc:
+        return error_response(message=str(exc), status_code=403, error_code="DOCUMENT_DELETE_FORBIDDEN")
     except ValueError as exc:
         status_code = 404 if str(exc) == "Document not found" else 400
         return error_response(message=str(exc), status_code=status_code, error_code="DOCUMENT_DELETE_INVALID")

@@ -64,6 +64,51 @@ async def list_subjects(page: int, limit: int) -> tuple[list[dict], int]:
     return response.data or [], int(response.count or 0)
 
 
+async def list_subjects_by_teacher(page: int, limit: int, teacher_id: int) -> tuple[list[dict], int]:
+    supabase = SupabaseManager.get_client()
+    start = (page - 1) * limit
+    end = start + limit - 1
+
+    class_subjects_response = await asyncio.to_thread(
+        lambda: supabase.table("class_subjects")
+        .select("subject_id")
+        .eq("assigned_teacher_id", teacher_id)
+        .eq("status", "active")
+        .is_("deleted_at", None)
+        .execute()
+    )
+    subject_ids = sorted({item["subject_id"] for item in (class_subjects_response.data or [])})
+    if not subject_ids:
+        return [], 0
+
+    response = await asyncio.to_thread(
+        lambda: supabase.table("subjects")
+        .select(SUBJECT_SELECT_FIELDS, count="exact")
+        .in_("subject_id", subject_ids)
+        .is_("deleted_at", None)
+        .order("subject_id")
+        .range(start, end)
+        .execute()
+    )
+    return response.data or [], int(response.count or 0)
+
+
+async def is_teacher_assigned_to_subject(subject_id: int, teacher_id: int) -> bool:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("class_subjects")
+        .select("class_subject_id")
+        .eq("subject_id", subject_id)
+        .eq("assigned_teacher_id", teacher_id)
+        .eq("status", "active")
+        .is_("deleted_at", None)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return len(rows) > 0
+
+
 async def update_subject_by_id(subject_id: int, payload: dict) -> dict | None:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
@@ -90,4 +135,3 @@ async def soft_delete_subject_by_id(subject_id: int) -> bool:
     )
     rows = response.data or []
     return len(rows) > 0
-

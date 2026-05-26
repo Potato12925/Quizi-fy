@@ -27,13 +27,15 @@ async def create_document_record(payload: dict) -> dict:
     return rows[0]
 
 
-async def list_documents(page: int, limit: int) -> tuple[list[dict], int]:
+async def list_documents(page: int, limit: int, teacher_id: int | None = None) -> tuple[list[dict], int]:
     supabase = SupabaseManager.get_client()
     start = (page - 1) * limit
     end = start + limit - 1
     query = supabase.table("documents").select(SELECT_FIELDS, count="exact")
     if HAS_DELETED:
         query = query.is_("deleted_at", None)
+    if teacher_id is not None:
+        query = query.eq("teacher_id", teacher_id)
     response = await asyncio.to_thread(lambda: query.order("document_id").range(start, end).execute())
     return response.data or [], int(response.count or 0)
 

@@ -1,5 +1,6 @@
 from math import ceil
 
+from middlewares.auth_middleware import CurrentUser
 from repositories.document_repository import (
     create_document_record,
     find_document_by_id,
@@ -23,27 +24,54 @@ class DocumentAuthorizationError(ValueError):
     pass
 
 
-async def create_document(payload: DocumentCreateRequest) -> dict:
-    return await create_document_record({ "teacher_id": payload.teacher_id, "subject_id": payload.subject_id, "title": payload.title, "file_url": payload.file_url, "file_type": payload.file_type, "file_size": payload.file_size, "status": payload.status })
+def _is_admin(current_user: CurrentUser) -> bool:
+    return "admin" in current_user.roles
 
 
-async def get_document_by_id(record_id: int) -> dict:
+def _ensure_document_access(document: dict, current_user: CurrentUser) -> None:
+    if _is_admin(current_user):
+        return
+    if int(document["teacher_id"]) != current_user.user_id:
+        raise DocumentAuthorizationError("You can only access your own documents")
+
+
+async def create_document(payload: DocumentCreateRequest, current_user: CurrentUser) -> dict:
+    teacher_id = payload.teacher_id
+    if not _is_admin(current_user):
+        teacher_id = current_user.user_id
+    return await create_document_record(
+        {
+            "teacher_id": teacher_id,
+            "subject_id": payload.subject_id,
+            "title": payload.title,
+            "file_url": payload.file_url,
+            "file_type": payload.file_type,
+            "file_size": payload.file_size,
+            "status": payload.status,
+        }
+    )
+
+
+async def get_document_by_id(record_id: int, current_user: CurrentUser) -> dict:
     data = await find_document_by_id(record_id)
     if not data:
         raise ValueError("Document not found")
+    _ensure_document_access(data, current_user)
     return data
 
 
-async def get_documents(page: int, limit: int) -> dict:
-    items, total = await list_documents(page=page, limit=limit)
+async def get_documents(page: int, limit: int, current_user: CurrentUser) -> dict:
+    teacher_id = None if "admin" in current_user.roles else current_user.user_id
+    items, total = await list_documents(page=page, limit=limit, teacher_id=teacher_id)
     total_pages = ceil(total / limit) if total > 0 else 1
     return {"items": items, "pagination": {"page": page, "limit": limit, "total": total, "total_pages": total_pages}}
 
 
-async def update_document(record_id: int, payload: DocumentUpdateRequest) -> dict:
+async def update_document(record_id: int, payload: DocumentUpdateRequest, current_user: CurrentUser) -> dict:
     existing = await find_document_by_id(record_id)
     if not existing:
         raise ValueError("Document not found")
+    _ensure_document_access(existing, current_user)
     update_payload = payload.model_dump(exclude_none=True)
     if not update_payload:
         raise ValueError("No fields to update")
@@ -53,10 +81,11 @@ async def update_document(record_id: int, payload: DocumentUpdateRequest) -> dic
     return updated
 
 
-async def delete_document(record_id: int) -> dict:
+async def delete_document(record_id: int, current_user: CurrentUser) -> dict:
     existing = await find_document_by_id(record_id)
     if not existing:
         raise ValueError("Document not found")
+    _ensure_document_access(existing, current_user)
     deleted = await soft_delete_document_by_id(record_id)
     if not deleted:
         raise ValueError("Document not found")

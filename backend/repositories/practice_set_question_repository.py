@@ -27,6 +27,13 @@ async def create_practice_set_question_record(payload: dict) -> dict:
     return rows[0]
 
 
+async def bulk_insert_practice_set_questions(payloads: list[dict]) -> list[dict]:
+    if not payloads:
+        return []
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(lambda: supabase.table("practice_set_questions").insert(payloads).execute())
+    return response.data or []
+
 async def list_practice_set_questions(page: int, limit: int) -> tuple[list[dict], int]:
     supabase = SupabaseManager.get_client()
     start = (page - 1) * limit

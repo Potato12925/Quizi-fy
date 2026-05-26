@@ -18,6 +18,14 @@ async def find_class_student_by_id(record_id: int) -> dict | None:
     return rows[0] if rows else None
 
 
+async def list_my_classes(student_id: int) -> list[dict]:
+    supabase = SupabaseManager.get_client()
+    query = supabase.table("class_students").select("class_id, classes(*)")
+    if HAS_DELETED:
+        query = query.is_("deleted_at", None)
+    response = await asyncio.to_thread(lambda: query.eq("student_id", student_id).execute())
+    return response.data or []
+
 async def create_class_student_record(payload: dict) -> dict:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(lambda: supabase.table("class_students").insert(payload).execute())

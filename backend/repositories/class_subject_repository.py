@@ -18,6 +18,28 @@ async def find_class_subject_by_id(record_id: int) -> dict | None:
     return rows[0] if rows else None
 
 
+async def list_my_subjects(student_id: int) -> list[dict]:
+    supabase = SupabaseManager.get_client()
+    class_students_resp = await asyncio.to_thread(
+        lambda: supabase.table("class_students")
+        .select("class_id")
+        .eq("student_id", student_id)
+        .is_("deleted_at", None)
+        .execute()
+    )
+    class_ids = [item["class_id"] for item in (class_students_resp.data or [])]
+    if not class_ids:
+        return []
+    subjects_resp = await asyncio.to_thread(
+        lambda: supabase.table("class_subjects")
+        .select("subject_id, subjects(*)")
+        .in_("class_id", class_ids)
+        .eq("status", "active")
+        .is_("deleted_at", None)
+        .execute()
+    )
+    return subjects_resp.data or []
+
 async def create_class_subject_record(payload: dict) -> dict:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(lambda: supabase.table("class_subjects").insert(payload).execute())

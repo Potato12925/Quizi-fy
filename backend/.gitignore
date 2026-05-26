@@ -87,3 +87,8 @@ docker-compose.override.yml
 secrets/
 *.pem
 *.key
+
+*.gitignore
+*.cfg
+*.exe
+Scripts/

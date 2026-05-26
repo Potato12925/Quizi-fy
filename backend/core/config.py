@@ -12,7 +12,8 @@ class Config:
     # SUPABASE
     SUPABASE_URL = os.getenv("SUPABASE_URL")
     SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-    SUPABASE_DOCUMENT_BUCKET = os.getenv("SUPABASE_DOCUMENT_BUCKET", "documents")
+    SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    SUPABASE_DOCUMENT_BUCKET = "documents"
 
     # DATABASE
     DB_HOST = os.getenv("DB_HOST")

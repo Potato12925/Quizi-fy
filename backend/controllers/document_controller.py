@@ -42,8 +42,8 @@ async def upload_document_route(
         return error_response(message=str(exc), status_code=403, error_code="DOCUMENT_UPLOAD_FORBIDDEN")
     except DocumentValidationError as exc:
         return error_response(message=str(exc), status_code=400, error_code="DOCUMENT_UPLOAD_INVALID")
-    except Exception:
-        return error_response(message="Unable to upload document", status_code=500, error_code="DOCUMENT_UPLOAD_FAILED")
+    except Exception as exc:
+        return error_response(message=str(exc), status_code=500, error_code="DOCUMENT_UPLOAD_FAILED")
 
 
 @router.post("", summary="Create document")

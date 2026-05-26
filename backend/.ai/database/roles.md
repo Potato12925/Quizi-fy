@@ -11,6 +11,8 @@ Documentation for `roles` table.
 | `role_id` | `bigint [pk, increment]` |
 | `role_code` | `varchar(50) [unique, not null]` |
 | `role_name` | `varchar(100) [not null]` |
+| `description` | `text` |
+| `created_at` | `datetime` |
 
 ## Relationships
 

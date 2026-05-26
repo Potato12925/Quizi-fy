@@ -10,6 +10,9 @@ Documentation for `practice_attempts` table.
 |---|---|
 | `attempt_id` | `bigint [pk, increment]` |
 | `practice_set_id` | `bigint [not null]` |
+| `started_at` | `datetime` |
+| `submitted_at` | `datetime` |
+| `score` | `decimal(5,2)` |
 | `total_correct` | `int [default: 0]` |
 | `total_wrong` | `int [default: 0]` |
 | `status` | `practice_attempt_status [default: 'in_progress']` |

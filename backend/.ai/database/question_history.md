@@ -11,6 +11,10 @@ Documentation for `question_history` table.
 | `history_id` | `bigint [pk, increment]` |
 | `question_id` | `bigint [not null]` |
 | `changed_by` | `bigint [not null]` |
+| `old_data` | `json` |
+| `new_data` | `json` |
+| `change_type` | `varchar(100)` |
+| `changed_at` | `datetime` |
 
 ## Relationships
 

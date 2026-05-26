@@ -11,8 +11,13 @@ Documentation for `practice_sets` table.
 | `practice_set_id` | `bigint [pk, increment]` |
 | `student_id` | `bigint [not null]` |
 | `subject_id` | `bigint [not null]` |
+| `topic_id` | `bigint` |
+| `difficulty` | `difficulty_level` |
 | `num_questions_requested` | `int [not null]` |
+| `num_questions_actual` | `int` |
+| `time_limit_minutes` | `int` |
 | `prioritize_unanswered` | `boolean [default: false]` |
+| `created_at` | `datetime` |
 
 ## Relationships
 

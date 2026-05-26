@@ -11,11 +11,17 @@ Documentation for `documents` table.
 | `document_id` | `bigint [pk, increment]` |
 | `teacher_id` | `bigint [not null]` |
 | `subject_id` | `bigint [not null]` |
+| `topic_id` | `bigint` |
 | `title` | `varchar(500) [not null]` |
+| `description` | `text` |
 | `file_url` | `text [not null]` |
+| `file_hash` | `varchar(255)` |
 | `file_type` | `varchar(20) [not null]` |
 | `file_size` | `bigint [not null]` |
 | `status` | `active_status [default: 'active']` |
+| `created_at` | `datetime` |
+| `updated_at` | `datetime` |
+| `deleted_at` | `datetime` |
 
 ## Relationships
 

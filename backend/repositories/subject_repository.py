@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from core.supabase import SupabaseManager
 
 
-SUBJECT_SELECT_FIELDS = "subject_id,subject_code,subject_name,status"
+SUBJECT_SELECT_FIELDS = "subject_id,subject_code,subject_name,description,status,created_at, updated_at, deleted_at"
 
 
 async def find_subject_by_id(subject_id: int) -> dict | None:

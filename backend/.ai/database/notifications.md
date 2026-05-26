@@ -10,7 +10,10 @@ Documentation for `notifications` table.
 |---|---|
 | `notification_id` | `bigint [pk, increment]` |
 | `user_id` | `bigint [not null]` |
+| `title` | `varchar(255)` |
+| `content` | `text` |
 | `is_read` | `boolean [default: false]` |
+| `created_at` | `datetime` |
 
 ## Relationships
 

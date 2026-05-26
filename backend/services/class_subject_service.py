@@ -12,7 +12,7 @@ from schemas.class_subject_schema import ClassSubjectCreateRequest, ClassSubject
 
 
 async def create_class_subject(payload: ClassSubjectCreateRequest) -> dict:
-    return await create_class_subject_record({ "class_id": payload.class_id, "subject_id": payload.subject_id, "status": payload.status })
+    return await create_class_subject_record({ "class_id": payload.class_id, "subject_id": payload.subject_id, "assigned_teacher_id": payload.assigned_teacher_id, "status": payload.status })
 
 
 async def get_class_subject_by_id(record_id: int) -> dict:

@@ -44,7 +44,7 @@ async def post_subject(
 async def get_subject_list(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
-    _: CurrentUser = Depends(require_roles("admin")),
+    _: CurrentUser = Depends(require_roles("admin", "teacher")),
 ):
     try:
         result = await get_subjects(page=page, limit=limit)
@@ -65,7 +65,7 @@ async def get_subject_list(
 @router.get("/{subject_id}", summary="Get subject detail")
 async def get_subject_detail(
     subject_id: int,
-    _: CurrentUser = Depends(require_roles("admin")),
+    _: CurrentUser = Depends(require_roles("admin", "teacher")),
 ):
     try:
         result = await get_subject_by_id(subject_id)
@@ -92,7 +92,7 @@ async def get_subject_detail(
 async def put_subject(
     subject_id: int,
     payload: SubjectUpdateRequest,
-    _: CurrentUser = Depends(require_roles("admin")),
+    _: CurrentUser = Depends(require_roles("admin", "teacher")),
 ):
     try:
         result = await update_subject(subject_id, payload)
@@ -119,7 +119,7 @@ async def put_subject(
 @router.delete("/{subject_id}", summary="Soft delete subject")
 async def delete_subject_route(
     subject_id: int,
-    _: CurrentUser = Depends(require_roles("admin")),
+    _: CurrentUser = Depends(require_roles("admin", "teacher")),
 ):
     try:
         result = await delete_subject(subject_id)

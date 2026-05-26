@@ -20,6 +20,7 @@ async def create_subject(payload: SubjectCreateRequest) -> dict:
         {
             "subject_code": payload.subject_code,
             "subject_name": payload.subject_name,
+            "description": payload.description,
             "status": "active",
         }
     )
@@ -53,10 +54,18 @@ async def update_subject(subject_id: int, payload: SubjectUpdateRequest) -> dict
         raise ValueError("Subject not found")
 
     update_payload: dict = {}
+    if payload.subject_code is not None:
+        if payload.subject_code != existing_subject["subject_code"]:
+            code_exists = await find_subject_by_code(payload.subject_code)
+            if code_exists:
+                raise ValueError("Subject code already exists")
+        update_payload["subject_code"] = payload.subject_code
     if payload.subject_name is not None:
         update_payload["subject_name"] = payload.subject_name
     if payload.status is not None:
         update_payload["status"] = payload.status
+    if payload.description is not None:
+        update_payload["description"] = payload.description
 
     if not update_payload:
         raise ValueError("No fields to update")

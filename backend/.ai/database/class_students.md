@@ -12,6 +12,8 @@ Documentation for `class_students` table.
 | `class_id` | `bigint [not null]` |
 | `student_id` | `bigint [not null]` |
 | `invited_by` | `bigint [not null]` |
+| `joined_at` | `datetime` |
+| `deleted_at` | `datetime` |
 
 ## Relationships
 

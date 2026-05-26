@@ -11,7 +11,11 @@ Documentation for `subjects` table.
 | `subject_id` | `bigint [pk, increment]` |
 | `subject_code` | `varchar(50) [unique, not null]` |
 | `subject_name` | `varchar(255) [not null]` |
+| `description` | `text` |
 | `status` | `active_status [default: 'active']` |
+| `created_at` | `datetime` |
+| `updated_at` | `datetime` |
+| `deleted_at` | `datetime` |
 
 ## Relationships
 

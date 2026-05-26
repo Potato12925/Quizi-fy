@@ -15,6 +15,22 @@ export interface DbDocument {
   created_at: string;
 }
 
+export interface DbSubject {
+  subject_id: number;
+  subject_code: string;
+  subject_name: string;
+  description?: string;
+  status?: string;
+}
+
+export interface DbTopic {
+  topic_id: number;
+  subject_id: number;
+  topic_name: string;
+  description?: string;
+  status?: string;
+}
+
 export interface DbOption {
   option_id: number;
   question_id: number;
@@ -111,6 +127,10 @@ export const mapDbDocumentToTeacherResource = (db: DbDocument, usage: number = 0
   date: new Date(db.created_at || Date.now()).toLocaleDateString('vi-VN'),
   usage: usage,
   subject: subjectName,
+  description: db.description,
+  subjectId: db.subject_id,
+  topicId: db.topic_id,
+  status: db.status,
 });
 
 export interface BankSubject {
@@ -395,28 +415,27 @@ export const deleteQuestion = async (id: string): Promise<{ success: boolean }> 
 /**
  * GET /teacher/resources
  */
-export const getResources = async (): Promise<TeacherResource[]> => {
-  try {
-    const dbDocs = await api.get<DbDocument[]>('/teacher/resources');
-    return dbDocs.map(d => mapDbDocumentToTeacherResource(d, 10, 'Môn học Mock'));
-  } catch (error) {
-    console.warn('Backend endpoint /teacher/resources not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const mockDocs: DbDocument[] = [
-          { document_id: 1, teacher_id: 1, subject_id: 1, title: 'Giao trinh Mang may tinh - Chuong 3.pdf', file_url: '', file_type: 'pdf', file_size: 2516582, status: 'active', created_at: '2026-04-20T00:00:00Z' },
-          { document_id: 2, teacher_id: 1, subject_id: 1, title: 'Slide Bai giang Co so du lieu.pptx', file_url: '', file_type: 'pptx', file_size: 13421772, status: 'active', created_at: '2026-04-18T00:00:00Z' },
-        ];
-        resolve(mockDocs.map(d => mapDbDocumentToTeacherResource(d, 45, 'Mạng máy tính')));
-      }, 500);
-    });
-  }
+export const getResources = async (userId: number): Promise<TeacherResource[]> => {
+  const [docsRes, subjectsRes] = await Promise.all([
+    api.get<ApiEnvelope<DbDocument[]>>('/documents', {
+      params: { page: '1', limit: '100' },
+    }),
+    api.get<ApiEnvelope<DbSubject[]>>('/subjects', {
+      params: { page: '1', limit: '100' },
+    }),
+  ]);
+
+  const dbDocs = (docsRes.data || []).filter((doc) => doc.teacher_id === userId);
+  const subjects = subjectsRes.data || [];
+  const subjectNameById = new Map<number, string>(
+    subjects.map((subject) => [subject.subject_id, subject.subject_name]),
+  );
+
+  return dbDocs.map((doc) =>
+    mapDbDocumentToTeacherResource(doc, 0, subjectNameById.get(doc.subject_id) || 'N/A'),
+  );
 };
 
-/**
- * POST /teacher/resources/upload
- */
 export interface UploadResourcePayload {
   title: string;
   subject_id: number;
@@ -425,19 +444,70 @@ export interface UploadResourcePayload {
   file: File;
 }
 
+interface ApiEnvelope<T> {
+  success: boolean;
+  message: string;
+  data: T;
+  meta?: Record<string, unknown> | null;
+}
+
+/**
+ * GET /subjects
+ */
+export const getSubjects = async (userId: number): Promise<DbSubject[]> => {
+  const [subjectsRes, docsRes] = await Promise.all([
+    api.get<ApiEnvelope<DbSubject[]>>('/subjects', {
+      params: { page: '1', limit: '100' },
+    }),
+    api.get<ApiEnvelope<DbDocument[]>>('/documents', {
+      params: { page: '1', limit: '100', teacher_id: userId.toString() },
+    }),
+  ]);
+
+  const subjects = subjectsRes.data || [];
+  const docs = (docsRes.data || []).filter((doc) => doc.teacher_id === userId);
+  const subjectIds = new Set(docs.map((doc) => doc.subject_id));
+  return subjects.filter((subject) => subjectIds.has(subject.subject_id));
+};
+
+/**
+ * GET /topics
+ */
+export const getTopics = async (userId: number): Promise<DbTopic[]> => {
+  const [topicsRes, docsRes] = await Promise.all([
+    api.get<ApiEnvelope<DbTopic[]>>('/topics', {
+      params: { page: '1', limit: '100' },
+    }),
+    api.get<ApiEnvelope<DbDocument[]>>('/documents', {
+      params: { page: '1', limit: '100', teacher_id: userId.toString() },
+    }),
+  ]);
+
+  const topics = topicsRes.data || [];
+  const docs = (docsRes.data || []).filter((doc) => doc.teacher_id === userId);
+  const subjectIds = new Set(docs.map((doc) => doc.subject_id));
+  return topics.filter((topic) => subjectIds.has(topic.subject_id));
+};
+
+/**
+ * POST /documents/upload
+ */
+export const uploadDocument = async (payload: UploadResourcePayload): Promise<DbDocument> => {
+  const formData = new FormData();
+  formData.append('file', payload.file);
+  formData.append('title', payload.title);
+  formData.append('subject_id', payload.subject_id.toString());
+  if (payload.topic_id !== undefined) formData.append('topic_id', payload.topic_id.toString());
+  if (payload.description) formData.append('description', payload.description);
+
+  const res = await api.post<ApiEnvelope<DbDocument>>('/documents/upload', formData);
+  return res.data;
+};
+
 export const uploadResource = async (payload: UploadResourcePayload): Promise<TeacherResource> => {
   try {
-    const formData = new FormData();
-    formData.append('file', payload.file);
-    formData.append('title', payload.title);
-    formData.append('subject_id', payload.subject_id.toString());
-    if (payload.topic_id) formData.append('topic_id', payload.topic_id.toString());
-    if (payload.description) formData.append('description', payload.description);
-
-    const res = await api.post<DbDocument>('/teacher/resources/upload', formData, {
-      headers: { 'Content-Type': undefined as any }
-    });
-    return mapDbDocumentToTeacherResource(res, 0, 'Mới tải lên');
+    const doc = await uploadDocument(payload);
+    return mapDbDocumentToTeacherResource(doc, 0, 'Mới tải lên');
   } catch (error) {
     console.warn('Backend endpoint /teacher/resources/upload not ready. Using fallback mock data.', error);
     return new Promise((resolve) => {
@@ -460,36 +530,19 @@ export const uploadResource = async (payload: UploadResourcePayload): Promise<Te
  * PUT /teacher/resources/:id
  */
 export const updateResource = async (id: number | string, payload: Partial<UploadResourcePayload>): Promise<{ success: boolean; data?: TeacherResource }> => {
-  try {
-    const res = await api.put<{ success: boolean; data: DbDocument }>(`/teacher/resources/${id}`, payload);
-    return { 
-      success: res.success, 
-      data: res.data ? mapDbDocumentToTeacherResource(res.data, 5, 'Cập nhật') : undefined 
-    };
-  } catch (error) {
-    console.warn(`Backend endpoint /teacher/resources/${id} (PUT) not ready. Using fallback mock data.`, error);
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({ success: true });
-      }, 500);
-    });
-  }
+  const res = await api.put<ApiEnvelope<DbDocument>>(`/documents/${id}`, payload);
+  return {
+    success: res.success,
+    data: res.data ? mapDbDocumentToTeacherResource(res.data, 0) : undefined,
+  };
 };
 
 /**
  * DELETE /teacher/resources/:id
  */
 export const deleteResource = async (id: number | string): Promise<{ success: boolean }> => {
-  try {
-    return await api.delete<{ success: boolean }>(`/teacher/resources/${id}`);
-  } catch (error) {
-    console.warn(`Backend endpoint /teacher/resources/${id} (DELETE) not ready. Using fallback mock data.`, error);
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({ success: true });
-      }, 500);
-    });
-  }
+  const res = await api.delete<ApiEnvelope<{ document_id: number; deleted: boolean }>>(`/documents/${id}`);
+  return { success: res.success };
 };
 
 /**

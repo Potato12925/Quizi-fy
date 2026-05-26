@@ -11,6 +11,9 @@ Documentation for `student_answers` table.
 | `answer_id` | `bigint [pk, increment]` |
 | `attempt_id` | `bigint [not null]` |
 | `question_id` | `bigint [not null]` |
+| `selected_option_id` | `bigint` |
+| `is_correct` | `boolean` |
+| `answered_at` | `datetime` |
 
 ## Relationships
 

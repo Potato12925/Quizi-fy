@@ -21,6 +21,24 @@ async def find_user_by_username(
     return rows[0] if rows else None
 
 
+async def find_user_by_id(
+    user_id: int,
+) -> dict | None:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("users")
+        .select(
+            "user_id,username,password_hash,full_name,is_active,must_change_password,created_at,updated_at,deleted_at"
+        )
+        .eq("user_id", user_id)
+        .is_("deleted_at", None)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
 async def find_role_id_by_code(role_code: str) -> int | None:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(

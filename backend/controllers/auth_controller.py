@@ -93,9 +93,16 @@ async def get_me_route(
             status_code=200,
         )
 
-    except Exception as exc:
+    except ValueError as exc:
         return error_response(
             message=str(exc),
+            status_code=404,
+            error_code="AUTH_USER_NOT_FOUND",
+        )
+
+    except Exception:
+        return error_response(
+            message="Unable to load current user",
             status_code=500,
             error_code="AUTH_ME_FAILED",
         )

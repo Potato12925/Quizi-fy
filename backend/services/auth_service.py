@@ -7,6 +7,7 @@ from repositories.auth_repository import (
     add_user_role,
     find_role_codes_by_user_id,
     find_role_id_by_code,
+    find_user_by_id,
     find_user_by_username,
     has_user_role,
 )
@@ -99,9 +100,23 @@ def _decode_jwt_token(token: str) -> dict:
 async def get_me(
     current_user: CurrentUser,
 ) -> dict:
+    user = await find_user_by_id(current_user.user_id)
+
+    if not user:
+        raise ValueError("User not found")
+
     return {
-        "user_id": current_user.user_id,
-        "username": current_user.username,
+        "user_id": int(user["user_id"]),
+        "username": user["username"],
+        "password_hash": user["password_hash"],
+        "full_name": user["full_name"],
+        "is_active": bool(user.get("is_active", True)),
+        "must_change_password": bool(
+            user.get("must_change_password", True)
+        ),
+        "created_at": user.get("created_at"),
+        "updated_at": user.get("updated_at"),
+        "deleted_at": user.get("deleted_at"),
         "roles": current_user.roles,
     }
 

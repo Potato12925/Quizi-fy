@@ -40,6 +40,7 @@ export const apiClient = async <T = any>(
   options: RequestOptions = {}
 ): Promise<T> => {
   const { data, params, headers, ...customConfig } = options;
+  const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
 
   // Build headers
   const configHeaders: Record<string, string> = { 
@@ -47,7 +48,7 @@ export const apiClient = async <T = any>(
   };
 
   // Determine content type if we have data to send
-  if (data) {
+  if (data && !isFormData) {
     configHeaders['Content-Type'] = 'application/json';
   }
 
@@ -63,7 +64,7 @@ export const apiClient = async <T = any>(
   };
 
   if (data) {
-    config.body = JSON.stringify(data);
+    config.body = isFormData ? data : JSON.stringify(data);
   }
 
   // Query parameters parsing

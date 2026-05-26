@@ -9,7 +9,7 @@ router = APIRouter(prefix="/topics", tags=["Topics"])
 
 
 @router.post("", summary="Create topic")
-async def post_topic(payload: TopicCreateRequest, _: CurrentUser = Depends(require_roles("admin"))):
+async def post_topic(payload: TopicCreateRequest, _: CurrentUser = Depends(require_roles("admin", "teacher"))):
     try:
         result = await create_topic(payload)
         return success_response(data=result, message="Topic created successfully", status_code=201)
@@ -20,7 +20,7 @@ async def post_topic(payload: TopicCreateRequest, _: CurrentUser = Depends(requi
 
 
 @router.get("", summary="List topics")
-async def get_topic_list(page: int = Query(default=1, ge=1), limit: int = Query(default=20, ge=1, le=100), _: CurrentUser = Depends(require_roles("admin"))):
+async def get_topic_list(page: int = Query(default=1, ge=1), limit: int = Query(default=20, ge=1, le=100), _: CurrentUser = Depends(require_roles("admin", "teacher"))):
     try:
         result = await get_topics(page=page, limit=limit)
         return success_response(data=result["items"], meta=result["pagination"], message="Topic loaded successfully", status_code=200)
@@ -29,7 +29,7 @@ async def get_topic_list(page: int = Query(default=1, ge=1), limit: int = Query(
 
 
 @router.get("/{record_id}", summary="Get topic detail")
-async def get_topic_detail(record_id: int, _: CurrentUser = Depends(require_roles("admin"))):
+async def get_topic_detail(record_id: int, _: CurrentUser = Depends(require_roles("admin", "teacher"))):
     try:
         result = await get_topic_by_id(record_id)
         return success_response(data=result, message="Topic loaded successfully", status_code=200)
@@ -40,7 +40,7 @@ async def get_topic_detail(record_id: int, _: CurrentUser = Depends(require_role
 
 
 @router.put("/{record_id}", summary="Update topic")
-async def put_topic(record_id: int, payload: TopicUpdateRequest, _: CurrentUser = Depends(require_roles("admin"))):
+async def put_topic(record_id: int, payload: TopicUpdateRequest, _: CurrentUser = Depends(require_roles("admin", "teacher"))):
     try:
         result = await update_topic(record_id, payload)
         return success_response(data=result, message="Topic updated successfully", status_code=200)
@@ -52,7 +52,7 @@ async def put_topic(record_id: int, payload: TopicUpdateRequest, _: CurrentUser 
 
 
 @router.delete("/{record_id}", summary="Delete topic")
-async def delete_topic_route(record_id: int, _: CurrentUser = Depends(require_roles("admin"))):
+async def delete_topic_route(record_id: int, _: CurrentUser = Depends(require_roles("admin", "teacher"))):
     try:
         result = await delete_topic(record_id)
         return success_response(data=result, message="Topic deleted successfully", status_code=200)

@@ -16,6 +16,7 @@ export default function DashboardSidebar({ role }: { role?: 'student' | 'teacher
 
   const teacherMenu = [
     { name: 'Tổng quan', icon: 'dashboard', path: '/teacher/dashboard' },
+    { name: 'Quản lý chương', icon: 'menu_book', path: '/teacher/subjects' },
     { name: 'Kho tài liệu', icon: 'folder_open', path: '/teacher/resources' },
     { name: 'Tạo câu hỏi AI', icon: 'auto_awesome', path: '/teacher/ai-generator' },
     { name: 'Ngân hàng câu hỏi', icon: 'database', path: '/teacher/question-bank' },

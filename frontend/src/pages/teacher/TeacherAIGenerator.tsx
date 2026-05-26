@@ -1,13 +1,18 @@
-import React, { useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { generateQuestions, saveGeneratedQuestions } from '@/api/teacherApi';
-import type { GeneratedQuestion } from '@/api/teacherApi';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { generateQuestions, saveGeneratedQuestions, getTopicsBySubject, getResources, type GeneratedQuestion, type DbTopic, type TeacherResource } from '@/api/teacherApi';
 
 export default function AiGeneratorPage() {
+  const location = useLocation();
+  const passedDocId = location.state?.documentId;
+
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
-    files: [],
-    subject: 'ctdl',
+    subjectId: 1,
+    topicId: 1,
+    documentId: passedDocId ? String(passedDocId) : 'all',
+    rangeType: 'all', // 'all' | 'partial'
+    partialText: '',
     level: 'Trung bình',
     quantity: 20,
     language: 'Tiếng Việt'
@@ -20,14 +25,63 @@ export default function AiGeneratorPage() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  const [resources, setResources] = useState<TeacherResource[]>([]);
+  const [availableTopics, setAvailableTopics] = useState<DbTopic[]>([]);
+
+  // Load resources and pre-select subject
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const resList = await getResources();
+        setResources(resList);
+        
+        if (passedDocId) {
+          const doc = resList.find(r => String(r.id) === String(passedDocId));
+          if (doc && doc.subjectId) {
+            setFormData(prev => ({ ...prev, subjectId: doc.subjectId! }));
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi tải tài liệu', err);
+      }
+    };
+    loadInitialData();
+  }, [passedDocId]);
+
+  // Load topics dynamically based on subjectId
+  useEffect(() => {
+    const loadTopics = async () => {
+      try {
+        const topics = await getTopicsBySubject(formData.subjectId);
+        setAvailableTopics(topics);
+        if (topics.length > 0) {
+          setFormData(prev => ({ ...prev, topicId: topics[0].topic_id }));
+        }
+      } catch (err) {
+        console.error('Lỗi tải chương học', err);
+      }
+    };
+    loadTopics();
+  }, [formData.subjectId]);
+
   const nextStep = () => setStep(step + 1);
   const prevStep = () => setStep(step - 1);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.subject || formData.subject.trim() === '') {
-      setError('Vui lòng chọn môn học / chủ đề');
+    if (!formData.subjectId) {
+      setError('Vui lòng chọn môn học');
+      return;
+    }
+
+    if (!formData.topicId) {
+      setError('Vui lòng chọn chương học để lưu trữ câu hỏi');
+      return;
+    }
+
+    if (formData.rangeType === 'partial' && !formData.partialText.trim()) {
+      setError('Vui lòng nhập phần trích dẫn văn bản giới hạn nội dung');
       return;
     }
 
@@ -66,7 +120,11 @@ export default function AiGeneratorPage() {
 
     setIsSaving(true);
     try {
-      await saveGeneratedQuestions({ questions: approvedQuestions });
+      const questionsToSave = approvedQuestions.map(q => ({
+        ...q,
+        topicId: String(formData.topicId)
+      }));
+      await saveGeneratedQuestions({ questions: questionsToSave });
       alert('Đã lưu câu hỏi thành công!');
       navigate('/teacher/question-bank');
     } catch {
@@ -137,46 +195,119 @@ export default function AiGeneratorPage() {
         {/* STEP 1: UPLOAD (RESTORED) */}
         {step === 1 && (
           <div className="grid grid-cols-1 md:grid-cols-12 gap-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="md:col-span-7 space-y-8">
+            <div className="md:col-span-12 space-y-8 bg-white p-10 md:p-12 rounded-[2.5rem] border border-slate-100 shadow-sm">
               <div className="space-y-2">
-                <h2 className="text-4xl font-extrabold tracking-tight leading-tight">Tải lên tài liệu học tập</h2>
-                <p className="text-lg text-[#5c403d] leading-relaxed font-medium">AI sẽ phân tích nội dung để tạo câu hỏi trắc nghiệm một cách chính xác nhất cho bài giảng của bạn.</p>
+                <h2 className="text-4xl font-extrabold tracking-tight leading-tight">Chọn nguồn tài nguyên tài liệu</h2>
+                <p className="text-lg text-[#5c403d] leading-relaxed font-medium">Chọn phạm vi tài liệu giảng dạy để AI phân tích và thiết lập bộ câu hỏi.</p>
               </div>
-              <div className="relative group cursor-pointer" onClick={nextStep}>
-                <div className="absolute inset-0 bg-[#b20112]/5 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="relative flex flex-col items-center justify-center border-2 border-dashed border-[#e5bdb9] bg-white p-12 rounded-3xl transition-all duration-300 group-hover:border-[#b20112]">
-                  <div className="w-20 h-20 rounded-full bg-[#d62828]/10 flex items-center justify-center mb-6">
-                    <span className="material-symbols-outlined text-[#b20112] text-4xl">cloud_upload</span>
-                  </div>
-                  <h3 className="text-xl font-bold mb-2">Kéo thả hoặc chọn tệp</h3>
-                  <p className="text-[#5c403d] text-sm mb-6">PDF, Docx, TXT (Tối đa 20MB)</p>
-                  <button className="bg-[#b20112] text-white px-8 py-3 rounded-full font-bold shadow-md hover:bg-[#d62828] transition-all">Chọn tệp từ máy tính</button>
-                </div>
-              </div>
-            </div>
-            <div className="md:col-span-5 space-y-6">
-              <div className="p-8 rounded-3xl shadow-[0px_12px_32px_rgba(147,0,10,0.06)] bg-[#f3f3f3]">
-                <h4 className="text-sm font-black uppercase tracking-widest text-[#b20112] mb-6">Tài liệu gần đây</h4>
+
+              {error && <div className="p-4 bg-red-50 text-red-500 rounded-xl font-bold text-xs">{error}</div>}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
                 <div className="space-y-4">
-                  <div className="flex items-center gap-4 p-4 rounded-2xl bg-white hover:bg-red-50/50 transition-colors cursor-pointer group">
-                    <div className="w-12 h-12 rounded-xl bg-[#ffdad9] flex items-center justify-center text-[#804647]">
-                      <span className="material-symbols-outlined">description</span>
-                    </div>
-                    <div className="flex-grow">
-                      <p className="text-sm font-bold truncate">Giai-tich-1-Chapter-2.pdf</p>
-                      <p className="text-[10px] font-medium text-[#5c403d]">Tải lên 2 giờ trước • 4.2 MB</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 p-4 rounded-2xl bg-white hover:bg-red-50/50 transition-colors cursor-pointer group">
-                    <div className="w-12 h-12 rounded-xl bg-[#ffdad9] flex items-center justify-center text-[#804647]">
-                      <span className="material-symbols-outlined">article</span>
-                    </div>
-                    <div className="flex-grow">
-                      <p className="text-sm font-bold truncate">Cau-hoi-On-tap-Triet.docx</p>
-                      <p className="text-[10px] font-medium text-[#5c403d]">Tải lên 1 ngày trước • 1.1 MB</p>
-                    </div>
+                  <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Chọn môn học</label>
+                  <select 
+                    value={formData.subjectId}
+                    onChange={e => setFormData({ ...formData, subjectId: parseInt(e.target.value) })}
+                    className="w-full bg-[#f3f3f3] border-none rounded-xl px-6 py-4 text-on-surface focus:ring-2 focus:ring-[#d62828] outline-none font-bold"
+                  >
+                    <option value={1}>Mạng máy tính</option>
+                    <option value={2}>Cấu trúc dữ liệu và Giải thuật</option>
+                    <option value={3}>Hệ điều hành</option>
+                  </select>
+                </div>
+
+                <div className="space-y-4">
+                  <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Phạm vi tài liệu nguồn</label>
+                  <div className="flex gap-4 p-1 bg-[#e8e8e8] rounded-xl">
+                    <button 
+                      type="button" 
+                      onClick={() => setFormData({ ...formData, documentId: 'all' })}
+                      className={`flex-1 py-3.5 text-xs font-bold rounded-lg transition-all ${formData.documentId === 'all' ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}
+                    >
+                      Tất cả tài liệu môn học
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        const firstDoc = resources.find(r => r.subjectId === formData.subjectId);
+                        setFormData({ ...formData, documentId: firstDoc ? String(firstDoc.id) : '' });
+                      }}
+                      className={`flex-1 py-3.5 text-xs font-bold rounded-lg transition-all ${formData.documentId !== 'all' ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}
+                    >
+                      Chọn tài liệu cụ thể
+                    </button>
                   </div>
                 </div>
+              </div>
+
+              {formData.documentId !== 'all' && (
+                <div className="space-y-6 pt-4 border-t border-slate-100 animate-in fade-in duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Chọn tệp tài liệu cụ thể</label>
+                      <select 
+                        value={formData.documentId}
+                        onChange={e => setFormData({ ...formData, documentId: e.target.value })}
+                        className="w-full bg-[#f3f3f3] border-none rounded-xl px-6 py-4 text-on-surface focus:ring-2 focus:ring-[#d62828] outline-none font-bold"
+                      >
+                        <option value="">-- Chọn tệp tài liệu --</option>
+                        {resources.filter(r => r.subjectId === formData.subjectId).map(doc => (
+                          <option key={doc.id} value={doc.id}>{doc.name} ({doc.size})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-4">
+                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Độ dài nội dung đọc</label>
+                      <div className="flex gap-4 p-1 bg-[#e8e8e8] rounded-xl">
+                        <button 
+                          type="button" 
+                          onClick={() => setFormData({ ...formData, rangeType: 'all' })}
+                          className={`flex-1 py-3.5 text-xs font-bold rounded-lg transition-all ${formData.rangeType === 'all' ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}
+                        >
+                          Toàn bộ tài liệu
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => setFormData({ ...formData, rangeType: 'partial' })}
+                          className={`flex-1 py-3.5 text-xs font-bold rounded-lg transition-all ${formData.rangeType === 'partial' ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}
+                        >
+                          Một phần tài liệu
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {formData.rangeType === 'partial' && (
+                    <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
+                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Nhập đoạn văn bản trích dẫn giới hạn nội dung tạo câu hỏi</label>
+                      <textarea 
+                        rows={6}
+                        placeholder="Hãy copy và dán một phần bài viết hoặc nội dung chính xác trong giáo trình tại đây để AI phân tích..."
+                        value={formData.partialText}
+                        onChange={e => setFormData({ ...formData, partialText: e.target.value })}
+                        className="w-full p-6 rounded-3xl bg-[#f3f3f3] border-none text-xs font-bold focus:ring-2 focus:ring-[#d62828] resize-none"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end pt-6 border-t border-slate-50">
+                <button 
+                  onClick={() => {
+                    if (formData.documentId !== 'all' && !formData.documentId) {
+                      setError('Vui lòng chọn tài liệu cụ thể');
+                      return;
+                    }
+                    setError('');
+                    nextStep();
+                  }}
+                  className="bg-[#b20112] text-white px-10 py-4 rounded-xl font-bold shadow-md hover:bg-black transition-all uppercase tracking-widest text-xs flex items-center gap-2"
+                >
+                  Tiếp tục cấu hình <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                </button>
               </div>
             </div>
           </div>
@@ -198,10 +329,15 @@ export default function AiGeneratorPage() {
                 {error && <div className="mb-6 p-4 bg-red-50 text-red-500 rounded-xl font-bold">{error}</div>}
                 <form className="space-y-10" onSubmit={handleGenerate}>
                   <div className="space-y-4">
-                    <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Chọn môn học</label>
-                    <select className="w-full bg-[#f3f3f3] border-none rounded-xl px-6 py-4 text-on-surface focus:ring-2 focus:ring-[#d62828] outline-none">
-                      <option value="ctdl">Cấu trúc dữ liệu và Giải thuật</option>
-                      <option value="mmt">Mạng máy tính</option>
+                    <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Lưu bộ câu hỏi vào chương (Topic)</label>
+                    <select 
+                      value={formData.topicId}
+                      onChange={e => setFormData({ ...formData, topicId: parseInt(e.target.value) })}
+                      className="w-full bg-[#f3f3f3] border-none rounded-xl px-6 py-4 text-on-surface focus:ring-2 focus:ring-[#d62828] outline-none font-bold cursor-pointer"
+                    >
+                      {availableTopics.map(topic => (
+                        <option key={topic.topic_id} value={topic.topic_id}>{topic.topic_name}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="space-y-6">

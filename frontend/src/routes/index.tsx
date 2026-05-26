@@ -21,6 +21,7 @@ import TeacherDashboard from '@/pages/teacher/TeacherDashboard';
 import TeacherAIGenerator from '@/pages/teacher/TeacherAIGenerator';
 import TeacherQuestionBank from '@/pages/teacher/TeacherQuestionBank';
 import TeacherResources from '@/pages/teacher/TeacherResources';
+import TeacherSubjects from '@/pages/teacher/TeacherSubjects';
 import TeacherStats from '@/pages/teacher/TeacherStats';
 import TeacherSettings from '@/pages/teacher/TeacherSettings';
 
@@ -103,6 +104,10 @@ export const router = createBrowserRouter([
           {
             path: 'resources',
             element: <TeacherResources />,
+          },
+          {
+            path: 'subjects',
+            element: <TeacherSubjects />,
           },
           {
             path: 'stats',

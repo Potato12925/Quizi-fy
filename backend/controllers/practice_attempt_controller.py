@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, Query
 
 from core.responses import error_response, success_response
@@ -14,6 +15,8 @@ from services.practice_attempt_service import (
     autosave_answers,
     submit_attempt,
     get_attempt_result,
+    get_my_history,
+    get_attempt_questions,
 )
 
 router = APIRouter(prefix="/practice-attempts", tags=["PracticeAttempts"])
@@ -39,6 +42,15 @@ async def get_practice_attempt_list(page: int = Query(default=1, ge=1), limit: i
         return error_response(message="Unable to load practice-attempts", status_code=500, error_code="PRACTICEATTEMPT_LIST_FAILED")
 
 
+@router.get("/my-history", summary="Get practice history for current student")
+async def get_my_history_route(current_user: CurrentUser = Depends(require_roles("student"))):
+    try:
+        result = await get_my_history(current_user.user_id)
+        return success_response(data=result, message="History loaded successfully", status_code=200)
+    except Exception:
+        return error_response(message="Unable to load history", status_code=500, error_code="HISTORY_LOAD_FAILED")
+
+
 @router.post("/start", summary="Start practice attempt")
 async def start_practice_attempt_route(payload: PracticeAttemptStartRequest, _: CurrentUser = Depends(require_roles("student"))):
     try:
@@ -46,6 +58,16 @@ async def start_practice_attempt_route(payload: PracticeAttemptStartRequest, _: 
         return success_response(data=result, message="Practice attempt started", status_code=201)
     except Exception:
         return error_response(message="Unable to start practice attempt", status_code=500, error_code="PRACTICE_ATTEMPT_START_FAILED")
+
+@router.get("/{attempt_id}/questions", summary="Get attempt questions")
+async def get_attempt_questions_route(attempt_id: int, _: CurrentUser = Depends(require_roles("student"))):
+    try:
+        result = await get_attempt_questions(attempt_id)
+        return success_response(data=result, message="Questions loaded successfully", status_code=200)
+    except ValueError as exc:
+        return error_response(message=str(exc), status_code=404, error_code="PRACTICE_ATTEMPT_NOT_FOUND")
+    except Exception:
+        return error_response(message="Unable to load questions", status_code=500, error_code="QUESTIONS_LOAD_FAILED")
 
 @router.post("/{attempt_id}/answers", summary="Autosave student answers")
 async def autosave_answers_route(attempt_id: int, payload: StudentAnswerSaveRequest, _: CurrentUser = Depends(require_roles("student"))):

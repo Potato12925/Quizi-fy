@@ -1,40 +1,7 @@
-import { api } from './client';
-
-// Database Schema Models
-export interface DbPracticeSet {
-  practice_set_id: number;
-  student_id: number;
-  subject_id: number;
-  topic_id?: number;
-  difficulty: string;
-  num_questions_requested: number;
-  num_questions_actual?: number;
-  time_limit_minutes?: number;
-  created_at: string;
-}
-
-export interface DbPracticeAttempt {
-  attempt_id: number;
-  practice_set_id: number;
-  started_at: string;
-  submitted_at?: string;
-  score?: number;
-  total_correct?: number;
-  total_wrong?: number;
-  status: string;
-}
-
-export interface DbStudentAnswer {
-  answer_id: number;
-  attempt_id: number;
-  question_id: number;
-  selected_option_id?: number;
-  is_correct?: boolean;
-  answered_at: string;
-}
+import * as client from './client';
 
 // UI Models
-export interface SubjectStat {
+export default interface SubjectStat {
   id: string;
   name: string;
   questions: number;
@@ -74,31 +41,6 @@ export interface HistoryItem {
   status: string;
 }
 
-export interface Topic {
-  name: string;
-  status: string;
-}
-
-export interface PracticeModule {
-  name: string;
-  topics: number;
-  completed: number;
-  icon: string;
-  color: string;
-}
-
-export interface OngoingExam {
-  title: string;
-  deadline: string;
-  questions: number;
-  duration: string;
-}
-
-export interface PracticeSubjectData {
-  modules: PracticeModule[];
-  exams: OngoingExam[];
-}
-
 export interface PracticeSessionPayload {
   subject: string;
   quantity: number;
@@ -107,10 +49,16 @@ export interface PracticeSessionPayload {
   mode: string;
 }
 
+export interface Option {
+  id: number;
+  text: string;
+}
+
 export interface Question {
   id: number;
   text: string;
-  options: string[];
+  options: Option[];
+  selectedOptionId?: number;
 }
 
 export interface PracticeDetail {
@@ -121,13 +69,204 @@ export interface PracticeDetail {
 }
 
 export interface SubmitPracticePayload {
-  answers: Record<number, number>;
+  answers: { question_id: number, selected_option_id: number }[];
 }
 
 export interface SubmitPracticeResponse {
   success: boolean;
   resultId: string;
 }
+
+export interface ResultOverview {
+  score: number;
+  total: number;
+  time: string;
+  accuracy: number;
+}
+
+export interface ResultQuestion {
+  text: string;
+  options: { id: number, text: string }[];
+  userAnswer?: number;
+  correctAnswer: number;
+  explanation: string;
+}
+
+export interface StudentResultData {
+  overview: ResultOverview;
+  questions: ResultQuestion[];
+}
+
+
+/**
+ * GET /student/dashboard
+ * Mocked because we don't have a dedicated dashboard endpoint yet.
+ */
+export const getStudentDashboard = async (): Promise<StudentDashboardData> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        subjects: [
+          { id: '1', name: 'Mạng máy tính', questions: 150, color: 'text-[#b20112]', icon: 'language' },
+          { id: '2', name: 'Cấu trúc dữ liệu', questions: 200, color: 'text-emerald-600', icon: 'account_tree' },
+        ],
+        metrics: [
+          { label: 'Hoàn thành', value: '85%', icon: 'task_alt', color: 'text-blue-500', bg: 'bg-blue-50' },
+        ],
+        activities: []
+      });
+    }, 500);
+  });
+};
+
+/**
+ * Lấy lịch sử làm bài: GET /practice-attempts/my-history
+ */
+export const getStudentHistory = async (): Promise<HistoryItem[]> => {
+  try {
+    const res = await client.api.get('/practice-attempts/my-history');
+    const dbAttempts = res.data || [];
+    return dbAttempts.map((a: any) => ({
+      id: a.attempt_id,
+      subject: a.subject_name || 'N/A',
+      date: new Date(a.started_at).toLocaleDateString('vi-VN'),
+      score: a.score || 0,
+      total: (a.total_correct || 0) + (a.total_wrong || 0),
+      time: a.submitted_at ? 'Hoàn thành' : '--:--',
+      status: a.status === 'submitted' ? 'Đã nộp' : 'Đang làm',
+    }));
+  } catch (error) {
+    console.warn('Lỗi tải lịch sử:', error);
+    return [];
+  }
+};
+
+/**
+ * Lấy danh sách môn học của học sinh: GET /class-subjects/my-subjects
+ */
+export const getMySubjects = async (): Promise<any[]> => {
+  try {
+    const res = await client.api.get('/class-subjects/my-subjects');
+    return res.data || [];
+  } catch (error) {
+    console.error('Lỗi lấy danh sách môn học', error);
+    return [];
+  }
+}
+
+/**
+ * Setup bài làm: POST /practice-sets/generate -> POST /practice-attempts/start
+ */
+export const createPracticeSession = async (payload: PracticeSessionPayload): Promise<{ practiceId: string }> => {
+  try {
+    // 1. Generate practice set
+    const setRes = await client.api.post('/practice-sets/generate', {
+      subject_id: parseInt(payload.subject),
+      num_questions: payload.quantity,
+      difficulty: payload.level === 'Dễ' ? 'easy' : payload.level === 'Khó' ? 'hard' : 'medium'
+    });
+    const practiceSetId = setRes.data.practice_set_id;
+
+    // 2. Start attempt
+    const attemptRes = await client.api.post('/practice-attempts/start', {
+      practice_set_id: practiceSetId
+    });
+
+    return { practiceId: attemptRes.data.attempt_id.toString() };
+  } catch (error) {
+    console.error('Failed to create practice session', error);
+    throw error;
+  }
+};
+
+/**
+ * GET /practice-attempts/:id/questions
+ */
+export const getPracticeDetail = async (practiceId: string): Promise<PracticeDetail> => {
+  try {
+    const res = await client.api.get(`/practice-attempts/${practiceId}/questions`);
+    const data = res.data;
+
+    return {
+      id: practiceId,
+      subjectName: 'Bài luyện tập',
+      duration: 1200,
+      questions: data.questions.map((q: any) => ({
+        id: q.question_id,
+        text: q.content,
+        selectedOptionId: q.selected_option_id,
+        options: q.options.map((o: any) => ({ id: o.option_id, text: o.option_text }))
+      }))
+    };
+  } catch (error) {
+    console.error('Failed to get practice detail', error);
+    throw error;
+  }
+};
+
+/**
+ * POST /practice-attempts/:id/answers
+ */
+export const autosaveAnswers = async (practiceId: string, payload: SubmitPracticePayload): Promise<void> => {
+  try {
+    await client.api.post(`/practice-attempts/${practiceId}/answers`, payload);
+  } catch (e) {
+    console.error("Autosave failed", e);
+  }
+}
+
+/**
+ * POST /practice-attempts/:id/submit
+ */
+export const submitPractice = async (practiceId: string): Promise<SubmitPracticeResponse> => {
+  try {
+    await client.api.post(`/practice-attempts/${practiceId}/submit`);
+    return { success: true, resultId: practiceId };
+  } catch (error) {
+    console.error('Submit failed', error);
+    throw error;
+  }
+};
+
+/**
+ * GET /practice-attempts/:id/result
+ */
+export const getStudentResultDetail = async (resultId: string): Promise<StudentResultData> => {
+  try {
+    const res = await client.api.get(`/practice-attempts/${resultId}/result`);
+    const data = res.data;
+
+    const questions = data.questions.map((q: any) => {
+      // Find correct option
+      const correctOpt = q.options.find((o: any) => o.is_correct);
+      // Map user answer option_id to index if needed, but we'll return option_id
+      return {
+        text: q.content,
+        options: q.options.map((o: any) => ({ id: o.option_id, text: o.option_text })),
+        userAnswer: q.selected_option_id,
+        correctAnswer: correctOpt ? correctOpt.option_id : 0,
+        explanation: q.explanation || 'Không có giải thích.'
+      };
+    });
+
+    const score = parseFloat(data.attempt.score) || 0;
+    const total_q = data.attempt.total_correct + data.attempt.total_wrong;
+    const acc = total_q > 0 ? (data.attempt.total_correct / total_q) * 100 : 0;
+
+    return {
+      overview: {
+        score: score,
+        total: total_q,
+        time: '--:--',
+        accuracy: Math.round(acc)
+      },
+      questions: questions
+    }
+  } catch (error) {
+    console.error('Failed to get result', error);
+    throw error;
+  }
+};
 
 export interface ProgressStats {
   avgScore: number;
@@ -148,206 +287,7 @@ export interface StudentProgressData {
   subjectPerformance: SubjectPerformance[];
 }
 
-export interface ResultOverview {
-  score: number;
-  total: number;
-  time: string;
-  accuracy: number;
-}
-
-export interface ResultQuestion {
-  text: string;
-  options: string[];
-  userAnswer: number;
-  correctAnswer: number;
-  explanation: string;
-}
-
-export interface StudentResultData {
-  overview: ResultOverview;
-  questions: ResultQuestion[];
-}
-
-// Mappers
-export const mapDbPracticeAttemptToHistoryItem = (db: DbPracticeAttempt, subjectName: string = 'N/A'): HistoryItem => ({
-  id: db.attempt_id,
-  subject: subjectName,
-  date: new Date(db.started_at).toLocaleDateString('vi-VN'),
-  score: db.total_correct || 0,
-  total: (db.total_correct || 0) + (db.total_wrong || 0),
-  time: db.submitted_at ? '15:00' : '--:--', // Duration calculation or mock
-  status: (db.score || 0) >= 8 ? 'Giỏi' : (db.score || 0) >= 5 ? 'Khá' : 'TB',
-});
-
-/**
- * GET /student/dashboard
- */
-export const getStudentDashboard = async (): Promise<StudentDashboardData> => {
-  try {
-    return await api.get<StudentDashboardData>('/student/dashboard');
-  } catch (error) {
-    console.warn('Backend endpoint /student/dashboard not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          subjects: [
-            { id: '1', name: 'Mạng máy tính', questions: 150, color: 'text-[#b20112]', icon: 'language' },
-            { id: '2', name: 'Cấu trúc dữ liệu', questions: 200, color: 'text-emerald-600', icon: 'account_tree' },
-            { id: '3', name: 'Hệ điều hành', questions: 120, color: 'text-blue-600', icon: 'terminal' },
-          ],
-          metrics: [
-            { label: 'Chuỗi ngày', value: '12', icon: 'local_fire_department', color: 'text-red-500', bg: 'bg-red-50' },
-            { label: 'Điểm tích lũy', value: '2,450', icon: 'star', color: 'text-amber-500', bg: 'bg-amber-50' },
-            { label: 'Hoàn thành', value: '85%', icon: 'task_alt', color: 'text-blue-500', bg: 'bg-blue-50' },
-            { label: 'Thời gian học', value: '4.2h', icon: 'timer', color: 'text-slate-400', bg: 'bg-slate-50' },
-          ],
-          activities: [
-            { id: '1', subject: 'Cấu trúc dữ liệu', time: 'Hôm qua, 14:20', score: '9/10' },
-            { id: '2', subject: 'Mạng máy tính', time: '2 ngày trước', score: '8/10' },
-          ]
-        });
-      }, 500);
-    });
-  }
-};
-
-/**
- * GET /student/history
- */
-export const getStudentHistory = async (): Promise<HistoryItem[]> => {
-  try {
-    const dbAttempts = await api.get<DbPracticeAttempt[]>('/student/history');
-    return dbAttempts.map(a => mapDbPracticeAttemptToHistoryItem(a, 'Môn học Mock'));
-  } catch (error) {
-    console.warn('Backend endpoint /student/history not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const mockAttempts: DbPracticeAttempt[] = [
-          { attempt_id: 1, practice_set_id: 1, started_at: '2024-04-25T10:00:00Z', submitted_at: '2024-04-25T10:12:45Z', score: 8.0, total_correct: 8, total_wrong: 2, status: 'submitted' },
-          { attempt_id: 2, practice_set_id: 2, started_at: '2024-04-24T15:00:00Z', submitted_at: '2024-04-24T15:15:20Z', score: 9.0, total_correct: 9, total_wrong: 1, status: 'submitted' },
-        ];
-        resolve(mockAttempts.map(a => mapDbPracticeAttemptToHistoryItem(a, 'Cấu trúc dữ liệu')));
-      }, 500);
-    });
-  }
-};
-
-/**
- * GET /student/practice
- */
-export const getPracticeList = async (): Promise<PracticeSubjectData> => {
-  try {
-    return await api.get<PracticeSubjectData>('/student/practice');
-  } catch (error) {
-    console.warn('Backend endpoint /student/practice not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          modules: [
-            { name: 'Cấu trúc dữ liệu & Giải thuật', topics: 12, completed: 8, icon: 'account_tree', color: 'bg-red-500' },
-            { name: 'Mạng máy tính', topics: 10, completed: 4, icon: 'settings_input_antenna', color: 'bg-blue-500' },
-            { name: 'Lập trình Java nâng cao', topics: 15, completed: 12, icon: 'code', color: 'bg-purple-500' },
-            { name: 'Cơ sở dữ liệu', topics: 8, completed: 7, icon: 'database', color: 'bg-orange-500' },
-          ],
-          exams: [
-            { title: 'Kiểm tra giữa kỳ - Mạng máy tính', deadline: 'Còn 2 ngày', questions: 40, duration: '60 phút' },
-            { title: 'Bài tập tuần 4 - Java', deadline: 'Hôm nay', questions: 20, duration: '30 phút' },
-          ]
-        });
-      }, 500);
-    });
-  }
-};
-
-/**
- * POST /student/practice/setup
- */
-export const createPracticeSession = async (payload: PracticeSessionPayload): Promise<{ practiceId: string }> => {
-  try {
-    return await api.post<{ practiceId: string }>('/student/practice/setup', payload);
-  } catch (error) {
-    console.warn('Backend endpoint /student/practice/setup not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({ practiceId: 'demo-practice-id' });
-      }, 1000); // Simulate AI generation
-    });
-  }
-};
-
-/**
- * GET /student/practice/:id
- */
-export const getPracticeDetail = async (practiceId: string): Promise<PracticeDetail> => {
-  try {
-    return await api.get<PracticeDetail>(`/student/practice/${practiceId}`);
-  } catch (error) {
-    console.warn(`Backend endpoint /student/practice/${practiceId} not ready. Using fallback mock data.`, error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          id: practiceId,
-          subjectName: 'Môn học Demo',
-          duration: 1200, // 20 minutes
-          questions: [
-            {
-              id: 1,
-              text: 'Trong mô hình OSI, tầng nào chịu trách nhiệm nén dữ liệu và mã hóa?',
-              options: ['Tầng ứng dụng (Application)', 'Tầng trình diễn (Presentation)', 'Tầng phiên (Session)', 'Tầng giao vận (Transport)'],
-            },
-            {
-              id: 2,
-              text: 'Giao thức nào sau đây được sử dụng để truyền tải file trên Internet?',
-              options: ['HTTP', 'SMTP', 'FTP', 'DNS'],
-            },
-            {
-              id: 3,
-              text: 'Địa chỉ IPv4 có độ dài bao nhiêu bit?',
-              options: ['16 bit', '32 bit', '64 bit', '128 bit'],
-            },
-            {
-              id: 4,
-              text: 'Thiết bị Switch hoạt động ở tầng nào của mô hình OSI?',
-              options: ['Tầng 1 (Physical)', 'Tầng 2 (Data Link)', 'Tầng 3 (Network)', 'Tầng 4 (Transport)'],
-            },
-          ]
-        });
-      }, 500);
-    });
-  }
-};
-
-/**
- * POST /student/practice/:id/submit
- */
-export const submitPractice = async (practiceId: string, payload: SubmitPracticePayload): Promise<SubmitPracticeResponse> => {
-  try {
-    return await api.post<SubmitPracticeResponse>(`/student/practice/${practiceId}/submit`, payload);
-  } catch (error) {
-    console.warn(`Backend endpoint /student/practice/${practiceId}/submit not ready. Using fallback mock data.`, error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({ success: true, resultId: 'demo-result-id' });
-      }, 800);
-    });
-  }
-};
-
-/**
- * GET /student/progress
- */
 export const getStudentProgress = async (): Promise<StudentProgressData> => {
-  try {
-    return await api.get<StudentProgressData>('/student/progress');
-  } catch (error) {
-    console.warn('Backend endpoint /student/progress not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve({
@@ -361,63 +301,8 @@ export const getStudentProgress = async (): Promise<StudentProgressData> => {
           subjectPerformance: [
             { name: 'Mạng máy tính', score: 85, color: 'bg-[#b20112]' },
             { name: 'Cấu trúc dữ liệu', score: 65, color: 'bg-emerald-500' },
-            { name: 'Hệ điều hành', score: 40, color: 'bg-blue-500' },
-            { name: 'Giải tích 1', score: 90, color: 'bg-amber-500' },
           ]
         });
       }, 500);
     });
-  }
-};
-
-/**
- * GET /student/results
- */
-export const getStudentResults = async (): Promise<any[]> => {
-  try {
-    return await api.get<any[]>('/student/results');
-  } catch (error) {
-    console.warn('Backend endpoint /student/results not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve([]); // Returning empty for now, detail page is more important
-      }, 500);
-    });
-  }
-};
-
-/**
- * GET /student/results/:id
- */
-export const getStudentResultDetail = async (resultId: string): Promise<StudentResultData> => {
-  try {
-    return await api.get<StudentResultData>(`/student/results/${resultId}`);
-  } catch (error) {
-    console.warn(`Backend endpoint /student/results/${resultId} not ready. Using fallback mock data.`, error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          overview: { score: 8.5, total: 20, time: '14:30', accuracy: 85 },
-          questions: [
-            {
-              text: 'Trong mô hình OSI, tầng nào chịu trách nhiệm nén dữ liệu và mã hóa?',
-              options: ['Tầng ứng dụng (Application)', 'Tầng trình diễn (Presentation)', 'Tầng phiên (Session)', 'Tầng giao vận (Transport)'],
-              userAnswer: 1,
-              correctAnswer: 1,
-              explanation: 'Tầng trình diễn (Presentation) có nhiệm vụ mã hóa, giải mã và nén dữ liệu để đảm bảo các thiết bị khác nhau có thể hiểu nhau.'
-            },
-            {
-              text: 'Địa chỉ IPv4 có độ dài bao nhiêu bit?',
-              options: ['16 bit', '32 bit', '64 bit', '128 bit'],
-              userAnswer: 2, // incorrect
-              correctAnswer: 1,
-              explanation: 'IPv4 là phiên bản thứ tư của Internet Protocol, sử dụng không gian địa chỉ 32 bit.'
-            }
-          ]
-        });
-      }, 500);
-    });
-  }
 };

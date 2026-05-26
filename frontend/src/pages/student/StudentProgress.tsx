@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getStudentProgress } from '@/api/studentApi';
 import type { StudentProgressData } from '@/api/studentApi';
@@ -135,10 +135,10 @@ export default function ProgressPage() {
       {/* Subject Performance */}
       <div className="bg-white rounded-[3.5rem] p-12 border border-slate-100 shadow-sm">
          <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight mb-12 flex items-center gap-4">
-            <span className="material-symbols-outlined text-[#b20112]">bar_chart</span> Hiá»‡u suáº¥t theo mÃ´n há»c
+            <span className="material-symbols-outlined text-[#b20112]">bar_chart</span> Hiá»‡u suáº¥t theo mÃ´n há» c
          </h3>
          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-20 gap-y-12">
-            {subjectPerformance.map((s, idx) => (
+            {data?.subjectPerformance.map((s: any, idx: number) => (
               <div key={idx} className="space-y-4">
                  <div className="flex justify-between items-end">
                     <p className="text-sm font-black text-slate-800 tracking-tight">{s.name}</p>

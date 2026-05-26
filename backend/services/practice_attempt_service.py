@@ -100,6 +100,65 @@ async def get_attempt_result(attempt_id: int) -> dict:
         raise ValueError("PracticeAttempt not found")
     return details
 
+async def get_my_history(student_id: int) -> list[dict]:
+    supabase = SupabaseManager.get_client()
+    
+    ps_resp = await asyncio.to_thread(lambda: supabase.table("practice_sets").select("practice_set_id, subjects(subject_name)").eq("student_id", student_id).execute())
+    ps_data = ps_resp.data or []
+    if not ps_data:
+        return []
+    
+    ps_ids = [ps["practice_set_id"] for ps in ps_data]
+    ps_map = {ps["practice_set_id"]: ps["subjects"]["subject_name"] if ps.get("subjects") else "Unknown" for ps in ps_data}
+    
+    attempts_resp = await asyncio.to_thread(lambda: supabase.table("practice_attempts").select("*").in_("practice_set_id", ps_ids).order("started_at", desc=True).execute())
+    attempts = attempts_resp.data or []
+    
+    for attempt in attempts:
+        attempt["subject_name"] = ps_map.get(attempt["practice_set_id"], "Unknown")
+        
+    return attempts
+
+async def get_attempt_questions(attempt_id: int) -> dict:
+    attempt = await find_practice_attempt_by_id(attempt_id)
+    if not attempt:
+        raise ValueError("PracticeAttempt not found")
+        
+    supabase = SupabaseManager.get_client()
+    
+    ps_id = attempt["practice_set_id"]
+    psq_resp = await asyncio.to_thread(lambda: supabase.table("practice_set_questions")
+        .select("order_num, questions(*, question_options(option_id, option_text, order_num))")
+        .eq("practice_set_id", ps_id)
+        .order("order_num")
+        .execute()
+    )
+    questions_data = psq_resp.data or []
+    
+    answers_resp = await asyncio.to_thread(lambda: supabase.table("student_answers").select("question_id, selected_option_id").eq("attempt_id", attempt_id).execute())
+    answers = {a["question_id"]: a["selected_option_id"] for a in (answers_resp.data or [])}
+    
+    formatted_questions = []
+    for row in questions_data:
+        q = row.get("questions")
+        if not q: continue
+        opts = q.get("question_options", [])
+        opts.sort(key=lambda x: x.get("order_num", 0))
+        
+        formatted_questions.append({
+            "question_id": q["question_id"],
+            "content": q["content"],
+            "options": [{"option_id": o["option_id"], "option_text": o["option_text"]} for o in opts],
+            "order_num": row["order_num"],
+            "selected_option_id": answers.get(q["question_id"])
+        })
+        
+    return {
+        "attempt_id": attempt_id,
+        "practice_set_id": ps_id,
+        "status": attempt["status"],
+        "questions": formatted_questions
+    }
 
 async def get_practice_attempts(page: int, limit: int) -> dict:
     items, total = await list_practice_attempts(page=page, limit=limit)

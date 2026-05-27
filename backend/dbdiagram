@@ -1,6 +1,5 @@
-
-Project BKP_System {
-  database_type: "MySQL"
+Project BKP_SYSTEM {
+  database_type: "PostgreSQL"
 }
 
 /* =========================================================
@@ -45,7 +44,7 @@ Enum practice_attempt_status {
 }
 
 /* =========================================================
-   USERS & ROLES
+   USERS
 ========================================================= */
 
 Table users {
@@ -61,9 +60,9 @@ Table users {
 
   must_change_password boolean [default: true]
 
-  created_at datetime
-  updated_at datetime
-  deleted_at datetime
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 
   indexes {
     (username)
@@ -71,24 +70,34 @@ Table users {
   }
 }
 
+/* =========================================================
+   ROLES
+========================================================= */
+
 Table roles {
   role_id bigint [pk, increment]
 
   role_code varchar(50) [unique, not null]
+
   role_name varchar(100) [not null]
 
   description text
 
-  created_at datetime
+  created_at timestamp
 }
+
+/* =========================================================
+   USER ROLES
+========================================================= */
 
 Table user_roles {
   user_role_id bigint [pk, increment]
 
   user_id bigint [not null]
+
   role_id bigint [not null]
 
-  assigned_at datetime
+  assigned_at timestamp
 
   indexes {
     (user_id, role_id) [unique]
@@ -103,6 +112,7 @@ Table classes {
   class_id bigint [pk, increment]
 
   class_code varchar(50) [unique, not null]
+
   class_name varchar(255) [not null]
 
   description text
@@ -111,16 +121,16 @@ Table classes {
 
   status active_status [default: 'active']
 
-  created_at datetime
-  updated_at datetime
-  deleted_at datetime
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 }
 
 /* =========================================================
    SUBJECTS
 ========================================================= */
 
- Table subjects {
+Table subjects {
   subject_id bigint [pk, increment]
 
   subject_code varchar(50) [unique, not null]
@@ -131,9 +141,9 @@ Table classes {
 
   status active_status [default: 'active']
 
-  created_at datetime
-  updated_at datetime
-  deleted_at datetime
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 }
 
 /* =========================================================
@@ -143,18 +153,12 @@ Table classes {
 Table topics {
   topic_id bigint [pk, increment]
 
-  subject_id bigint [not null]
-
-  topic_name varchar(255) [not null]
+  topic_name varchar(255) [unique, not null]
 
   description text
 
-  created_at datetime
-  updated_at datetime
-
-  indexes {
-    (subject_id, topic_name) [unique]
-  }
+  created_at timestamp
+  updated_at timestamp
 }
 
 /* =========================================================
@@ -165,15 +169,16 @@ Table class_subjects {
   class_subject_id bigint [pk, increment]
 
   class_id bigint [not null]
+
   subject_id bigint [not null]
 
   assigned_teacher_id bigint
 
   status active_status [default: 'active']
 
-  created_at datetime
-  updated_at datetime
-  deleted_at datetime
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 
   indexes {
     (class_id, subject_id) [unique]
@@ -188,13 +193,14 @@ Table class_students {
   class_student_id bigint [pk, increment]
 
   class_id bigint [not null]
+
   student_id bigint [not null]
 
   invited_by bigint [not null]
 
-  joined_at datetime
+  joined_at timestamp
 
-  deleted_at datetime
+  deleted_at timestamp
 
   indexes {
     (class_id, student_id) [unique]
@@ -209,13 +215,14 @@ Table class_teachers {
   class_teacher_id bigint [pk, increment]
 
   class_id bigint [not null]
+
   teacher_id bigint [not null]
 
   added_by bigint [not null]
 
-  joined_at datetime
+  joined_at timestamp
 
-  deleted_at datetime
+  deleted_at timestamp
 
   indexes {
     (class_id, teacher_id) [unique]
@@ -230,14 +237,15 @@ Table documents {
   document_id bigint [pk, increment]
 
   teacher_id bigint [not null]
+
   subject_id bigint [not null]
-  topic_id bigint
 
   title varchar(500) [not null]
 
   description text
 
   file_url text [not null]
+
   file_hash varchar(255)
 
   file_type varchar(20) [not null]
@@ -246,13 +254,33 @@ Table documents {
 
   status active_status [default: 'active']
 
-  created_at datetime
-  updated_at datetime
-  deleted_at datetime
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 
   indexes {
-    (subject_id, topic_id, status)
     (teacher_id, created_at)
+    (subject_id, status)
+  }
+}
+
+/* =========================================================
+   DOCUMENT TOPICS
+========================================================= */
+
+Table document_topics {
+  document_topic_id bigint [pk, increment]
+
+  document_id bigint [not null]
+
+  topic_id bigint [not null]
+
+  created_at timestamp
+
+  indexes {
+    (document_id, topic_id) [unique]
+    (document_id)
+    (topic_id)
   }
 }
 
@@ -262,8 +290,6 @@ Table documents {
 
 Table ai_requests {
   request_id bigint [pk, increment]
-
-  teacher_id bigint [not null]
 
   document_id bigint [not null]
 
@@ -281,11 +307,11 @@ Table ai_requests {
 
   error_message text
 
-  created_at datetime
-  updated_at datetime
+  created_at timestamp
+  updated_at timestamp
 
   indexes {
-    (teacher_id, created_at)
+    (document_id)
     (status, created_at)
   }
 }
@@ -299,10 +325,8 @@ Table questions {
 
   teacher_id bigint [not null]
 
-  subject_id bigint [not null]
-  topic_id bigint [not null]
+  document_topic_id bigint [not null]
 
-  document_id bigint
   ai_request_id bigint
 
   content text [not null]
@@ -315,14 +339,14 @@ Table questions {
 
   explanation text
 
-  approved_by bigint
-
-  created_at datetime
-  updated_at datetime
-  deleted_at datetime
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 
   indexes {
-    (subject_id, topic_id, difficulty, status)
+    (document_topic_id)
+    (document_topic_id, difficulty, status)
+    (status)
     (teacher_id, created_at)
   }
 }
@@ -360,16 +384,12 @@ Table question_history {
 
   changed_by bigint [not null]
 
-  old_data json
-  new_data json
+  old_data jsonb
+  new_data jsonb
 
   change_type varchar(100)
 
-  changed_at datetime
-
-  indexes {
-    (question_id, changed_at)
-  }
+  changed_at timestamp
 }
 
 /* =========================================================
@@ -382,7 +402,8 @@ Table practice_sets {
   student_id bigint [not null]
 
   subject_id bigint [not null]
-  topic_id bigint
+
+  document_topic_id bigint
 
   difficulty difficulty_level
 
@@ -394,10 +415,11 @@ Table practice_sets {
 
   prioritize_unanswered boolean [default: false]
 
-  created_at datetime
+  created_at timestamp
 
   indexes {
     (student_id, created_at)
+    (document_topic_id)
   }
 }
 
@@ -429,9 +451,9 @@ Table practice_attempts {
 
   practice_set_id bigint [not null]
 
-  started_at datetime
+  started_at timestamp
 
-  submitted_at datetime
+  submitted_at timestamp
 
   score decimal(5,2)
 
@@ -440,10 +462,6 @@ Table practice_attempts {
   total_wrong int [default: 0]
 
   status practice_attempt_status [default: 'in_progress']
-
-  indexes {
-    (practice_set_id)
-  }
 }
 
 /* =========================================================
@@ -461,7 +479,7 @@ Table student_answers {
 
   is_correct boolean
 
-  answered_at datetime
+  answered_at timestamp
 
   indexes {
     (attempt_id, question_id) [unique]
@@ -483,11 +501,7 @@ Table notifications {
 
   is_read boolean [default: false]
 
-  created_at datetime
-
-  indexes {
-    (user_id, is_read)
-  }
+  created_at timestamp
 }
 
 /* =========================================================
@@ -498,8 +512,6 @@ Ref: user_roles.user_id > users.user_id
 Ref: user_roles.role_id > roles.role_id
 
 Ref: classes.owner_id > users.user_id
-
-Ref: topics.subject_id > subjects.subject_id
 
 Ref: class_subjects.class_id > classes.class_id
 Ref: class_subjects.subject_id > subjects.subject_id
@@ -515,17 +527,15 @@ Ref: class_teachers.added_by > users.user_id
 
 Ref: documents.teacher_id > users.user_id
 Ref: documents.subject_id > subjects.subject_id
-Ref: documents.topic_id > topics.topic_id
 
-Ref: ai_requests.teacher_id > users.user_id
+Ref: document_topics.document_id > documents.document_id
+Ref: document_topics.topic_id > topics.topic_id
+
 Ref: ai_requests.document_id > documents.document_id
 
 Ref: questions.teacher_id > users.user_id
-Ref: questions.subject_id > subjects.subject_id
-Ref: questions.topic_id > topics.topic_id
-Ref: questions.document_id > documents.document_id
+Ref: questions.document_topic_id > document_topics.document_topic_id
 Ref: questions.ai_request_id > ai_requests.request_id
-Ref: questions.approved_by > users.user_id
 
 Ref: question_options.question_id > questions.question_id
 
@@ -534,7 +544,7 @@ Ref: question_history.changed_by > users.user_id
 
 Ref: practice_sets.student_id > users.user_id
 Ref: practice_sets.subject_id > subjects.subject_id
-Ref: practice_sets.topic_id > topics.topic_id
+Ref: practice_sets.document_topic_id > document_topics.document_topic_id
 
 Ref: practice_set_questions.practice_set_id > practice_sets.practice_set_id
 Ref: practice_set_questions.question_id > questions.question_id

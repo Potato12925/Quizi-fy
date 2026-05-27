@@ -13,7 +13,14 @@ from repositories.practice_set_question_repository import bulk_insert_practice_s
 
 
 async def create_practice_set(payload: PracticeSetCreateRequest) -> dict:
-    return await create_practice_set_record({ "student_id": payload.student_id, "subject_id": payload.subject_id, "num_questions_requested": payload.num_questions_requested, "prioritize_unanswered": payload.prioritize_unanswered })
+    return await create_practice_set_record({ 
+        "student_id": payload.student_id, 
+        "subject_id": payload.subject_id, 
+        "difficulty": payload.difficulty,
+        "time_limit_minutes": payload.time_limit_minutes,
+        "num_questions_requested": payload.num_questions_requested, 
+        "prioritize_unanswered": payload.prioritize_unanswered 
+    })
 
 
 async def get_practice_set_by_id(record_id: int) -> dict:
@@ -26,7 +33,7 @@ async def get_practice_set_by_id(record_id: int) -> dict:
 async def generate_practice_set(student_id: int, payload: PracticeSetGenerateRequest) -> dict:
     question_ids = await get_random_question_ids(
         subject_id=payload.subject_id,
-        topic_id=payload.topic_id,
+        document_topic_id=payload.document_topic_id,
         difficulty=payload.difficulty,
         limit=payload.num_questions
     )
@@ -36,8 +43,9 @@ async def generate_practice_set(student_id: int, payload: PracticeSetGenerateReq
     ps_payload = {
         "student_id": student_id,
         "subject_id": payload.subject_id,
-        "topic_id": payload.topic_id,
+        "document_topic_id": payload.document_topic_id,
         "difficulty": payload.difficulty if payload.difficulty != "mix" else None,
+        "time_limit_minutes": payload.time_limit_minutes,
         "num_questions_requested": payload.num_questions,
         "num_questions_actual": len(question_ids),
         "prioritize_unanswered": payload.prioritize_unanswered

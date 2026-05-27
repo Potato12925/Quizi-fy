@@ -368,7 +368,7 @@ export default function TeacherResourcesPage() {
                   ))}
                 </select>
 
-                <div className="w-full p-4 rounded-2xl bg-slate-50 min-h-28 disabled:opacity-60">
+                <div className="w-full p-4 rounded-2xl bg-slate-50 border border-slate-100 min-h-28">
                   {!formData.subjectId ? (
                     <p className="text-xs font-bold text-slate-400">Vui long chon mon hoc truoc</p>
                   ) : modalTopics.length === 0 ? (
@@ -378,23 +378,39 @@ export default function TeacherResourcesPage() {
                       {modalTopics.map((topic) => {
                         const checked = formData.topicIds.includes(topic.topic_id);
                         return (
-                          <label key={topic.topic_id} className="flex items-center gap-3 text-xs font-bold text-slate-700 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              disabled={!formData.subjectId || isModalTopicsLoading}
-                              checked={checked}
-                              onChange={(e) => {
-                                const isChecked = e.target.checked;
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  topicIds: isChecked
-                                    ? [...prev.topicIds, topic.topic_id]
-                                    : prev.topicIds.filter((id) => id !== topic.topic_id),
-                                }));
-                              }}
-                              className="w-4 h-4 accent-[#b20112]"
-                            />
-                            <span>{topic.topic_name}</span>
+                          <label
+                            key={topic.topic_id}
+                            className={`group flex items-center gap-3 text-xs font-bold rounded-xl px-3 py-2 border transition-all cursor-pointer ${
+                              checked
+                                ? 'border-[#b20112]/30 bg-red-50 text-[#7a0c11]'
+                                : 'border-slate-200 bg-white text-slate-700 hover:border-[#b20112]/30 hover:bg-red-50/40'
+                            }`}
+                          >
+                            <span
+                              className={`relative flex items-center justify-center w-5 h-5 rounded-md border-2 transition-all ${
+                                checked ? 'border-[#b20112] bg-[#b20112]' : 'border-slate-300 bg-white group-hover:border-[#b20112]/60'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                disabled={!formData.subjectId || isModalTopicsLoading}
+                                checked={checked}
+                                onChange={(e) => {
+                                  const isChecked = e.target.checked;
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    topicIds: isChecked
+                                      ? [...prev.topicIds, topic.topic_id]
+                                      : prev.topicIds.filter((id) => id !== topic.topic_id),
+                                  }));
+                                }}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              />
+                              <span className={`material-symbols-outlined text-[13px] text-white transition-opacity ${checked ? 'opacity-100' : 'opacity-0'}`}>
+                                check
+                              </span>
+                            </span>
+                            <span className="leading-relaxed">{topic.topic_name}</span>
                           </label>
                         );
                       })}

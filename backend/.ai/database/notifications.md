@@ -1,4 +1,4 @@
-# Table: `notifications`
+﻿# Table: `notifications`
 
 ## Purpose
 
@@ -13,7 +13,7 @@ Documentation for `notifications` table.
 | `title` | `varchar(255)` |
 | `content` | `text` |
 | `is_read` | `boolean [default: false]` |
-| `created_at` | `datetime` |
+| `created_at` | `timestamp` |
 
 ## Relationships
 
@@ -30,3 +30,4 @@ select * from notifications limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

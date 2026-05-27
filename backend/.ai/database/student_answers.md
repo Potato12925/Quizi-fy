@@ -1,4 +1,4 @@
-# Table: `student_answers`
+﻿# Table: `student_answers`
 
 ## Purpose
 
@@ -13,7 +13,11 @@ Documentation for `student_answers` table.
 | `question_id` | `bigint [not null]` |
 | `selected_option_id` | `bigint` |
 | `is_correct` | `boolean` |
-| `answered_at` | `datetime` |
+| `answered_at` | `timestamp` |
+
+## Indexes
+
+- `(attempt_id, question_id) [unique]`
 
 ## Relationships
 
@@ -32,3 +36,4 @@ select * from student_answers limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

@@ -1,18 +1,40 @@
 -- =========================================================
 -- BKP SYSTEM DATABASE
--- FULL RESET + RECREATE
--- PostgreSQL / Supabase
+-- SUPABASE READY VERSION
+-- UPDATED RELATIONSHIPS
 -- =========================================================
 
 -- =========================================================
--- RESET DATABASE
+-- DROP OLD TABLES
 -- =========================================================
 
-DROP SCHEMA IF EXISTS public CASCADE;
-CREATE SCHEMA public;
+DROP TABLE IF EXISTS student_answers CASCADE;
+DROP TABLE IF EXISTS practice_attempts CASCADE;
+DROP TABLE IF EXISTS practice_set_questions CASCADE;
+DROP TABLE IF EXISTS practice_sets CASCADE;
+DROP TABLE IF EXISTS question_options CASCADE;
+DROP TABLE IF EXISTS question_history CASCADE;
+DROP TABLE IF EXISTS questions CASCADE;
+DROP TABLE IF EXISTS ai_requests CASCADE;
+DROP TABLE IF EXISTS document_topics CASCADE;
+DROP TABLE IF EXISTS documents CASCADE;
+DROP TABLE IF EXISTS class_students CASCADE;
+DROP TABLE IF EXISTS class_teachers CASCADE;
+DROP TABLE IF EXISTS class_subjects CASCADE;
+DROP TABLE IF EXISTS topics CASCADE;
+DROP TABLE IF EXISTS subjects CASCADE;
+DROP TABLE IF EXISTS classes CASCADE;
+DROP TABLE IF EXISTS user_roles CASCADE;
+DROP TABLE IF EXISTS roles CASCADE;
+DROP TABLE IF EXISTS notifications CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 
-GRANT ALL ON SCHEMA public TO postgres;
-GRANT ALL ON SCHEMA public TO public;
+DROP TYPE IF EXISTS active_status CASCADE;
+DROP TYPE IF EXISTS difficulty_level CASCADE;
+DROP TYPE IF EXISTS ai_request_status CASCADE;
+DROP TYPE IF EXISTS question_source CASCADE;
+DROP TYPE IF EXISTS question_status CASCADE;
+DROP TYPE IF EXISTS practice_attempt_status CASCADE;
 
 -- =========================================================
 -- EXTENSIONS
@@ -88,39 +110,7 @@ ON users(username);
 
 CREATE INDEX idx_users_is_active
 ON users(is_active);
--- =========================================================
--- DEFAULT USERS
--- =========================================================
 
-INSERT INTO users (
-    username,
-    password_hash,
-    full_name,
-    is_active,
-    must_change_password
-)
-VALUES
-(
-    'admin',
-    '$2b$12$hRU1YPKZALIRE0F/LgchpeANk4d6z.HxwbxKsC1mV7aQ0WlPzpxRy',
-    'System Administrator',
-    TRUE,
-    FALSE
-),
-(
-    'teacher',
-    '$2b$12$hRU1YPKZALIRE0F/LgchpeANk4d6z.HxwbxKsC1mV7aQ0WlPzpxRy',
-    'Default Teacher',
-    TRUE,
-    FALSE
-),
-(
-    'student',
-    '$2b$12$hRU1YPKZALIRE0F/LgchpeANk4d6z.HxwbxKsC1mV7aQ0WlPzpxRy',
-    'Default Student',
-    TRUE,
-    FALSE
-);
 -- =========================================================
 -- ROLES
 -- =========================================================
@@ -161,21 +151,7 @@ CREATE TABLE user_roles (
     CONSTRAINT uq_user_role
         UNIQUE(user_id, role_id)
 );
--- =========================================================
--- DEFAULT USER ROLES
--- =========================================================
 
-INSERT INTO user_roles (user_id, role_id)
-SELECT u.user_id, r.role_id
-FROM users u
-JOIN roles r
-ON (
-    (u.username = 'admin' AND r.role_code = 'admin')
-    OR
-    (u.username = 'teacher' AND r.role_code = 'teacher')
-    OR
-    (u.username = 'student' AND r.role_code = 'student')
-);
 -- =========================================================
 -- CLASSES
 -- =========================================================
@@ -228,22 +204,12 @@ CREATE TABLE subjects (
 CREATE TABLE topics (
     topic_id BIGSERIAL PRIMARY KEY,
 
-    subject_id BIGINT NOT NULL,
-
-    topic_name VARCHAR(255) NOT NULL,
+    topic_name VARCHAR(255) NOT NULL UNIQUE,
 
     description TEXT,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT fk_topics_subject
-        FOREIGN KEY(subject_id)
-        REFERENCES subjects(subject_id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT uq_topic_subject
-        UNIQUE(subject_id, topic_name)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- =========================================================
@@ -359,7 +325,6 @@ CREATE TABLE documents (
 
     teacher_id BIGINT NOT NULL,
     subject_id BIGINT NOT NULL,
-    topic_id BIGINT,
 
     title VARCHAR(500) NOT NULL,
 
@@ -384,18 +349,47 @@ CREATE TABLE documents (
 
     CONSTRAINT fk_documents_subject
         FOREIGN KEY(subject_id)
-        REFERENCES subjects(subject_id),
-
-    CONSTRAINT fk_documents_topic
-        FOREIGN KEY(topic_id)
-        REFERENCES topics(topic_id)
+        REFERENCES subjects(subject_id)
 );
-
-CREATE INDEX idx_documents_subject_topic_status
-ON documents(subject_id, topic_id, status);
 
 CREATE INDEX idx_documents_teacher_created
 ON documents(teacher_id, created_at);
+
+CREATE INDEX idx_documents_subject_status
+ON documents(subject_id, status);
+
+-- =========================================================
+-- DOCUMENT TOPICS
+-- MANY TO MANY
+-- =========================================================
+
+CREATE TABLE document_topics (
+    document_topic_id BIGSERIAL PRIMARY KEY,
+
+    document_id BIGINT NOT NULL,
+    topic_id BIGINT NOT NULL,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_document_topics_document
+        FOREIGN KEY(document_id)
+        REFERENCES documents(document_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_document_topics_topic
+        FOREIGN KEY(topic_id)
+        REFERENCES topics(topic_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_document_topic
+        UNIQUE(document_id, topic_id)
+);
+
+CREATE INDEX idx_document_topics_document
+ON document_topics(document_id);
+
+CREATE INDEX idx_document_topics_topic
+ON document_topics(topic_id);
 
 -- =========================================================
 -- AI REQUESTS
@@ -403,8 +397,6 @@ ON documents(teacher_id, created_at);
 
 CREATE TABLE ai_requests (
     request_id BIGSERIAL PRIMARY KEY,
-
-    teacher_id BIGINT NOT NULL,
 
     document_id BIGINT NOT NULL,
 
@@ -425,17 +417,13 @@ CREATE TABLE ai_requests (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT fk_ai_requests_teacher
-        FOREIGN KEY(teacher_id)
-        REFERENCES users(user_id),
-
     CONSTRAINT fk_ai_requests_document
         FOREIGN KEY(document_id)
         REFERENCES documents(document_id)
 );
 
-CREATE INDEX idx_ai_requests_teacher_created
-ON ai_requests(teacher_id, created_at);
+CREATE INDEX idx_ai_requests_document
+ON ai_requests(document_id);
 
 CREATE INDEX idx_ai_requests_status_created
 ON ai_requests(status, created_at);
@@ -449,10 +437,8 @@ CREATE TABLE questions (
 
     teacher_id BIGINT NOT NULL,
 
-    subject_id BIGINT NOT NULL,
-    topic_id BIGINT NOT NULL,
+    document_topic_id BIGINT NOT NULL,
 
-    document_id BIGINT,
     ai_request_id BIGINT,
 
     content TEXT NOT NULL,
@@ -465,9 +451,6 @@ CREATE TABLE questions (
 
     explanation TEXT,
 
-    approved_by BIGINT,
-    approved_at TIMESTAMP,
-
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP,
@@ -476,29 +459,23 @@ CREATE TABLE questions (
         FOREIGN KEY(teacher_id)
         REFERENCES users(user_id),
 
-    CONSTRAINT fk_questions_subject
-        FOREIGN KEY(subject_id)
-        REFERENCES subjects(subject_id),
-
-    CONSTRAINT fk_questions_topic
-        FOREIGN KEY(topic_id)
-        REFERENCES topics(topic_id),
-
-    CONSTRAINT fk_questions_document
-        FOREIGN KEY(document_id)
-        REFERENCES documents(document_id),
+    CONSTRAINT fk_questions_document_topic_id
+        FOREIGN KEY(document_topic_id)
+        REFERENCES document_topics(document_topic_id),
 
     CONSTRAINT fk_questions_ai_request
         FOREIGN KEY(ai_request_id)
-        REFERENCES ai_requests(request_id),
-
-    CONSTRAINT fk_questions_approved_by
-        FOREIGN KEY(approved_by)
-        REFERENCES users(user_id)
+        REFERENCES ai_requests(request_id)
 );
 
-CREATE INDEX idx_questions_subject_topic
-ON questions(subject_id, topic_id, difficulty, status);
+CREATE INDEX idx_questions_topic
+ON questions(document_topic_id);
+
+CREATE INDEX idx_questions_topic_difficulty_status
+ON questions(document_topic_id, difficulty, status);
+
+CREATE INDEX idx_questions_status
+ON questions(status);
 
 CREATE INDEX idx_questions_teacher_created
 ON questions(teacher_id, created_at);
@@ -557,9 +534,6 @@ CREATE TABLE question_history (
         REFERENCES users(user_id)
 );
 
-CREATE INDEX idx_question_history_question_changed
-ON question_history(question_id, changed_at);
-
 -- =========================================================
 -- PRACTICE SETS
 -- =========================================================
@@ -570,7 +544,8 @@ CREATE TABLE practice_sets (
     student_id BIGINT NOT NULL,
 
     subject_id BIGINT NOT NULL,
-    topic_id BIGINT,
+
+    document_topic_id BIGINT,
 
     difficulty difficulty_level,
 
@@ -592,13 +567,16 @@ CREATE TABLE practice_sets (
         FOREIGN KEY(subject_id)
         REFERENCES subjects(subject_id),
 
-    CONSTRAINT fk_practice_sets_topic
-        FOREIGN KEY(topic_id)
-        REFERENCES topics(topic_id)
+    CONSTRAINT fk_practice_sets_document_topic
+        FOREIGN KEY(document_topic_id)
+        REFERENCES document_topics(document_topic_id)
 );
 
 CREATE INDEX idx_practice_sets_student_created
 ON practice_sets(student_id, created_at);
+
+CREATE INDEX idx_practice_sets_document_topic
+ON practice_sets(document_topic_id);
 
 -- =========================================================
 -- PRACTICE SET QUESTIONS
@@ -655,9 +633,6 @@ CREATE TABLE practice_attempts (
         REFERENCES practice_sets(practice_set_id)
         ON DELETE CASCADE
 );
-
-CREATE INDEX idx_practice_attempts_set
-ON practice_attempts(practice_set_id);
 
 -- =========================================================
 -- STUDENT ANSWERS
@@ -716,11 +691,68 @@ CREATE TABLE notifications (
         ON DELETE CASCADE
 );
 
-CREATE INDEX idx_notifications_user_read
-ON notifications(user_id, is_read);
+-- =========================================================
+-- DEFAULT USERS
+-- =========================================================
+
+INSERT INTO users (
+    username,
+    password_hash,
+    full_name,
+    is_active,
+    must_change_password
+)
+VALUES
+(
+    'admin',
+    '$2b$12$7qJ0JwYQ7X7Y3WzQXQ6lE.P8T5NQwM7rjQ5y7h1v6mD1XJ5V1Yw5K',
+    'System Administrator',
+    TRUE,
+    FALSE
+),
+(
+    'teacher',
+    '$2b$12$7qJ0JwYQ7X7Y3WzQXQ6lE.P8T5NQwM7rjQ5y7h1v6mD1XJ5V1Yw5K',
+    'Default Teacher',
+    TRUE,
+    FALSE
+),
+(
+    'student',
+    '$2b$12$7qJ0JwYQ7X7Y3WzQXQ6lE.P8T5NQwM7rjQ5y7h1v6mD1XJ5V1Yw5K',
+    'Default Student',
+    TRUE,
+    FALSE
+);
 
 -- =========================================================
--- AUTO UPDATE FUNCTION
+-- DEFAULT ROLES
+-- =========================================================
+
+INSERT INTO roles(role_code, role_name, description)
+VALUES
+('admin', 'Administrator', 'System administrator'),
+('teacher', 'Teacher', 'Teacher role'),
+('student', 'Student', 'Student role');
+
+-- =========================================================
+-- DEFAULT USER ROLES
+-- =========================================================
+
+INSERT INTO user_roles (user_id, role_id)
+SELECT u.user_id, r.role_id
+FROM users u
+JOIN roles r
+ON (
+    (u.username = 'admin' AND r.role_code = 'admin')
+    OR
+    (u.username = 'teacher' AND r.role_code = 'teacher')
+    OR
+    (u.username = 'student' AND r.role_code = 'student')
+);
+
+-- =========================================================
+-- UPDATE UPDATED_AT FUNCTION
 -- =========================================================
 
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -774,16 +806,6 @@ CREATE TRIGGER trg_class_subjects_updated_at
 BEFORE UPDATE ON class_subjects
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
-
--- =========================================================
--- DEFAULT ROLES
--- =========================================================
-
-INSERT INTO roles(role_code, role_name, description)
-VALUES
-('admin', 'Administrator', 'System administrator'),
-('teacher', 'Teacher', 'Teacher role'),
-('student', 'Student', 'Student role');
 
 -- =========================================================
 -- END

@@ -1,4 +1,4 @@
-# Table: `practice_set_questions`
+﻿# Table: `practice_set_questions`
 
 ## Purpose
 
@@ -12,6 +12,11 @@ Documentation for `practice_set_questions` table.
 | `practice_set_id` | `bigint [not null]` |
 | `question_id` | `bigint [not null]` |
 | `order_num` | `int [not null]` |
+
+## Indexes
+
+- `(practice_set_id, question_id) [unique]`
+- `(practice_set_id, order_num) [unique]`
 
 ## Relationships
 
@@ -29,3 +34,4 @@ select * from practice_set_questions limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

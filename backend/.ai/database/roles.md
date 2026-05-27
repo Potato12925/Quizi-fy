@@ -1,4 +1,4 @@
-# Table: `roles`
+﻿# Table: `roles`
 
 ## Purpose
 
@@ -12,11 +12,11 @@ Documentation for `roles` table.
 | `role_code` | `varchar(50) [unique, not null]` |
 | `role_name` | `varchar(100) [not null]` |
 | `description` | `text` |
-| `created_at` | `datetime` |
+| `created_at` | `timestamp` |
 
 ## Relationships
 
-- No direct relationship found
+- user_roles.role_id -> roles.role_id
 
 ## Recommended Supabase Queries
 
@@ -29,3 +29,4 @@ select * from roles limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

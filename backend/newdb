@@ -1,0 +1,558 @@
+Project BKP_SYSTEM {
+  database_type: "PostgreSQL"
+}
+
+/* =========================================================
+   ENUMS
+========================================================= */
+
+Enum active_status {
+  active
+  inactive
+}
+
+Enum difficulty_level {
+  easy
+  medium
+  hard
+}
+
+Enum ai_request_status {
+  pending
+  processing
+  completed
+  failed
+  cancelled
+}
+
+Enum question_source {
+  ai
+  manual
+}
+
+Enum question_status {
+  draft
+  approved
+  inactive
+  rejected
+}
+
+Enum practice_attempt_status {
+  in_progress
+  submitted
+  timeout
+}
+
+/* =========================================================
+   USERS
+========================================================= */
+
+Table users {
+  user_id bigint [pk, increment]
+
+  username varchar(100) [unique, not null]
+
+  password_hash varchar(255) [not null]
+
+  full_name varchar(255) [not null]
+
+  is_active boolean [default: true]
+
+  must_change_password boolean [default: true]
+
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
+
+  indexes {
+    (username)
+    (is_active)
+  }
+}
+
+/* =========================================================
+   ROLES
+========================================================= */
+
+Table roles {
+  role_id bigint [pk, increment]
+
+  role_code varchar(50) [unique, not null]
+
+  role_name varchar(100) [not null]
+
+  description text
+
+  created_at timestamp
+}
+
+/* =========================================================
+   USER ROLES
+========================================================= */
+
+Table user_roles {
+  user_role_id bigint [pk, increment]
+
+  user_id bigint [not null]
+
+  role_id bigint [not null]
+
+  assigned_at timestamp
+
+  indexes {
+    (user_id, role_id) [unique]
+  }
+}
+
+/* =========================================================
+   CLASSES
+========================================================= */
+
+Table classes {
+  class_id bigint [pk, increment]
+
+  class_code varchar(50) [unique, not null]
+
+  class_name varchar(255) [not null]
+
+  description text
+
+  owner_id bigint [not null]
+
+  status active_status [default: 'active']
+
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
+}
+
+/* =========================================================
+   SUBJECTS
+========================================================= */
+
+Table subjects {
+  subject_id bigint [pk, increment]
+
+  subject_code varchar(50) [unique, not null]
+
+  subject_name varchar(255) [not null]
+
+  description text
+
+  status active_status [default: 'active']
+
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
+}
+
+/* =========================================================
+   TOPICS
+========================================================= */
+
+Table topics {
+  topic_id bigint [pk, increment]
+
+  topic_name varchar(255) [unique, not null]
+
+  description text
+
+  created_at timestamp
+  updated_at timestamp
+}
+
+/* =========================================================
+   CLASS SUBJECTS
+========================================================= */
+
+Table class_subjects {
+  class_subject_id bigint [pk, increment]
+
+  class_id bigint [not null]
+
+  subject_id bigint [not null]
+
+  assigned_teacher_id bigint
+
+  status active_status [default: 'active']
+
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
+
+  indexes {
+    (class_id, subject_id) [unique]
+  }
+}
+
+/* =========================================================
+   CLASS STUDENTS
+========================================================= */
+
+Table class_students {
+  class_student_id bigint [pk, increment]
+
+  class_id bigint [not null]
+
+  student_id bigint [not null]
+
+  invited_by bigint [not null]
+
+  joined_at timestamp
+
+  deleted_at timestamp
+
+  indexes {
+    (class_id, student_id) [unique]
+  }
+}
+
+/* =========================================================
+   CLASS TEACHERS
+========================================================= */
+
+Table class_teachers {
+  class_teacher_id bigint [pk, increment]
+
+  class_id bigint [not null]
+
+  teacher_id bigint [not null]
+
+  added_by bigint [not null]
+
+  joined_at timestamp
+
+  deleted_at timestamp
+
+  indexes {
+    (class_id, teacher_id) [unique]
+  }
+}
+
+/* =========================================================
+   DOCUMENTS
+========================================================= */
+
+Table documents {
+  document_id bigint [pk, increment]
+
+  teacher_id bigint [not null]
+
+  subject_id bigint [not null]
+
+  title varchar(500) [not null]
+
+  description text
+
+  file_url text [not null]
+
+  file_hash varchar(255)
+
+  file_type varchar(20) [not null]
+
+  file_size bigint [not null]
+
+  status active_status [default: 'active']
+
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
+
+  indexes {
+    (teacher_id, created_at)
+    (subject_id, status)
+  }
+}
+
+/* =========================================================
+   DOCUMENT TOPICS
+========================================================= */
+
+Table document_topics {
+  document_topic_id bigint [pk, increment]
+
+  document_id bigint [not null]
+
+  topic_id bigint [not null]
+
+  created_at timestamp
+
+  indexes {
+    (document_id, topic_id) [unique]
+    (document_id)
+    (topic_id)
+  }
+}
+
+/* =========================================================
+   AI REQUESTS
+========================================================= */
+
+Table ai_requests {
+  request_id bigint [pk, increment]
+
+  document_id bigint [not null]
+
+  num_questions int [not null]
+
+  difficulty difficulty_level [not null]
+
+  content_scope text
+
+  status ai_request_status [default: 'pending']
+
+  generated_question_count int [default: 0]
+
+  retry_count int [default: 0]
+
+  error_message text
+
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (document_id)
+    (status, created_at)
+  }
+}
+
+/* =========================================================
+   QUESTIONS
+========================================================= */
+
+Table questions {
+  question_id bigint [pk, increment]
+
+  teacher_id bigint [not null]
+
+  document_topic_id bigint [not null]
+
+  ai_request_id bigint
+
+  content text [not null]
+
+  difficulty difficulty_level [not null]
+
+  source question_source [not null]
+
+  status question_status [default: 'draft']
+
+  explanation text
+
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
+
+  indexes {
+    (document_topic_id)
+    (document_topic_id, difficulty, status)
+    (status)
+    (teacher_id, created_at)
+  }
+}
+
+/* =========================================================
+   QUESTION OPTIONS
+========================================================= */
+
+Table question_options {
+  option_id bigint [pk, increment]
+
+  question_id bigint [not null]
+
+  option_label varchar(5) [not null]
+
+  option_text text [not null]
+
+  is_correct boolean [default: false]
+
+  order_num int [not null]
+
+  indexes {
+    (question_id, order_num) [unique]
+  }
+}
+
+/* =========================================================
+   QUESTION HISTORY
+========================================================= */
+
+Table question_history {
+  history_id bigint [pk, increment]
+
+  question_id bigint [not null]
+
+  changed_by bigint [not null]
+
+  old_data jsonb
+  new_data jsonb
+
+  change_type varchar(100)
+
+  changed_at timestamp
+}
+
+/* =========================================================
+   PRACTICE SETS
+========================================================= */
+
+Table practice_sets {
+  practice_set_id bigint [pk, increment]
+
+  student_id bigint [not null]
+
+  subject_id bigint [not null]
+
+  document_topic_id bigint
+
+  difficulty difficulty_level
+
+  num_questions_requested int [not null]
+
+  num_questions_actual int
+
+  time_limit_minutes int
+
+  prioritize_unanswered boolean [default: false]
+
+  created_at timestamp
+
+  indexes {
+    (student_id, created_at)
+    (document_topic_id)
+  }
+}
+
+/* =========================================================
+   PRACTICE SET QUESTIONS
+========================================================= */
+
+Table practice_set_questions {
+  practice_set_question_id bigint [pk, increment]
+
+  practice_set_id bigint [not null]
+
+  question_id bigint [not null]
+
+  order_num int [not null]
+
+  indexes {
+    (practice_set_id, question_id) [unique]
+    (practice_set_id, order_num) [unique]
+  }
+}
+
+/* =========================================================
+   PRACTICE ATTEMPTS
+========================================================= */
+
+Table practice_attempts {
+  attempt_id bigint [pk, increment]
+
+  practice_set_id bigint [not null]
+
+  started_at timestamp
+
+  submitted_at timestamp
+
+  score decimal(5,2)
+
+  total_correct int [default: 0]
+
+  total_wrong int [default: 0]
+
+  status practice_attempt_status [default: 'in_progress']
+}
+
+/* =========================================================
+   STUDENT ANSWERS
+========================================================= */
+
+Table student_answers {
+  answer_id bigint [pk, increment]
+
+  attempt_id bigint [not null]
+
+  question_id bigint [not null]
+
+  selected_option_id bigint
+
+  is_correct boolean
+
+  answered_at timestamp
+
+  indexes {
+    (attempt_id, question_id) [unique]
+  }
+}
+
+/* =========================================================
+   NOTIFICATIONS
+========================================================= */
+
+Table notifications {
+  notification_id bigint [pk, increment]
+
+  user_id bigint [not null]
+
+  title varchar(255)
+
+  content text
+
+  is_read boolean [default: false]
+
+  created_at timestamp
+}
+
+/* =========================================================
+   RELATIONSHIPS
+========================================================= */
+
+Ref: user_roles.user_id > users.user_id
+Ref: user_roles.role_id > roles.role_id
+
+Ref: classes.owner_id > users.user_id
+
+Ref: class_subjects.class_id > classes.class_id
+Ref: class_subjects.subject_id > subjects.subject_id
+Ref: class_subjects.assigned_teacher_id > users.user_id
+
+Ref: class_students.class_id > classes.class_id
+Ref: class_students.student_id > users.user_id
+Ref: class_students.invited_by > users.user_id
+
+Ref: class_teachers.class_id > classes.class_id
+Ref: class_teachers.teacher_id > users.user_id
+Ref: class_teachers.added_by > users.user_id
+
+Ref: documents.teacher_id > users.user_id
+Ref: documents.subject_id > subjects.subject_id
+
+Ref: document_topics.document_id > documents.document_id
+Ref: document_topics.topic_id > topics.topic_id
+
+Ref: ai_requests.document_id > documents.document_id
+
+Ref: questions.teacher_id > users.user_id
+Ref: questions.document_topic_id > document_topics.document_topic_id
+Ref: questions.ai_request_id > ai_requests.request_id
+
+Ref: question_options.question_id > questions.question_id
+
+Ref: question_history.question_id > questions.question_id
+Ref: question_history.changed_by > users.user_id
+
+Ref: practice_sets.student_id > users.user_id
+Ref: practice_sets.subject_id > subjects.subject_id
+Ref: practice_sets.document_topic_id > document_topics.document_topic_id
+
+Ref: practice_set_questions.practice_set_id > practice_sets.practice_set_id
+Ref: practice_set_questions.question_id > questions.question_id
+
+Ref: practice_attempts.practice_set_id > practice_sets.practice_set_id
+
+Ref: student_answers.attempt_id > practice_attempts.attempt_id
+Ref: student_answers.question_id > questions.question_id
+Ref: student_answers.selected_option_id > question_options.option_id
+
+Ref: notifications.user_id > users.user_id

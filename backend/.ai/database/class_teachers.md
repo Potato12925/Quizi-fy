@@ -1,4 +1,4 @@
-# Table: `class_teachers`
+﻿# Table: `class_teachers`
 
 ## Purpose
 
@@ -12,8 +12,12 @@ Documentation for `class_teachers` table.
 | `class_id` | `bigint [not null]` |
 | `teacher_id` | `bigint [not null]` |
 | `added_by` | `bigint [not null]` |
-| `joined_at` | `datetime` |
-| `deleted_at` | `datetime` |
+| `joined_at` | `timestamp` |
+| `deleted_at` | `timestamp` |
+
+## Indexes
+
+- `(class_id, teacher_id) [unique]`
 
 ## Relationships
 
@@ -32,3 +36,4 @@ select * from class_teachers limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

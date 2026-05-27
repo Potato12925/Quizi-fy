@@ -1,4 +1,4 @@
-# Table: `practice_attempts`
+﻿# Table: `practice_attempts`
 
 ## Purpose
 
@@ -10,8 +10,8 @@ Documentation for `practice_attempts` table.
 |---|---|
 | `attempt_id` | `bigint [pk, increment]` |
 | `practice_set_id` | `bigint [not null]` |
-| `started_at` | `datetime` |
-| `submitted_at` | `datetime` |
+| `started_at` | `timestamp` |
+| `submitted_at` | `timestamp` |
 | `score` | `decimal(5,2)` |
 | `total_correct` | `int [default: 0]` |
 | `total_wrong` | `int [default: 0]` |
@@ -20,6 +20,7 @@ Documentation for `practice_attempts` table.
 ## Relationships
 
 - practice_attempts.practice_set_id -> practice_sets.practice_set_id
+- student_answers.attempt_id -> practice_attempts.attempt_id
 
 ## Recommended Supabase Queries
 
@@ -32,3 +33,4 @@ select * from practice_attempts limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

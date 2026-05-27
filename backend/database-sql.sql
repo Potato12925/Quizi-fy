@@ -705,21 +705,21 @@ INSERT INTO users (
 VALUES
 (
     'admin',
-    '$2b$12$7qJ0JwYQ7X7Y3WzQXQ6lE.P8T5NQwM7rjQ5y7h1v6mD1XJ5V1Yw5K',
+    '$2b$12$2PG4GGwGcNh8u2fjrdTVKe41hbycEVsuCsviJxCQrC15zaDuanWLO',
     'System Administrator',
     TRUE,
     FALSE
 ),
 (
     'teacher',
-    '$2b$12$7qJ0JwYQ7X7Y3WzQXQ6lE.P8T5NQwM7rjQ5y7h1v6mD1XJ5V1Yw5K',
+    '$2b$12$2PG4GGwGcNh8u2fjrdTVKe41hbycEVsuCsviJxCQrC15zaDuanWLO',
     'Default Teacher',
     TRUE,
     FALSE
 ),
 (
     'student',
-    '$2b$12$7qJ0JwYQ7X7Y3WzQXQ6lE.P8T5NQwM7rjQ5y7h1v6mD1XJ5V1Yw5K',
+    '$2b$12$2PG4GGwGcNh8u2fjrdTVKe41hbycEVsuCsviJxCQrC15zaDuanWLO',
     'Default Student',
     TRUE,
     FALSE

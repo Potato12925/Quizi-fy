@@ -1,4 +1,4 @@
-# Table: `user_roles`
+﻿# Table: `user_roles`
 
 ## Purpose
 
@@ -11,7 +11,11 @@ Documentation for `user_roles` table.
 | `user_role_id` | `bigint [pk, increment]` |
 | `user_id` | `bigint [not null]` |
 | `role_id` | `bigint [not null]` |
-| `assigned_at` | `datetime` |
+| `assigned_at` | `timestamp` |
+
+## Indexes
+
+- `(user_id, role_id) [unique]`
 
 ## Relationships
 
@@ -29,3 +33,4 @@ select * from user_roles limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

@@ -1,4 +1,4 @@
-# Table: `question_history`
+﻿# Table: `question_history`
 
 ## Purpose
 
@@ -11,10 +11,10 @@ Documentation for `question_history` table.
 | `history_id` | `bigint [pk, increment]` |
 | `question_id` | `bigint [not null]` |
 | `changed_by` | `bigint [not null]` |
-| `old_data` | `json` |
-| `new_data` | `json` |
+| `old_data` | `jsonb` |
+| `new_data` | `jsonb` |
 | `change_type` | `varchar(100)` |
-| `changed_at` | `datetime` |
+| `changed_at` | `timestamp` |
 
 ## Relationships
 
@@ -32,3 +32,4 @@ select * from question_history limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

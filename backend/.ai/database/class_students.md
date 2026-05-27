@@ -1,4 +1,4 @@
-# Table: `class_students`
+﻿# Table: `class_students`
 
 ## Purpose
 
@@ -12,8 +12,12 @@ Documentation for `class_students` table.
 | `class_id` | `bigint [not null]` |
 | `student_id` | `bigint [not null]` |
 | `invited_by` | `bigint [not null]` |
-| `joined_at` | `datetime` |
-| `deleted_at` | `datetime` |
+| `joined_at` | `timestamp` |
+| `deleted_at` | `timestamp` |
+
+## Indexes
+
+- `(class_id, student_id) [unique]`
 
 ## Relationships
 
@@ -32,3 +36,4 @@ select * from class_students limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

@@ -1,4 +1,4 @@
-# Table: `class_subjects`
+﻿# Table: `class_subjects`
 
 ## Purpose
 
@@ -13,9 +13,13 @@ Documentation for `class_subjects` table.
 | `subject_id` | `bigint [not null]` |
 | `assigned_teacher_id` | `bigint` |
 | `status` | `active_status [default: 'active']` |
-| `created_at` | `datetime` |
-| `updated_at` | `datetime` |
-| `deleted_at` | `datetime` |
+| `created_at` | `timestamp` |
+| `updated_at` | `timestamp` |
+| `deleted_at` | `timestamp` |
+
+## Indexes
+
+- `(class_id, subject_id) [unique]`
 
 ## Relationships
 
@@ -34,3 +38,4 @@ select * from class_subjects limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

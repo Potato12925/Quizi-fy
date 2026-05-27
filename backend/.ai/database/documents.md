@@ -1,4 +1,4 @@
-# Table: `documents`
+﻿# Table: `documents`
 
 ## Purpose
 
@@ -11,7 +11,6 @@ Documentation for `documents` table.
 | `document_id` | `bigint [pk, increment]` |
 | `teacher_id` | `bigint [not null]` |
 | `subject_id` | `bigint [not null]` |
-| `topic_id` | `bigint` |
 | `title` | `varchar(500) [not null]` |
 | `description` | `text` |
 | `file_url` | `text [not null]` |
@@ -19,15 +18,21 @@ Documentation for `documents` table.
 | `file_type` | `varchar(20) [not null]` |
 | `file_size` | `bigint [not null]` |
 | `status` | `active_status [default: 'active']` |
-| `created_at` | `datetime` |
-| `updated_at` | `datetime` |
-| `deleted_at` | `datetime` |
+| `created_at` | `timestamp` |
+| `updated_at` | `timestamp` |
+| `deleted_at` | `timestamp` |
+
+## Indexes
+
+- `(teacher_id, created_at)`
+- `(subject_id, status)`
 
 ## Relationships
 
 - documents.teacher_id -> users.user_id
 - documents.subject_id -> subjects.subject_id
-- documents.topic_id -> topics.topic_id
+- document_topics.document_id -> documents.document_id
+- ai_requests.document_id -> documents.document_id
 
 ## Recommended Supabase Queries
 
@@ -40,3 +45,4 @@ select * from documents limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

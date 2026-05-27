@@ -8,6 +8,7 @@ from controllers.class_subject_controller import router as class_subject_router
 from controllers.class_teacher_controller import router as class_teacher_router
 from controllers.database_controller import router as database_router
 from controllers.document_controller import router as document_router
+from controllers.document_topic_controller import router as document_topic_router
 from controllers.health_controller import router as health_router
 from controllers.notification_controller import router as notification_router
 from controllers.practice_attempt_controller import router as practice_attempt_router
@@ -74,6 +75,11 @@ def register_routes(app: FastAPI) -> None:
 
     app.include_router(
         document_router,
+        prefix="/api/v1",
+    )
+
+    app.include_router(
+        document_topic_router,
         prefix="/api/v1",
     )
 

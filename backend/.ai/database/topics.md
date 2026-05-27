@@ -1,4 +1,4 @@
-# Table: `topics`
+﻿# Table: `topics`
 
 ## Purpose
 
@@ -9,15 +9,14 @@ Documentation for `topics` table.
 | Column | Definition |
 |---|---|
 | `topic_id` | `bigint [pk, increment]` |
-| `subject_id` | `bigint [not null]` |
-| `topic_name` | `varchar(255) [not null]` |
+| `topic_name` | `varchar(255) [unique, not null]` |
 | `description` | `text` |
-| `created_at` | `datetime` |
-| `updated_at` | `datetime` |
+| `created_at` | `timestamp` |
+| `updated_at` | `timestamp` |
 
 ## Relationships
 
-- topics.subject_id -> subjects.subject_id
+- document_topics.topic_id -> topics.topic_id
 
 ## Recommended Supabase Queries
 
@@ -30,3 +29,4 @@ select * from topics limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

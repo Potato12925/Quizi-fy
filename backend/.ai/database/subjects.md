@@ -1,4 +1,4 @@
-# Table: `subjects`
+﻿# Table: `subjects`
 
 ## Purpose
 
@@ -13,13 +13,15 @@ Documentation for `subjects` table.
 | `subject_name` | `varchar(255) [not null]` |
 | `description` | `text` |
 | `status` | `active_status [default: 'active']` |
-| `created_at` | `datetime` |
-| `updated_at` | `datetime` |
-| `deleted_at` | `datetime` |
+| `created_at` | `timestamp` |
+| `updated_at` | `timestamp` |
+| `deleted_at` | `timestamp` |
 
 ## Relationships
 
-- No direct relationship found
+- class_subjects.subject_id -> subjects.subject_id
+- documents.subject_id -> subjects.subject_id
+- practice_sets.subject_id -> subjects.subject_id
 
 ## Recommended Supabase Queries
 
@@ -32,3 +34,4 @@ select * from subjects limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

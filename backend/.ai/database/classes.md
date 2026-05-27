@@ -1,4 +1,4 @@
-# Table: `classes`
+﻿# Table: `classes`
 
 ## Purpose
 
@@ -14,13 +14,16 @@ Documentation for `classes` table.
 | `description` | `text` |
 | `owner_id` | `bigint [not null]` |
 | `status` | `active_status [default: 'active']` |
-| `created_at` | `datetime` |
-| `updated_at` | `datetime` |
-| `deleted_at` | `datetime` |
+| `created_at` | `timestamp` |
+| `updated_at` | `timestamp` |
+| `deleted_at` | `timestamp` |
 
 ## Relationships
 
 - classes.owner_id -> users.user_id
+- class_subjects.class_id -> classes.class_id
+- class_students.class_id -> classes.class_id
+- class_teachers.class_id -> classes.class_id
 
 ## Recommended Supabase Queries
 
@@ -33,3 +36,4 @@ select * from classes limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
+

@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, Query
 
 from core.responses import error_response, success_response
 from middlewares.auth_middleware import CurrentUser, require_roles
-from schemas.user_schema import UserCreateRequest, UserUpdateRequest
+from schemas.user_schema import UserCreateRequest, UserStatusUpdateRequest, UserUpdateRequest
 from services.user_service import (
     create_user,
     delete_user,
     get_user_by_id,
     get_users,
+    update_user_status,
     update_user,
 )
 
@@ -17,10 +18,10 @@ router = APIRouter(prefix="/user", tags=["User"])
 @router.post("", summary="Create teacher or student user")
 async def post_user(
     payload: UserCreateRequest,
-    _: CurrentUser = Depends(require_roles("admin")),
+    current_user: CurrentUser = Depends(require_roles("admin")),
 ):
     try:
-        result = await create_user(payload)
+        result = await create_user(payload, current_user)
         return success_response(
             data=result,
             message="User created successfully",
@@ -50,11 +51,21 @@ async def post_user(
 async def get_user_list(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
-    role_code: str | None = Query(default=None),
+    role_code: str = Query(default="all"),
+    status: str = Query(default="all"),
+    search: str | None = Query(default=None),
+    include_deleted: bool = Query(default=False),
     _: CurrentUser = Depends(require_roles("admin")),
 ):
     try:
-        result = await get_users(page=page, limit=limit, role_code=role_code)
+        result = await get_users(
+            page=page,
+            limit=limit,
+            role_code=role_code,
+            status=status,
+            search=search,
+            include_deleted=include_deleted,
+        )
         return success_response(
             data=result["items"],
             meta=result["pagination"],
@@ -126,6 +137,34 @@ async def put_user(
             message="Unable to update user",
             status_code=500,
             error_code="USER_UPDATE_FAILED",
+        )
+
+
+@router.patch("/{user_id}/status", summary="Update user active status")
+async def patch_user_status(
+    user_id: int,
+    payload: UserStatusUpdateRequest,
+    _: CurrentUser = Depends(require_roles("admin")),
+):
+    try:
+        result = await update_user_status(user_id=user_id, is_active=payload.is_active)
+        return success_response(
+            data=result,
+            message="User status updated successfully",
+            status_code=200,
+        )
+    except ValueError as exc:
+        status_code = 404 if str(exc) == "User not found" else 400
+        return error_response(
+            message=str(exc),
+            status_code=status_code,
+            error_code="USER_STATUS_UPDATE_INVALID",
+        )
+    except Exception:
+        return error_response(
+            message="Unable to update user status",
+            status_code=500,
+            error_code="USER_STATUS_UPDATE_FAILED",
         )
 
 

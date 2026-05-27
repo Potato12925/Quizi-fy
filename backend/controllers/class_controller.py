@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+import traceback
 
 from core.responses import error_response, success_response
 from middlewares.auth_middleware import CurrentUser, require_roles
@@ -48,19 +49,22 @@ async def get_class_list(
 ):
     try:
         result = await get_classes(page=page, limit=limit)
+
         return success_response(
             data=result["items"],
             meta=result["pagination"],
             message="Classes loaded successfully",
             status_code=200,
         )
-    except Exception:
+
+    except Exception as exc:
+        traceback.print_exc()  # in full stack trace ra terminal
+
         return error_response(
-            message="Unable to load classes",
+            message=f"Unable to load classes: {str(exc)}",
             status_code=500,
             error_code="CLASS_LIST_FAILED",
         )
-
 
 @router.get("/{class_id}", summary="Get class detail")
 async def get_class_detail(

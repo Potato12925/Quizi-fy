@@ -118,7 +118,7 @@ Table classes {
 
   description text
 
-  owner_id bigint [not null]
+  teacher_id bigint [not null]
 
   status active_status [default: 'active']
 
@@ -521,7 +521,7 @@ Table notifications {
 Ref: user_roles.user_id > users.user_id
 Ref: user_roles.role_id > roles.role_id
 
-Ref: classes.owner_id > users.user_id
+Ref: classes.teacher_id > users.user_id
 
 Ref: topics.subject_id > subjects.subject_id
 

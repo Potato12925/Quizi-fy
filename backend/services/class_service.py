@@ -21,7 +21,7 @@ async def create_class(payload: ClassCreateRequest) -> dict:
             "class_code": payload.class_code,
             "class_name": payload.class_name,
             "description": payload.description,
-            "owner_id": payload.owner_id,
+            "teacher_id": payload.teacher_id,
             "status": "active",
         }
     )
@@ -57,8 +57,8 @@ async def update_class(class_id: int, payload: ClassUpdateRequest) -> dict:
     update_payload: dict = {}
     if payload.class_name is not None:
         update_payload["class_name"] = payload.class_name
-    if payload.owner_id is not None:
-        update_payload["owner_id"] = payload.owner_id
+    if payload.teacher_id is not None:
+        update_payload["teacher_id"] = payload.teacher_id
     if payload.status is not None:
         update_payload["status"] = payload.status
 
@@ -81,4 +81,3 @@ async def delete_class(class_id: int) -> dict:
         raise ValueError("Class not found")
 
     return {"class_id": class_id, "deleted": True}
-

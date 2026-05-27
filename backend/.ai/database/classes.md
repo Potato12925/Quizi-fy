@@ -6,17 +6,17 @@ Documentation for `classes` table.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `class_id` | `bigint [pk, increment]` |
-| `class_code` | `varchar(50) [unique, not null]` |
-| `class_name` | `varchar(255) [not null]` |
-| `description` | `text` |
-| `owner_id` | `bigint [not null]` |
-| `status` | `active_status [default: 'active']` |
-| `created_at` | `timestamp` |
-| `updated_at` | `timestamp` |
-| `deleted_at` | `timestamp` |
+| Column        | Definition                                |
+| ------------- | ----------------------------------------- |
+| `class_id`    | `bigint [pk, increment]`                  |
+| `teacher_id`  | `bigint [not null, ref: > users.user_id]` |
+| `class_code`  | `varchar(50) [unique, not null]`          |
+| `class_name`  | `varchar(255) [not null]`                 |
+| `description` | `text`                                    |
+| `status`      | `active_status [default: 'active']`       |
+| `created_at`  | `timestamp [default: CURRENT_TIMESTAMP]`  |
+| `updated_at`  | `timestamp [default: CURRENT_TIMESTAMP]`  |
+| `deleted_at`  | `timestamp`                               |
 
 ## Relationships
 
@@ -36,4 +36,3 @@ select * from classes limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
-

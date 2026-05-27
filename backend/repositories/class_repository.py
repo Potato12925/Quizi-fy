@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from core.supabase import SupabaseManager
 
 
-CLASS_SELECT_FIELDS = "class_id,class_code,class_name,owner_id,status"
+CLASS_SELECT_FIELDS = "class_id,class_code,class_name,teacher_id,status"
 
 
 async def find_class_by_id(class_id: int) -> dict | None:
@@ -90,4 +90,3 @@ async def soft_delete_class_by_id(class_id: int) -> bool:
     )
     rows = response.data or []
     return len(rows) > 0
-

@@ -1,11 +1,16 @@
 
 -- =========================================================
 -- BKP SYSTEM DATABASE
--- UPDATED VERSION
+-- TEACHER MANAGED VERSION
+--
 -- CHANGES:
--- 1. topics thêm subject_id
--- 2. documents bỏ subject_id
--- 3. ai_requests dùng document_topic_id
+-- 1. Teacher quản lý lớp học
+-- 2. Teacher quản lý môn học
+-- 3. Teacher quản lý topic
+-- 4. Teacher upload document
+-- 5. Subject thuộc về teacher
+-- 6. Class thuộc về teacher
+-- 7. Admin chỉ quản lý hệ thống và tài khoản
 -- =========================================================
 
 DROP TABLE IF EXISTS student_answers CASCADE;
@@ -19,8 +24,6 @@ DROP TABLE IF EXISTS ai_requests CASCADE;
 DROP TABLE IF EXISTS document_topics CASCADE;
 DROP TABLE IF EXISTS documents CASCADE;
 DROP TABLE IF EXISTS class_students CASCADE;
-DROP TABLE IF EXISTS class_teachers CASCADE;
-DROP TABLE IF EXISTS class_subjects CASCADE;
 DROP TABLE IF EXISTS topics CASCADE;
 DROP TABLE IF EXISTS subjects CASCADE;
 DROP TABLE IF EXISTS classes CASCADE;
@@ -28,7 +31,8 @@ DROP TABLE IF EXISTS user_roles CASCADE;
 DROP TABLE IF EXISTS roles CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
-
+DROP TABLE IF EXISTS class_subjects CASCADE;
+DROP TABLE IF EXISTS class_teachers CASCADE;
 DROP TYPE IF EXISTS active_status CASCADE;
 DROP TYPE IF EXISTS difficulty_level CASCADE;
 DROP TYPE IF EXISTS ai_request_status CASCADE;
@@ -148,17 +152,18 @@ CREATE TABLE user_roles (
 
 -- =========================================================
 -- CLASSES
+-- Teacher owns class
 -- =========================================================
 
 CREATE TABLE classes (
     class_id BIGSERIAL PRIMARY KEY,
 
+    teacher_id BIGINT NOT NULL,
+
     class_code VARCHAR(50) UNIQUE NOT NULL,
     class_name VARCHAR(255) NOT NULL,
 
     description TEXT,
-
-    owner_id BIGINT NOT NULL,
 
     status active_status DEFAULT 'active',
 
@@ -166,19 +171,28 @@ CREATE TABLE classes (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP,
 
-    CONSTRAINT fk_classes_owner
-        FOREIGN KEY(owner_id)
+    CONSTRAINT fk_classes_teacher
+        FOREIGN KEY(teacher_id)
         REFERENCES users(user_id)
+        ON DELETE CASCADE
 );
+
+CREATE INDEX idx_classes_teacher
+ON classes(teacher_id);
 
 -- =========================================================
 -- SUBJECTS
+-- Subject belongs to teacher
 -- =========================================================
 
 CREATE TABLE subjects (
     subject_id BIGSERIAL PRIMARY KEY,
 
-    subject_code VARCHAR(50) UNIQUE NOT NULL,
+    teacher_id BIGINT NOT NULL,
+
+    class_id BIGINT NOT NULL,
+
+    subject_code VARCHAR(50) NOT NULL,
     subject_name VARCHAR(255) NOT NULL,
 
     description TEXT,
@@ -187,12 +201,31 @@ CREATE TABLE subjects (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP
+    deleted_at TIMESTAMP,
+
+    CONSTRAINT fk_subjects_teacher
+        FOREIGN KEY(teacher_id)
+        REFERENCES users(user_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_subjects_class
+        FOREIGN KEY(class_id)
+        REFERENCES classes(class_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_subject_code_per_teacher
+        UNIQUE(teacher_id, subject_code)
 );
+
+CREATE INDEX idx_subjects_teacher
+ON subjects(teacher_id);
+
+CREATE INDEX idx_subjects_class
+ON subjects(class_id);
 
 -- =========================================================
 -- TOPICS
--- UPDATED: thêm subject_id
+-- Topic belongs to subject
 -- =========================================================
 
 CREATE TABLE topics (
@@ -221,42 +254,6 @@ CREATE INDEX idx_topics_subject
 ON topics(subject_id);
 
 -- =========================================================
--- CLASS SUBJECTS
--- =========================================================
-
-CREATE TABLE class_subjects (
-    class_subject_id BIGSERIAL PRIMARY KEY,
-
-    class_id BIGINT NOT NULL,
-    subject_id BIGINT NOT NULL,
-
-    assigned_teacher_id BIGINT,
-
-    status active_status DEFAULT 'active',
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP,
-
-    CONSTRAINT fk_class_subjects_class
-        FOREIGN KEY(class_id)
-        REFERENCES classes(class_id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT fk_class_subjects_subject
-        FOREIGN KEY(subject_id)
-        REFERENCES subjects(subject_id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT fk_class_subjects_teacher
-        FOREIGN KEY(assigned_teacher_id)
-        REFERENCES users(user_id),
-
-    CONSTRAINT uq_class_subject
-        UNIQUE(class_id, subject_id)
-);
-
--- =========================================================
 -- CLASS STUDENTS
 -- =========================================================
 
@@ -265,8 +262,6 @@ CREATE TABLE class_students (
 
     class_id BIGINT NOT NULL,
     student_id BIGINT NOT NULL,
-
-    invited_by BIGINT NOT NULL,
 
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
@@ -282,51 +277,13 @@ CREATE TABLE class_students (
         REFERENCES users(user_id)
         ON DELETE CASCADE,
 
-    CONSTRAINT fk_class_students_invited
-        FOREIGN KEY(invited_by)
-        REFERENCES users(user_id),
-
     CONSTRAINT uq_class_student
         UNIQUE(class_id, student_id)
 );
 
 -- =========================================================
--- CLASS TEACHERS
--- =========================================================
-
-CREATE TABLE class_teachers (
-    class_teacher_id BIGSERIAL PRIMARY KEY,
-
-    class_id BIGINT NOT NULL,
-    teacher_id BIGINT NOT NULL,
-
-    added_by BIGINT NOT NULL,
-
-    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    deleted_at TIMESTAMP,
-
-    CONSTRAINT fk_class_teachers_class
-        FOREIGN KEY(class_id)
-        REFERENCES classes(class_id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT fk_class_teachers_teacher
-        FOREIGN KEY(teacher_id)
-        REFERENCES users(user_id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT fk_class_teachers_added_by
-        FOREIGN KEY(added_by)
-        REFERENCES users(user_id),
-
-    CONSTRAINT uq_class_teacher
-        UNIQUE(class_id, teacher_id)
-);
-
--- =========================================================
 -- DOCUMENTS
--- UPDATED: bỏ subject_id
+-- Teacher uploads documents
 -- =========================================================
 
 CREATE TABLE documents (
@@ -354,6 +311,7 @@ CREATE TABLE documents (
     CONSTRAINT fk_documents_teacher
         FOREIGN KEY(teacher_id)
         REFERENCES users(user_id)
+        ON DELETE CASCADE
 );
 
 CREATE INDEX idx_documents_teacher_created
@@ -364,6 +322,7 @@ ON documents(status);
 
 -- =========================================================
 -- DOCUMENT TOPICS
+-- Many-to-many between document and topic
 -- =========================================================
 
 CREATE TABLE document_topics (
@@ -396,7 +355,6 @@ ON document_topics(topic_id);
 
 -- =========================================================
 -- AI REQUESTS
--- UPDATED: dùng document_topic_id
 -- =========================================================
 
 CREATE TABLE ai_requests (
@@ -462,15 +420,18 @@ CREATE TABLE questions (
 
     CONSTRAINT fk_questions_teacher
         FOREIGN KEY(teacher_id)
-        REFERENCES users(user_id),
+        REFERENCES users(user_id)
+        ON DELETE CASCADE,
 
     CONSTRAINT fk_questions_document_topic_id
         FOREIGN KEY(document_topic_id)
-        REFERENCES document_topics(document_topic_id),
+        REFERENCES document_topics(document_topic_id)
+        ON DELETE CASCADE,
 
     CONSTRAINT fk_questions_ai_request
         FOREIGN KEY(ai_request_id)
         REFERENCES ai_requests(request_id)
+        ON DELETE SET NULL
 );
 
 CREATE INDEX idx_questions_topic
@@ -537,6 +498,7 @@ CREATE TABLE question_history (
     CONSTRAINT fk_question_history_changed_by
         FOREIGN KEY(changed_by)
         REFERENCES users(user_id)
+        ON DELETE CASCADE
 );
 
 -- =========================================================
@@ -566,15 +528,18 @@ CREATE TABLE practice_sets (
 
     CONSTRAINT fk_practice_sets_student
         FOREIGN KEY(student_id)
-        REFERENCES users(user_id),
+        REFERENCES users(user_id)
+        ON DELETE CASCADE,
 
     CONSTRAINT fk_practice_sets_subject
         FOREIGN KEY(subject_id)
-        REFERENCES subjects(subject_id),
+        REFERENCES subjects(subject_id)
+        ON DELETE CASCADE,
 
     CONSTRAINT fk_practice_sets_document_topic
         FOREIGN KEY(document_topic_id)
         REFERENCES document_topics(document_topic_id)
+        ON DELETE SET NULL
 );
 
 CREATE INDEX idx_practice_sets_student_created
@@ -603,7 +568,8 @@ CREATE TABLE practice_set_questions (
 
     CONSTRAINT fk_psq_question
         FOREIGN KEY(question_id)
-        REFERENCES questions(question_id),
+        REFERENCES questions(question_id)
+        ON DELETE CASCADE,
 
     CONSTRAINT uq_psq_question
         UNIQUE(practice_set_id, question_id),
@@ -663,11 +629,13 @@ CREATE TABLE student_answers (
 
     CONSTRAINT fk_student_answers_question
         FOREIGN KEY(question_id)
-        REFERENCES questions(question_id),
+        REFERENCES questions(question_id)
+        ON DELETE CASCADE,
 
     CONSTRAINT fk_student_answers_option
         FOREIGN KEY(selected_option_id)
-        REFERENCES question_options(option_id),
+        REFERENCES question_options(option_id)
+        ON DELETE SET NULL,
 
     CONSTRAINT uq_attempt_question
         UNIQUE(attempt_id, question_id)
@@ -698,6 +666,7 @@ CREATE TABLE notifications (
 
 -- =========================================================
 -- DEFAULT USERS
+-- Password: 123456
 -- =========================================================
 
 INSERT INTO users (
@@ -716,16 +685,30 @@ VALUES
     FALSE
 ),
 (
-    'teacher',
+    'teacher01',
     '$2b$12$2PG4GGwGcNh8u2fjrdTVKe41hbycEVsuCsviJxCQrC15zaDuanWLO',
-    'Default Teacher',
+    'Nguyen Van Teacher',
     TRUE,
     FALSE
 ),
 (
-    'student',
+    'teacher02',
     '$2b$12$2PG4GGwGcNh8u2fjrdTVKe41hbycEVsuCsviJxCQrC15zaDuanWLO',
-    'Default Student',
+    'Tran Thi Teacher',
+    TRUE,
+    FALSE
+),
+(
+    'student01',
+    '$2b$12$2PG4GGwGcNh8u2fjrdTVKe41hbycEVsuCsviJxCQrC15zaDuanWLO',
+    'Le Van Student',
+    TRUE,
+    FALSE
+),
+(
+    'student02',
+    '$2b$12$2PG4GGwGcNh8u2fjrdTVKe41hbycEVsuCsviJxCQrC15zaDuanWLO',
+    'Pham Thi Student',
     TRUE,
     FALSE
 );
@@ -741,7 +724,7 @@ VALUES
 ('student', 'Student', 'Student role');
 
 -- =========================================================
--- DEFAULT USER ROLES
+-- USER ROLES
 -- =========================================================
 
 INSERT INTO user_roles (user_id, role_id)
@@ -751,9 +734,484 @@ JOIN roles r
 ON (
     (u.username = 'admin' AND r.role_code = 'admin')
     OR
-    (u.username = 'teacher' AND r.role_code = 'teacher')
+    (u.username = 'teacher01' AND r.role_code = 'teacher')
     OR
-    (u.username = 'student' AND r.role_code = 'student')
+    (u.username = 'teacher02' AND r.role_code = 'teacher')
+    OR
+    (u.username = 'student01' AND r.role_code = 'student')
+    OR
+    (u.username = 'student02' AND r.role_code = 'student')
+);
+
+-- =========================================================
+-- SEED CLASSES
+-- =========================================================
+
+INSERT INTO classes (
+    teacher_id,
+    class_code,
+    class_name,
+    description
+)
+VALUES
+(
+    2,
+    'SE0601',
+    'Software Engineering 01',
+    'Class managed by teacher01'
+),
+(
+    3,
+    'AI0601',
+    'Artificial Intelligence 01',
+    'Class managed by teacher02'
+);
+
+-- =========================================================
+-- SEED SUBJECTS
+-- =========================================================
+
+INSERT INTO subjects (
+    teacher_id,
+    class_id,
+    subject_code,
+    subject_name,
+    description
+)
+VALUES
+(
+    2,
+    1,
+    'PRN212',
+    'Web Development',
+    'Frontend and Backend development'
+),
+(
+    2,
+    1,
+    'DBI202',
+    'Database Systems',
+    'Database design and SQL'
+),
+(
+    3,
+    2,
+    'AIL302',
+    'Machine Learning',
+    'Introduction to machine learning'
+);
+
+-- =========================================================
+-- SEED TOPICS
+-- =========================================================
+
+INSERT INTO topics (
+    subject_id,
+    topic_name,
+    description
+)
+VALUES
+(
+    1,
+    'ReactJS Basics',
+    'Introduction to ReactJS'
+),
+(
+    1,
+    'REST API',
+    'Learn RESTful API design'
+),
+(
+    2,
+    'PostgreSQL',
+    'Database queries and optimization'
+),
+(
+    3,
+    'Neural Network',
+    'Deep learning fundamentals'
+);
+
+-- =========================================================
+-- SEED CLASS TEACHERS
+-- =========================================================
+
+CREATE TABLE class_teachers (
+    class_teacher_id BIGSERIAL PRIMARY KEY,
+
+    class_id BIGINT NOT NULL,
+    teacher_id BIGINT NOT NULL,
+
+    added_by BIGINT NOT NULL,
+
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    deleted_at TIMESTAMP,
+
+    CONSTRAINT fk_class_teachers_class
+        FOREIGN KEY(class_id)
+        REFERENCES classes(class_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_class_teachers_teacher
+        FOREIGN KEY(teacher_id)
+        REFERENCES users(user_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_class_teachers_added_by
+        FOREIGN KEY(added_by)
+        REFERENCES users(user_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_class_teacher
+        UNIQUE(class_id, teacher_id)
+);
+
+-- =========================================================
+-- CLASS SUBJECTS
+-- =========================================================
+
+CREATE TABLE class_subjects (
+    class_subject_id BIGSERIAL PRIMARY KEY,
+
+    class_id BIGINT NOT NULL,
+    subject_id BIGINT NOT NULL,
+
+    assigned_teacher_id BIGINT NOT NULL,
+
+    status active_status DEFAULT 'active',
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP,
+
+    CONSTRAINT fk_class_subjects_class
+        FOREIGN KEY(class_id)
+        REFERENCES classes(class_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_class_subjects_subject
+        FOREIGN KEY(subject_id)
+        REFERENCES subjects(subject_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_class_subjects_teacher
+        FOREIGN KEY(assigned_teacher_id)
+        REFERENCES users(user_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_class_subject
+        UNIQUE(class_id, subject_id)
+);
+
+CREATE INDEX idx_class_subjects_class
+ON class_subjects(class_id);
+
+CREATE INDEX idx_class_subjects_teacher
+ON class_subjects(assigned_teacher_id);
+
+-- =========================================================
+-- SEED CLASS TEACHERS
+-- =========================================================
+
+INSERT INTO class_teachers (
+    class_id,
+    teacher_id,
+    added_by
+)
+VALUES
+(
+    1,
+    2,
+    1
+),
+(
+    2,
+    3,
+    1
+);
+
+-- =========================================================
+-- SEED CLASS SUBJECTS
+-- =========================================================
+
+INSERT INTO class_subjects (
+    class_id,
+    subject_id,
+    assigned_teacher_id,
+    status
+)
+VALUES
+(
+    1,
+    1,
+    2,
+    'active'
+),
+(
+    1,
+    2,
+    2,
+    'active'
+),
+(
+    2,
+    3,
+    3,
+    'active'
+);
+
+-- =========================================================
+-- SEED CLASS STUDENTS
+-- =========================================================
+
+INSERT INTO class_students (
+    class_id,
+    student_id
+)
+VALUES
+(1, 4),
+(1, 5),
+(2, 4);
+
+-- =========================================================
+-- SEED DOCUMENTS
+-- =========================================================
+
+INSERT INTO documents (
+    teacher_id,
+    title,
+    description,
+    file_url,
+    file_hash,
+    file_type,
+    file_size
+)
+VALUES
+(
+    2,
+    'ReactJS Introduction',
+    'Basic ReactJS document',
+    'https://example.com/react-intro.pdf',
+    'hash_react_001',
+    'pdf',
+    2048000
+),
+(
+    2,
+    'REST API Guide',
+    'REST API learning material',
+    'https://example.com/rest-api.docx',
+    'hash_api_001',
+    'docx',
+    1024000
+),
+(
+    3,
+    'Machine Learning Notes',
+    'ML theory document',
+    'https://example.com/ml-notes.pdf',
+    'hash_ml_001',
+    'pdf',
+    4096000
+);
+
+-- =========================================================
+-- SEED DOCUMENT TOPICS
+-- =========================================================
+
+INSERT INTO document_topics (
+    document_id,
+    topic_id
+)
+VALUES
+(1, 1),
+(2, 2),
+(3, 4);
+
+-- =========================================================
+-- SEED AI REQUESTS
+-- =========================================================
+
+INSERT INTO ai_requests (
+    document_topic_id,
+    num_questions,
+    difficulty,
+    content_scope,
+    status,
+    generated_question_count
+)
+VALUES
+(
+    1,
+    10,
+    'easy',
+    'Chapter 1',
+    'completed',
+    10
+),
+(
+    2,
+    5,
+    'medium',
+    'Full document',
+    'processing',
+    2
+);
+
+-- =========================================================
+-- SEED QUESTIONS
+-- =========================================================
+
+INSERT INTO questions (
+    teacher_id,
+    document_topic_id,
+    ai_request_id,
+    content,
+    difficulty,
+    source,
+    status,
+    explanation
+)
+VALUES
+(
+    2,
+    1,
+    1,
+    'ReactJS là thư viện dùng để làm gì?',
+    'easy',
+    'ai',
+    'approved',
+    'ReactJS dùng để xây dựng giao diện người dùng.'
+),
+(
+    2,
+    2,
+    2,
+    'HTTP method nào dùng để tạo dữ liệu?',
+    'medium',
+    'manual',
+    'approved',
+    'POST dùng để tạo dữ liệu mới.'
+);
+
+-- =========================================================
+-- SEED QUESTION OPTIONS
+-- =========================================================
+
+INSERT INTO question_options (
+    question_id,
+    option_label,
+    option_text,
+    is_correct,
+    order_num
+)
+VALUES
+(1, 'A', 'Xây dựng giao diện', TRUE, 1),
+(1, 'B', 'Quản lý database', FALSE, 2),
+(1, 'C', 'Tạo server vật lý', FALSE, 3),
+(1, 'D', 'Cấu hình mạng', FALSE, 4),
+
+(2, 'A', 'GET', FALSE, 1),
+(2, 'B', 'POST', TRUE, 2),
+(2, 'C', 'DELETE', FALSE, 3),
+(2, 'D', 'PATCH', FALSE, 4);
+
+-- =========================================================
+-- SEED PRACTICE SETS
+-- =========================================================
+
+INSERT INTO practice_sets (
+    student_id,
+    subject_id,
+    document_topic_id,
+    difficulty,
+    num_questions_requested,
+    num_questions_actual,
+    time_limit_minutes
+)
+VALUES
+(
+    4,
+    1,
+    1,
+    'easy',
+    10,
+    10,
+    15
+);
+
+-- =========================================================
+-- SEED PRACTICE SET QUESTIONS
+-- =========================================================
+
+INSERT INTO practice_set_questions (
+    practice_set_id,
+    question_id,
+    order_num
+)
+VALUES
+(1, 1, 1),
+(1, 2, 2);
+
+-- =========================================================
+-- SEED PRACTICE ATTEMPTS
+-- =========================================================
+
+INSERT INTO practice_attempts (
+    practice_set_id,
+    submitted_at,
+    score,
+    total_correct,
+    total_wrong,
+    status
+)
+VALUES
+(
+    1,
+    CURRENT_TIMESTAMP,
+    8.50,
+    8,
+    2,
+    'submitted'
+);
+
+-- =========================================================
+-- SEED STUDENT ANSWERS
+-- =========================================================
+
+INSERT INTO student_answers (
+    attempt_id,
+    question_id,
+    selected_option_id,
+    is_correct
+)
+VALUES
+(1, 1, 1, TRUE),
+(1, 2, 6, TRUE);
+
+-- =========================================================
+-- SEED NOTIFICATIONS
+-- =========================================================
+
+INSERT INTO notifications (
+    user_id,
+    title,
+    content,
+    is_read
+)
+VALUES
+(
+    4,
+    'New Practice Set',
+    'A new practice set has been assigned to you.',
+    FALSE
+),
+(
+    2,
+    'AI Request Completed',
+    'Your AI question generation request has completed.',
+    FALSE
 );
 
 -- =========================================================
@@ -804,11 +1262,6 @@ EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER trg_questions_updated_at
 BEFORE UPDATE ON questions
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER trg_class_subjects_updated_at
-BEFORE UPDATE ON class_subjects
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 

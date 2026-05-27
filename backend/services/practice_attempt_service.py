@@ -83,8 +83,14 @@ async def submit_attempt(attempt_id: int) -> dict:
         raise ValueError("PracticeAttempt not found")
         
     ps_resp = await asyncio.to_thread(lambda: supabase.table("practice_sets").select("num_questions_actual").eq("practice_set_id", attempt["practice_set_id"]).execute())
-    num_q = ps_resp.data[0]["num_questions_actual"] if ps_resp.data else (total_correct + total_wrong)
-    if num_q == 0: num_q = 1
+    num_q = None
+    if ps_resp.data and "num_questions_actual" in ps_resp.data[0]:
+        num_q = ps_resp.data[0]["num_questions_actual"]
+        
+    if num_q is None:
+        num_q = total_correct + total_wrong
+    if num_q == 0:
+        num_q = 1
     
     score = (total_correct / num_q) * 10.0
     
@@ -101,7 +107,35 @@ async def get_attempt_result(attempt_id: int) -> dict:
     details = await get_attempt_result_details(attempt_id)
     if not details:
         raise ValueError("PracticeAttempt not found")
-    return details
+        
+    answers = details.get("answers", [])
+    formatted_questions = []
+    for ans in answers:
+        q = ans.get("questions")
+        if not q:
+            continue
+        opts = q.get("question_options", [])
+        
+        formatted_questions.append({
+            "question_id": q["question_id"],
+            "content": q["content"],
+            "explanation": q["explanation"],
+            "selected_option_id": ans["selected_option_id"],
+            "is_correct": ans["is_correct"],
+            "options": [
+                {
+                    "option_id": o["option_id"],
+                    "option_text": o["option_text"],
+                    "is_correct": o["is_correct"]
+                }
+                for o in opts
+            ]
+        })
+        
+    return {
+        "attempt": details["attempt"],
+        "questions": formatted_questions
+    }
 
 async def get_my_history(student_id: int) -> list[dict]:
     supabase = SupabaseManager.get_client()

@@ -92,7 +92,6 @@ async def create_user(payload: UserCreateRequest, current_user: CurrentUser) -> 
                 class_mapping = await create_class_student_mapping(
                     class_id=payload.class_id,
                     student_id=created_user_id,
-                    invited_by=current_user.user_id,
                 )
         if payload.role_code == "teacher":
             exists = await find_active_class_teacher_mapping(payload.class_id, created_user_id)

@@ -39,9 +39,9 @@ async def post_user(
             status_code=500,
             error_code="USER_SERVICE_MISCONFIGURED",
         )
-    except Exception:
+    except Exception as exc:
         return error_response(
-            message="Unable to create user",
+            message=str(exc),
             status_code=500,
             error_code="USER_CREATE_FAILED",
         )

@@ -11,7 +11,6 @@ Documentation for `class_students` table.
 | `class_student_id` | `bigint [pk, increment]` |
 | `class_id` | `bigint [not null]` |
 | `student_id` | `bigint [not null]` |
-| `invited_by` | `bigint [not null]` |
 | `joined_at` | `timestamp` |
 | `deleted_at` | `timestamp` |
 
@@ -23,7 +22,6 @@ Documentation for `class_students` table.
 
 - class_students.class_id -> classes.class_id
 - class_students.student_id -> users.user_id
-- class_students.invited_by -> users.user_id
 
 ## Recommended Supabase Queries
 

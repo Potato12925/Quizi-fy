@@ -264,11 +264,11 @@ async def find_active_class_student_mapping(class_id: int, student_id: int) -> d
     return rows[0] if rows else None
 
 
-async def create_class_student_mapping(class_id: int, student_id: int, invited_by: int) -> dict:
+async def create_class_student_mapping(class_id: int, student_id: int) -> dict:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("class_students")
-        .insert({"class_id": class_id, "student_id": student_id, "invited_by": invited_by})
+        .insert({"class_id": class_id, "student_id": student_id})
         .execute()
     )
     rows = response.data or []

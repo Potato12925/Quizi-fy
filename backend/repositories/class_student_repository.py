@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from core.supabase import SupabaseManager
 
 
-SELECT_FIELDS = "class_student_id,class_id,student_id,invited_by"
+SELECT_FIELDS = "class_student_id,class_id,student_id"
 HAS_DELETED = False
 
 

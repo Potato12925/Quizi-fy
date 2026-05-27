@@ -1,20 +1,22 @@
 import { api } from './client';
 
-export interface TeacherTopicItem {
-  topic_id: number;
-  topic_name: string;
-}
-
-export interface TeacherDocumentTopicItem {
-  document_id: number;
-  title: string;
-  topics: TeacherTopicItem[];
-}
-
-export interface TeacherSubjectDocumentTopicItem {
+export interface TeacherSubjectItem {
   subject_id: number;
   subject_name: string;
-  documents: TeacherDocumentTopicItem[];
+  subject_code?: string;
+}
+
+export interface TeacherTopicItem {
+  topic_id: number;
+  subject_id: number;
+  topic_name: string;
+  description?: string | null;
+}
+
+export interface SubjectWithTopicsViewModel {
+  subject_id: number;
+  subject_name: string;
+  topics: TeacherTopicItem[];
 }
 
 interface ApiEnvelope<T> {
@@ -24,38 +26,96 @@ interface ApiEnvelope<T> {
   meta?: Record<string, unknown> | null;
 }
 
-export interface AddDocumentTopicRequest {
-  topic_name: string;
+interface TopicPaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
 }
 
-export interface UpdateTopicNameRequest {
+export interface CreateTeacherSubjectTopicRequest {
   topic_name: string;
+  description?: string;
 }
 
-export const getTeacherSubjectsDocumentsTopics = async (): Promise<TeacherSubjectDocumentTopicItem[]> => {
-  const response = await api.get<ApiEnvelope<TeacherSubjectDocumentTopicItem[]>>('/teacher/subjects/documents-topics');
+export interface UpdateTeacherTopicRequest {
+  topic_name?: string;
+  description?: string;
+}
+
+const fetchTeacherSubjects = async (): Promise<TeacherSubjectItem[]> => {
+  const response = await api.get<ApiEnvelope<TeacherSubjectItem[]>>('/subjects', {
+    params: {
+      page: '1',
+      limit: '100',
+    },
+  });
   return response.data || [];
 };
 
-export const addTopicToDocument = async (
-  documentId: number,
-  payload: AddDocumentTopicRequest,
-): Promise<{ document_id: number; topic: TeacherTopicItem }> => {
-  const response = await api.post<ApiEnvelope<{ document_id: number; topic: TeacherTopicItem }>>(
-    `/teacher/documents/${documentId}/topics`,
-    payload,
+const fetchTopicsBySubject = async (subjectId: number): Promise<TeacherTopicItem[]> => {
+  const response = await api.get<ApiEnvelope<TeacherTopicItem[]>>('/topics', {
+    params: {
+      page: '1',
+      limit: '200',
+      subject_id: String(subjectId),
+    },
+  });
+  return response.data || [];
+};
+
+export const getTeacherSubjectsWithTopics = async (): Promise<SubjectWithTopicsViewModel[]> => {
+  const subjects = await fetchTeacherSubjects();
+  const topicsBySubject = await Promise.all(
+    subjects.map(async (subject) => {
+      const topics = await fetchTopicsBySubject(subject.subject_id);
+      return {
+        subject_id: subject.subject_id,
+        subject_name: subject.subject_name,
+        topics,
+      } satisfies SubjectWithTopicsViewModel;
+    }),
   );
-  return response.data;
+
+  return topicsBySubject;
 };
 
-export const updateTeacherTopicName = async (
-  topicId: number,
-  payload: UpdateTopicNameRequest,
+export const createTopicForTeacherSubject = async (
+  subjectId: number,
+  payload: CreateTeacherSubjectTopicRequest,
 ): Promise<TeacherTopicItem> => {
-  const response = await api.put<ApiEnvelope<TeacherTopicItem>>(`/teacher/topics/${topicId}`, payload);
+  const response = await api.post<ApiEnvelope<TeacherTopicItem>>('/topics', {
+    subject_id: subjectId,
+    topic_name: payload.topic_name,
+    description: payload.description,
+  });
   return response.data;
 };
 
-export const removeTopicFromDocument = async (documentId: number, topicId: number): Promise<void> => {
-  await api.delete(`/teacher/documents/${documentId}/topics/${topicId}`);
+export const updateTeacherSubjectTopic = async (
+  topicId: number,
+  payload: UpdateTeacherTopicRequest,
+): Promise<TeacherTopicItem> => {
+  const response = await api.put<ApiEnvelope<TeacherTopicItem>>(`/topics/${topicId}`, payload);
+  return response.data;
+};
+
+export const softDeleteTeacherSubjectTopic = async (topicId: number): Promise<void> => {
+  await api.delete(`/topics/${topicId}`);
+};
+
+export const getTeacherTopicsBySubject = async (
+  subjectId: number,
+): Promise<{ items: TeacherTopicItem[]; meta: TopicPaginationMeta | null }> => {
+  const response = await api.get<ApiEnvelope<TeacherTopicItem[]>>('/topics', {
+    params: {
+      page: '1',
+      limit: '200',
+      subject_id: String(subjectId),
+    },
+  });
+  return {
+    items: response.data || [],
+    meta: (response.meta as TopicPaginationMeta | null) || null,
+  };
 };

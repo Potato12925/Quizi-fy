@@ -70,36 +70,47 @@ async def _validate_subject_access_by_teacher(subject_id: int, teacher_id: int, 
             raise DocumentAuthorizationError("Teacher is not assigned to this subject")
 
 
-async def _validate_topic_ids(topic_ids: list[int]) -> list[dict]:
-    if not topic_ids:
-        return []
-    topics = await find_topics_by_ids(topic_ids)
-    if len(topics) != len(set(topic_ids)):
+async def _validate_topic_ids(topic_ids: list[int]) -> tuple[list[dict], int]:
+    unique_ids = sorted(set(topic_ids))
+    if not unique_ids:
+        raise DocumentValidationError("topic_ids must not be empty")
+    topics = await find_topics_by_ids(unique_ids)
+    if len(topics) != len(unique_ids):
         raise DocumentValidationError("One or more topic_ids are invalid")
-    return topics
+    subject_ids = {int(topic["subject_id"]) for topic in topics}
+    if len(subject_ids) != 1:
+        raise DocumentValidationError("All topic_ids must belong to the same subject")
+    return topics, subject_ids.pop()
 
 
 async def _serialize_document(document: dict) -> dict:
     document_id = int(document["document_id"])
     topic_rows = await list_by_document_id(document_id)
     topics = []
+    subject_id: int | None = None
+    subject_name = "Unknown"
+
     for row in topic_rows:
         topic = row.get("topics") or {}
+        if subject_id is None and topic.get("subject_id"):
+            subject_id = int(topic["subject_id"])
+        subject_ref = topic.get("subjects") or {}
+        if subject_ref.get("subject_name"):
+            subject_name = subject_ref["subject_name"]
         topics.append({
             "topic_id": int(row["topic_id"]),
             "topic_name": topic.get("topic_name"),
         })
 
-    subject_data = document.get("subjects") or {}
     ai_request_count, question_count = await _get_document_usage_counts(document_id)
 
     return {
         "document_id": document_id,
         "teacher_id": int(document["teacher_id"]),
-        "subject_id": int(document["subject_id"]),
+        "subject_id": subject_id,
         "subject": {
-            "subject_id": int(subject_data.get("subject_id") or document["subject_id"]),
-            "subject_name": subject_data.get("subject_name") or "Unknown",
+            "subject_id": subject_id,
+            "subject_name": subject_name,
         },
         "title": document.get("title"),
         "description": document.get("description"),
@@ -125,10 +136,11 @@ async def create_document(payload: DocumentCreateRequest, current_user: CurrentU
     teacher_id = payload.teacher_id
     if not _is_admin(current_user):
         teacher_id = current_user.user_id
-    return await create_document_record(
+    _, subject_id = await _validate_topic_ids(payload.topic_ids)
+    await _validate_subject_access_by_teacher(subject_id, teacher_id=teacher_id, is_admin=_is_admin(current_user))
+    created = await create_document_record(
         {
             "teacher_id": teacher_id,
-            "subject_id": payload.subject_id,
             "title": payload.title,
             "file_url": payload.file_url,
             "file_type": payload.file_type,
@@ -136,6 +148,11 @@ async def create_document(payload: DocumentCreateRequest, current_user: CurrentU
             "status": payload.status,
         }
     )
+    await replace_topics_for_document(int(created["document_id"]), payload.topic_ids)
+    enriched = await find_document_enriched_by_id(int(created["document_id"]))
+    if not enriched:
+        raise ValueError("Document not found")
+    return await _serialize_document(enriched)
 
 
 async def get_document_by_id(record_id: int, current_user: CurrentUser) -> dict:
@@ -192,12 +209,11 @@ async def update_document(
 
     update_payload = payload.model_dump(exclude_none=True)
     topic_ids = update_payload.pop("topic_ids", None)
+    if topic_ids is None:
+        raise DocumentValidationError("topic_ids must not be empty")
 
-    target_subject_id = int(update_payload.get("subject_id") or existing["subject_id"])
+    _, target_subject_id = await _validate_topic_ids(topic_ids)
     await _validate_subject_access(target_subject_id, current_user)
-
-    if topic_ids is not None:
-        await _validate_topic_ids(topic_ids)
 
     title_for_dup_check = str(update_payload.get("title") or existing["title"])
     existing_title = await find_active_document_by_title_in_subject(
@@ -244,8 +260,7 @@ async def update_document(
         if not updated:
             raise ValueError("Document not found")
 
-    if topic_ids is not None:
-        await replace_topics_for_document(record_id, topic_ids)
+    await replace_topics_for_document(record_id, topic_ids)
 
     result = await get_document_by_id(record_id, current_user=current_user)
     ai_count = int(result.get("ai_request_count") or 0)
@@ -312,11 +327,11 @@ async def upload_teacher_document(
         file_bytes=file_bytes,
     )
 
-    await _validate_subject_access_by_teacher(payload.subject_id, teacher_id=teacher_id, is_admin=False)
-    await _validate_topic_ids(payload.topic_ids)
+    _, subject_id = await _validate_topic_ids(payload.topic_ids)
+    await _validate_subject_access_by_teacher(subject_id, teacher_id=teacher_id, is_admin=False)
 
     existing_title = await find_active_document_by_title_in_subject(
-        subject_id=payload.subject_id,
+        subject_id=subject_id,
         title=payload.title,
         teacher_id=teacher_id,
     )
@@ -324,7 +339,7 @@ async def upload_teacher_document(
         raise DocumentValidationError("Duplicate title in this subject is not allowed")
 
     existing_hash = await find_active_document_by_hash_in_subject(
-        subject_id=payload.subject_id,
+        subject_id=subject_id,
         file_hash=file_hash,
         teacher_id=teacher_id,
     )
@@ -333,7 +348,7 @@ async def upload_teacher_document(
 
     file_url = await upload_document_file(
         teacher_id=teacher_id,
-        subject_id=payload.subject_id,
+        subject_id=subject_id,
         file_name=file_name,
         file_bytes=file_bytes,
     )
@@ -341,7 +356,6 @@ async def upload_teacher_document(
     created = await create_document_record(
         {
             "teacher_id": teacher_id,
-            "subject_id": payload.subject_id,
             "title": payload.title,
             "description": payload.description,
             "file_url": file_url,

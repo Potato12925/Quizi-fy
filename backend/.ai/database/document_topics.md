@@ -1,8 +1,8 @@
-﻿# Table: `document_topics`
+# Table: `document_topics`
 
 ## Purpose
 
-Documentation for `document_topics` table.
+Join table between documents and topics. This is the path used to infer subject from a document.
 
 ## Columns
 
@@ -23,18 +23,12 @@ Documentation for `document_topics` table.
 
 - document_topics.document_id -> documents.document_id
 - document_topics.topic_id -> topics.topic_id
+- ai_requests.document_topic_id -> document_topics.document_topic_id
 - questions.document_topic_id -> document_topics.document_topic_id
 - practice_sets.document_topic_id -> document_topics.document_topic_id
 
 ## Recommended Supabase Queries
 
 ```sql
-select * from document_topics limit 20;
+select document_topic_id, document_id, topic_id from document_topics limit 20;
 ```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
-

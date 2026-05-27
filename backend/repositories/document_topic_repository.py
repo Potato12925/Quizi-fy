@@ -61,7 +61,7 @@ async def list_by_document_id(document_id: int) -> list[dict]:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("document_topics")
-        .select("document_topic_id,document_id,topic_id,topics(topic_id,topic_name)")
+        .select("document_topic_id,document_id,topic_id,topics(topic_id,topic_name,subject_id,subjects(subject_id,subject_name))")
         .eq("document_id", document_id)
         .order("document_topic_id")
         .execute()

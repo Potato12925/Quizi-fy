@@ -10,7 +10,7 @@ export interface ApiEnvelope<T> {
 export interface TeacherDocument {
   document_id: number;
   teacher_id: number;
-  subject_id: number;
+  subject_id: number | null;
   title: string;
   description?: string;
   file_url: string;
@@ -19,7 +19,7 @@ export interface TeacherDocument {
   status: string;
   created_at: string;
   updated_at?: string;
-  subject: { subject_id: number; subject_name: string };
+  subject: { subject_id: number | null; subject_name: string };
   topics: { topic_id: number; topic_name: string }[];
   ai_request_count?: number;
   question_count?: number;
@@ -39,16 +39,14 @@ export interface TeacherDocumentListParams {
 
 export interface UploadTeacherDocumentPayload {
   title: string;
-  subject_id: number;
-  topic_ids?: number[];
+  topic_ids: number[];
   description?: string;
   file: File;
 }
 
 export interface UpdateTeacherDocumentPayload {
   title?: string;
-  subject_id?: number;
-  topic_ids?: number[];
+  topic_ids: number[];
   description?: string;
   status?: string;
   file?: File;
@@ -79,7 +77,6 @@ export const uploadTeacherDocument = async (payload: UploadTeacherDocumentPayloa
   const formData = new FormData();
   formData.append('file', payload.file);
   formData.append('title', payload.title);
-  formData.append('subject_id', String(payload.subject_id));
   if (payload.description) formData.append('description', payload.description);
   for (const topicId of payload.topic_ids || []) {
     formData.append('topic_ids', String(topicId));
@@ -93,7 +90,6 @@ export const updateTeacherDocument = async (documentId: number, payload: UpdateT
   const formData = new FormData();
   if (payload.title !== undefined) formData.append('title', payload.title);
   if (payload.description !== undefined) formData.append('description', payload.description);
-  if (payload.subject_id !== undefined) formData.append('subject_id', String(payload.subject_id));
   if (payload.status !== undefined) formData.append('status', payload.status);
   for (const topicId of payload.topic_ids || []) {
     formData.append('topic_ids', String(topicId));

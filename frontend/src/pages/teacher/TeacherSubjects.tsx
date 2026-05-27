@@ -3,37 +3,37 @@ import React, { useEffect, useMemo, useState } from 'react';
 import ErrorState from '@/components/common/ErrorState';
 import LoadingState from '@/components/common/LoadingState';
 import {
-  addTopicToDocument,
-  getTeacherSubjectsDocumentsTopics,
-  removeTopicFromDocument,
-  type TeacherDocumentTopicItem,
-  type TeacherSubjectDocumentTopicItem,
+  createTopicForTeacherSubject,
+  getTeacherSubjectsWithTopics,
+  softDeleteTeacherSubjectTopic,
+  type SubjectWithTopicsViewModel,
   type TeacherTopicItem,
-  updateTeacherTopicName,
+  updateTeacherSubjectTopic,
 } from '@/api/teacherTopicManagementApi';
 
 export default function TeacherSubjectsPage() {
-  const [subjects, setSubjects] = useState<TeacherSubjectDocumentTopicItem[]>([]);
+  const [subjects, setSubjects] = useState<SubjectWithTopicsViewModel[]>([]);
   const [activeSubjectId, setActiveSubjectId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [selectedDocument, setSelectedDocument] = useState<TeacherDocumentTopicItem | null>(null);
-  const [selectedTopic, setSelectedTopic] = useState<TeacherTopicItem | null>(null);
-  const [formTopicName, setFormTopicName] = useState('');
+  const [topicName, setTopicName] = useState('');
+  const [topicDescription, setTopicDescription] = useState('');
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [deleteTarget, setDeleteTarget] = useState<{ document: TeacherDocumentTopicItem; topic: TeacherTopicItem } | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingTopic, setEditingTopic] = useState<TeacherTopicItem | null>(null);
+  const [editTopicName, setEditTopicName] = useState('');
+  const [editTopicDescription, setEditTopicDescription] = useState('');
+  const [editError, setEditError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<TeacherTopicItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchData = async () => {
     setIsLoading(true);
     setError('');
     try {
-      const data = await getTeacherSubjectsDocumentsTopics();
+      const data = await getTeacherSubjectsWithTopics();
       setSubjects(data);
       setActiveSubjectId((prev) => {
         if (!data.length) {
@@ -45,7 +45,7 @@ export default function TeacherSubjectsPage() {
         return data[0].subject_id;
       });
     } catch {
-      setError('Khong the tai du lieu mon hoc va tai lieu. Vui long thu lai.');
+      setError('Khong the tai danh sach mon hoc va topic. Vui long thu lai.');
     } finally {
       setIsLoading(false);
     }
@@ -61,78 +61,95 @@ export default function TeacherSubjectsPage() {
   );
 
   const totalTopics = useMemo(
-    () => (activeSubject ? activeSubject.documents.reduce((sum, document) => sum + document.topics.length, 0) : 0),
-    [activeSubject],
+    () => subjects.reduce((sum, subject) => sum + subject.topics.length, 0),
+    [subjects],
   );
 
-  const handleOpenAddTopic = (document: TeacherDocumentTopicItem) => {
-    setModalMode('create');
-    setSelectedDocument(document);
-    setSelectedTopic(null);
-    setFormTopicName('');
-    setFormError('');
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEditTopic = (document: TeacherDocumentTopicItem, topic: TeacherTopicItem) => {
-    setModalMode('edit');
-    setSelectedDocument(document);
-    setSelectedTopic(topic);
-    setFormTopicName(topic.topic_name);
-    setFormError('');
-    setIsModalOpen(true);
-  };
-
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleCreateTopic = async (event: React.FormEvent) => {
     event.preventDefault();
+    const trimmedName = topicName.trim();
 
-    if (!formTopicName.trim()) {
+    if (!trimmedName) {
       setFormError('Vui long nhap ten topic.');
       return;
     }
-
-    if (!selectedDocument) {
-      setFormError('Khong tim thay tai lieu duoc chon.');
+    if (!activeSubject) {
+      setFormError('Vui long chon mon hoc truoc khi tao topic.');
       return;
     }
 
     setIsSubmitting(true);
     setFormError('');
     try {
-      if (modalMode === 'create') {
-        await addTopicToDocument(selectedDocument.document_id, { topic_name: formTopicName });
-      } else if (selectedTopic) {
-        await updateTeacherTopicName(selectedTopic.topic_id, { topic_name: formTopicName });
-      }
-
-      setIsModalOpen(false);
+      await createTopicForTeacherSubject(activeSubject.subject_id, {
+        topic_name: trimmedName,
+        description: topicDescription.trim() || undefined,
+      });
+      setTopicName('');
+      setTopicDescription('');
       await fetchData();
     } catch {
-      setFormError('Khong the luu topic. Vui long thu lai.');
+      setFormError('Khong the tao topic. Ten topic co the bi trung hoac ban khong co quyen.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleConfirmDelete = async () => {
+  const openEditModal = (topic: TeacherTopicItem) => {
+    setEditingTopic(topic);
+    setEditTopicName(topic.topic_name);
+    setEditTopicDescription(topic.description || '');
+    setEditError('');
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateTopic = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingTopic) {
+      return;
+    }
+    const trimmedName = editTopicName.trim();
+    if (!trimmedName) {
+      setEditError('Vui long nhap ten topic.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setEditError('');
+    try {
+      await updateTeacherSubjectTopic(editingTopic.topic_id, {
+        topic_name: trimmedName,
+        description: editTopicDescription.trim() || undefined,
+      });
+      setIsEditModalOpen(false);
+      setEditingTopic(null);
+      await fetchData();
+    } catch {
+      setEditError('Khong the cap nhat topic. Ten topic co the bi trung hoac ban khong co quyen.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteTopic = async () => {
     if (!deleteTarget) {
       return;
     }
 
     setIsDeleting(true);
     try {
-      await removeTopicFromDocument(deleteTarget.document.document_id, deleteTarget.topic.topic_id);
+      await softDeleteTeacherSubjectTopic(deleteTarget.topic_id);
       setDeleteTarget(null);
       await fetchData();
     } catch {
-      setFormError('Khong the xoa topic khoi tai lieu.');
+      setFormError('Khong the xoa topic. Vui long thu lai.');
     } finally {
       setIsDeleting(false);
     }
   };
 
   if (isLoading) {
-    return <LoadingState message="Dang tai du lieu teacher subjects..." />;
+    return <LoadingState message="Dang tai du lieu mon hoc va topic..." />;
   }
 
   if (error) {
@@ -144,11 +161,11 @@ export default function TeacherSubjectsPage() {
       <div className="pb-20 space-y-8">
         <h1 className="text-5xl italic font-black leading-none tracking-tighter uppercase text-slate-900">
           Quan ly <br />
-          <span className="text-[#b20112]">topic theo tai lieu</span>
+          <span className="text-[#b20112]">topic theo mon hoc</span>
         </h1>
         <div className="border-4 border-dashed border-slate-100 rounded-[3rem] p-16 flex flex-col items-center text-center">
           <span className="mb-6 text-6xl material-symbols-outlined text-slate-100">menu_book</span>
-          <p className="text-sm font-black tracking-widest uppercase text-slate-400">Chua co tai lieu nao de quan ly topic</p>
+          <p className="text-sm font-black tracking-widest uppercase text-slate-400">Ban chua duoc phan cong mon hoc nao</p>
         </div>
       </div>
     );
@@ -160,15 +177,18 @@ export default function TeacherSubjectsPage() {
         <div>
           <h1 className="text-5xl italic font-black leading-none tracking-tighter uppercase text-slate-900">
             Quan ly <br />
-            <span className="text-[#b20112]">topic theo tai lieu</span>
+            <span className="text-[#b20112]">topic theo mon hoc</span>
           </h1>
-          <p className="mt-4 font-medium text-slate-500">Theo doi cac tai lieu cua tung mon hoc va gan topic truc tiep theo document.</p>
+          <p className="mt-4 font-medium text-slate-500">Tao topic cho tung mon hoc ban dang phu trach. Topic co the duoc dung o cac luong khac.</p>
         </div>
+        <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
+          {totalTopics} topic
+        </span>
       </div>
 
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-4">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Mon hoc co tai lieu</h3>
+          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Mon hoc cua ban</h3>
           <div className="space-y-2">
             {subjects.map((subject) => (
               <button
@@ -184,7 +204,7 @@ export default function TeacherSubjectsPage() {
                   <p className={`text-sm font-black transition-colors ${activeSubjectId === subject.subject_id ? 'text-[#b20112]' : 'text-slate-600'}`}>
                     {subject.subject_name}
                   </p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{subject.documents.length} tai lieu</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{subject.topics.length} topic</p>
                 </div>
                 <span
                   className={`material-symbols-outlined text-xl transition-all ${
@@ -199,91 +219,85 @@ export default function TeacherSubjectsPage() {
         </div>
 
         <div className="space-y-6 lg:col-span-8">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-              Danh sach tai lieu va topic cua {activeSubject?.subject_name || 'mon hoc'}
-            </h3>
-            <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
-              {totalTopics} topic
-            </span>
+          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+            Topic cua {activeSubject?.subject_name || 'mon hoc'}
+          </h3>
+
+          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+            <form onSubmit={handleCreateTopic} className="space-y-4">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Tao topic moi</label>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="text"
+                  placeholder="Vi du: Chuong 1: Gioi thieu"
+                  value={topicName}
+                  onChange={(event) => setTopicName(event.target.value)}
+                  className="flex-1 p-4 text-xs font-bold border-none rounded-2xl bg-slate-50 focus:ring-2 focus:ring-red-500/20"
+                  disabled={isSubmitting || !activeSubject}
+                />
+                <textarea
+                  placeholder="Mo ta topic (tuy chon)"
+                  value={topicDescription}
+                  onChange={(event) => setTopicDescription(event.target.value)}
+                  className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50 focus:ring-2 focus:ring-red-500/20 min-h-20"
+                  disabled={isSubmitting || !activeSubject}
+                />
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !activeSubject}
+                  className="bg-[#b20112] text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 hover:bg-black transition-all disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Dang tao...' : 'Them topic'}
+                </button>
+              </div>
+              {formError && (
+                <div className="p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-3">
+                  <span className="text-sm material-symbols-outlined">error</span> {formError}
+                </div>
+              )}
+            </form>
           </div>
 
-          {!activeSubject || !activeSubject.documents.length ? (
+          {!activeSubject || !activeSubject.topics.length ? (
             <div className="border-4 border-dashed border-slate-100 rounded-[3rem] p-20 flex flex-col items-center text-center">
-              <span className="mb-6 text-6xl material-symbols-outlined text-slate-100">description</span>
-              <p className="text-sm font-black tracking-widest uppercase text-slate-400">Mon hoc nay chua co tai lieu</p>
+              <span className="mb-6 text-6xl material-symbols-outlined text-slate-100">topic</span>
+              <p className="text-sm font-black tracking-widest uppercase text-slate-400">Mon hoc nay chua co topic nao</p>
             </div>
           ) : (
-            <div className="space-y-5">
-              {activeSubject.documents.map((document, index) => (
-                <div key={document.document_id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div className="flex items-start gap-3">
-                      <span className="w-8 h-8 rounded-lg bg-red-50 text-[#b20112] flex items-center justify-center text-xs font-black">{index + 1}</span>
-                      <div>
-                        <h4 className="text-lg font-black leading-snug tracking-tight text-slate-800">{document.title}</h4>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">
-                          Document ID: {document.document_id}
-                        </p>
-                      </div>
+            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+              <div className="flex flex-wrap gap-3">
+                {activeSubject.topics.map((topic) => (
+                  <div key={`${activeSubject.subject_id}-${topic.topic_id}`} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-100">
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">{topic.topic_name}</p>
+                      {topic.description && <p className="text-[10px] font-medium text-slate-400 mt-1">{topic.description}</p>}
                     </div>
-
-                    <button
-                      onClick={() => handleOpenAddTopic(document)}
-                      className="bg-[#b20112] text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 hover:bg-black transition-all disabled:opacity-50"
-                      disabled={isSubmitting || isDeleting}
-                    >
-                      Them topic
+                    <button onClick={() => openEditModal(topic)} className="text-slate-400 hover:text-[#b20112] transition-colors" title="Cap nhat topic">
+                      <span className="material-symbols-outlined text-base">edit</span>
+                    </button>
+                    <button onClick={() => setDeleteTarget(topic)} className="text-slate-400 hover:text-red-600 transition-colors" title="Xoa mem topic">
+                      <span className="material-symbols-outlined text-base">delete</span>
                     </button>
                   </div>
-
-                  {!document.topics.length ? (
-                    <p className="mt-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Tai lieu nay chua co topic nao.</p>
-                  ) : (
-                    <div className="mt-6 flex flex-wrap gap-3">
-                      {document.topics.map((topic) => (
-                        <div key={`${document.document_id}-${topic.topic_id}`} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-100">
-                          <span className="text-xs font-bold text-slate-700">{topic.topic_name}</span>
-                          <button
-                            onClick={() => handleOpenEditTopic(document, topic)}
-                            className="text-slate-400 hover:text-[#b20112] transition-colors"
-                            title="Sua topic"
-                          >
-                            <span className="material-symbols-outlined text-base">edit</span>
-                          </button>
-                          <button
-                            onClick={() => setDeleteTarget({ document, topic })}
-                            className="text-slate-400 hover:text-red-600 transition-colors"
-                            title="Xoa topic khoi tai lieu"
-                          >
-                            <span className="material-symbols-outlined text-base">delete</span>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {isModalOpen && (
+      {isEditModalOpen && editingTopic && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
             <div className="p-10">
               <div className="flex items-center justify-between mb-8">
                 <div>
                   <h2 className="text-2xl italic font-black tracking-tighter uppercase text-slate-900">
-                    {modalMode === 'create' ? 'Them moi' : 'Chinh sua'} <span className="text-[#b20112]">topic</span>
+                    Cap nhat <span className="text-[#b20112]">topic</span>
                   </h2>
-                  <p className="text-slate-400 text-[10px] font-black uppercase mt-1 tracking-widest">
-                    Tai lieu: {selectedDocument?.title || 'N/A'}
-                  </p>
                 </div>
                 <button
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => setIsEditModalOpen(false)}
                   className="flex items-center justify-center w-12 h-12 transition-all cursor-pointer rounded-2xl bg-slate-50 text-slate-400 hover:bg-slate-100"
                   disabled={isSubmitting}
                 >
@@ -291,29 +305,37 @@ export default function TeacherSubjectsPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleUpdateTopic} className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Ten topic</label>
                   <input
                     type="text"
-                    placeholder="Vi du: Chuong 1: Gioi thieu"
-                    value={formTopicName}
-                    onChange={(event) => setFormTopicName(event.target.value)}
+                    value={editTopicName}
+                    onChange={(event) => setEditTopicName(event.target.value)}
                     className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50 focus:ring-2 focus:ring-red-500/20"
                     disabled={isSubmitting}
                   />
                 </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Mo ta topic</label>
+                  <textarea
+                    value={editTopicDescription}
+                    onChange={(event) => setEditTopicDescription(event.target.value)}
+                    className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50 focus:ring-2 focus:ring-red-500/20 min-h-24"
+                    disabled={isSubmitting}
+                  />
+                </div>
 
-                {formError && (
+                {editError && (
                   <div className="p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-3">
-                    <span className="text-sm material-symbols-outlined">error</span> {formError}
+                    <span className="text-sm material-symbols-outlined">error</span> {editError}
                   </div>
                 )}
 
                 <div className="flex justify-end gap-4 pt-4 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => setIsModalOpen(false)}
+                    onClick={() => setIsEditModalOpen(false)}
                     className="px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all"
                     disabled={isSubmitting}
                   >
@@ -339,9 +361,9 @@ export default function TeacherSubjectsPage() {
             <div className="w-16 h-16 bg-red-50 text-[#b20112] rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-3xl material-symbols-outlined">warning</span>
             </div>
-            <h3 className="mb-2 text-xl font-black text-slate-900">Xac nhan xoa topic khoi tai lieu</h3>
+            <h3 className="mb-2 text-xl font-black text-slate-900">Xac nhan xoa mem topic</h3>
             <p className="mb-6 text-xs leading-relaxed text-slate-500">
-              Ban chac chan muon xoa topic <strong>{deleteTarget.topic.topic_name}</strong> khoi tai lieu nay?
+              Ban chac chan muon xoa topic <strong>{deleteTarget.topic_name}</strong>?
             </p>
             <div className="flex justify-center gap-3">
               <button
@@ -352,7 +374,7 @@ export default function TeacherSubjectsPage() {
                 Huy bo
               </button>
               <button
-                onClick={handleConfirmDelete}
+                onClick={handleDeleteTopic}
                 className="px-6 py-3 rounded-xl bg-[#b20112] text-white text-xs font-black hover:bg-red-700 transition-all disabled:opacity-50"
                 disabled={isDeleting}
               >

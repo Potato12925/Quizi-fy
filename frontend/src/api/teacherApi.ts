@@ -4,7 +4,7 @@ import { api } from './client';
 export interface DbDocument {
   document_id: number;
   teacher_id: number;
-  subject_id: number;
+  subject_id: number | null;
   topic_id?: number;
   title: string;
   description?: string;
@@ -15,7 +15,7 @@ export interface DbDocument {
   status: string;
   created_at: string;
   updated_at?: string;
-  subject?: { subject_id: number; subject_name: string };
+  subject?: { subject_id: number | null; subject_name: string };
   topics?: { topic_id: number; topic_name: string }[];
   ai_request_count?: number;
   question_count?: number;
@@ -139,7 +139,7 @@ export const mapDbDocumentToTeacherResource = (db: DbDocument, usage: number = 0
   topic: db.topics?.[0]?.topic_name || topicName || 'Tong quan',
   description: db.description,
   status: db.status,
-  subjectId: db.subject_id,
+  subjectId: db.subject_id ?? undefined,
   topicIds: db.topics?.map((topic) => topic.topic_id) || [],
 });
 
@@ -607,14 +607,15 @@ export const getResources = async (userId: number): Promise<TeacherResource[]> =
     subjects.map((subject) => [subject.subject_id, subject.subject_name]),
   );
 
-  return dbDocs.map((doc) =>
-    mapDbDocumentToTeacherResource(doc, 0, subjectNameById.get(doc.subject_id) || 'N/A'),
-  );
+  return dbDocs.map((doc) => {
+    const sid = doc.subject_id ?? doc.subject?.subject_id ?? null;
+    const resolvedName = sid ? subjectNameById.get(sid) || doc.subject?.subject_name || 'N/A' : doc.subject?.subject_name || 'N/A';
+    return mapDbDocumentToTeacherResource(doc, 0, resolvedName);
+  });
 };
 
 export interface UploadResourcePayload {
   title: string;
-  subject_id: number;
   topic_id?: number;
   topic_ids?: number[];
   description?: string;
@@ -624,7 +625,7 @@ export interface UploadResourcePayload {
 export interface TeacherDocument {
   document_id: number;
   teacher_id: number;
-  subject_id: number;
+  subject_id: number | null;
   title: string;
   description?: string;
   file_url: string;
@@ -633,7 +634,7 @@ export interface TeacherDocument {
   status: string;
   created_at: string;
   updated_at?: string;
-  subject: { subject_id: number; subject_name: string };
+  subject: { subject_id: number | null; subject_name: string };
   topics: { topic_id: number; topic_name: string }[];
   ai_request_count?: number;
   question_count?: number;
@@ -666,7 +667,11 @@ export const getSubjects = async (userId: number): Promise<DbSubject[]> => {
 
   const subjects = subjectsRes.data || [];
   const docs = (docsRes.data || []).filter((doc) => doc.teacher_id === userId);
-  const subjectIds = new Set(docs.map((doc) => doc.subject_id));
+  const subjectIds = new Set(
+    docs
+      .map((doc) => doc.subject_id ?? doc.subject?.subject_id ?? null)
+      .filter((id): id is number => id !== null),
+  );
   return subjects.filter((subject) => subjectIds.has(subject.subject_id));
 };
 
@@ -687,7 +692,6 @@ export const uploadDocument = async (payload: UploadResourcePayload): Promise<Db
   const formData = new FormData();
   formData.append('file', payload.file);
   formData.append('title', payload.title);
-  formData.append('subject_id', payload.subject_id.toString());
   if (payload.topic_id !== undefined) formData.append('topic_ids', payload.topic_id.toString());
   for (const topicId of payload.topic_ids || []) {
     formData.append('topic_ids', topicId.toString());

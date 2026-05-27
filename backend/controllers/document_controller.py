@@ -19,7 +19,6 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
 
 @router.post("/upload", summary="Upload document for assigned subject")
 async def upload_document_route(
-    subject_id: int = Form(..., ge=1),
     topic_ids: list[int] = Form(default=[]),
     title: str = Form(..., min_length=1, max_length=500),
     description: str | None = Form(default=None, max_length=1000),
@@ -28,7 +27,6 @@ async def upload_document_route(
 ):
     try:
         payload = DocumentUploadRequest(
-            subject_id=subject_id,
             topic_ids=topic_ids,
             title=title,
             description=description,
@@ -111,7 +109,6 @@ async def put_document(
     record_id: int,
     title: str | None = Form(default=None),
     description: str | None = Form(default=None),
-    subject_id: int | None = Form(default=None),
     topic_ids: list[int] | None = Form(default=None),
     status: str | None = Form(default=None),
     file: UploadFile | None = File(default=None),
@@ -121,7 +118,6 @@ async def put_document(
         payload = DocumentUpdateRequest(
             title=title,
             description=description,
-            subject_id=subject_id,
             topic_ids=topic_ids,
             status=status,
         )

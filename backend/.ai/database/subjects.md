@@ -1,8 +1,8 @@
-﻿# Table: `subjects`
+# Table: `subjects`
 
 ## Purpose
 
-Documentation for `subjects` table.
+Top-level subject catalog.
 
 ## Columns
 
@@ -19,19 +19,12 @@ Documentation for `subjects` table.
 
 ## Relationships
 
+- topics.subject_id -> subjects.subject_id
 - class_subjects.subject_id -> subjects.subject_id
-- documents.subject_id -> subjects.subject_id
 - practice_sets.subject_id -> subjects.subject_id
 
 ## Recommended Supabase Queries
 
 ```sql
-select * from subjects limit 20;
+select subject_id, subject_code, subject_name from subjects limit 20;
 ```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
-

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getSubjects, getTopics, type DbSubject, type DbTopic } from '@/api/teacherApi';
 import {
   getTeacherDocuments,
   softDeleteTeacherDocument,
@@ -8,6 +7,12 @@ import {
   uploadTeacherDocument,
   type TeacherDocument,
 } from '@/api/teacherDocumentApi';
+import {
+  getTeacherSubjectsWithTopics,
+  getTeacherTopicsBySubject,
+  type TeacherSubjectItem,
+  type TeacherTopicItem,
+} from '@/api/teacherTopicManagementApi';
 import LoadingState from '@/components/common/LoadingState';
 import ErrorState from '@/components/common/ErrorState';
 
@@ -23,8 +28,8 @@ const fmtDate = (value: string) => new Date(value).toLocaleDateString('vi-VN');
 
 export default function TeacherResourcesPage() {
   const [resources, setResources] = useState<TeacherDocument[]>([]);
-  const [subjects, setSubjects] = useState<DbSubject[]>([]);
-  const [topics, setTopics] = useState<DbTopic[]>([]);
+  const [subjects, setSubjects] = useState<TeacherSubjectItem[]>([]);
+  const [topicsBySubject, setTopicsBySubject] = useState<Record<number, TeacherTopicItem[]>>({});
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -41,25 +46,35 @@ export default function TeacherResourcesPage() {
 
   const [formData, setFormData] = useState({
     title: '',
-    subjectId: 0,
+    subjectId: '',
     topicIds: [] as number[],
     description: '',
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [modalTopics, setModalTopics] = useState<TeacherTopicItem[]>([]);
+  const [isModalTopicsLoading, setIsModalTopicsLoading] = useState(false);
+  const [modalTopicError, setModalTopicError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchData = async () => {
     setIsLoading(true);
     setError('');
     try {
-      const [docRes, subjectRes, topicRes] = await Promise.all([
+      const [docRes, subjectWithTopics] = await Promise.all([
         getTeacherDocuments({ page: 1, limit: 100, status: 'active' }),
-        getSubjects(0),
-        getTopics(0),
+        getTeacherSubjectsWithTopics(),
       ]);
       setResources(docRes.items);
-      setSubjects(subjectRes);
-      setTopics(topicRes);
+      const nextSubjects = subjectWithTopics.map((subject) => ({
+        subject_id: subject.subject_id,
+        subject_name: subject.subject_name,
+      }));
+      const nextTopicsBySubject: Record<number, TeacherTopicItem[]> = {};
+      for (const subject of subjectWithTopics) {
+        nextTopicsBySubject[subject.subject_id] = subject.topics;
+      }
+      setSubjects(nextSubjects);
+      setTopicsBySubject(nextTopicsBySubject);
     } catch {
       setError('Khong the tai du lieu');
     } finally {
@@ -71,6 +86,13 @@ export default function TeacherResourcesPage() {
     fetchData();
   }, []);
 
+  const visibleFilterTopics = useMemo(() => {
+    if (filterSubject === 'all') {
+      return Object.values(topicsBySubject).flat();
+    }
+    return topicsBySubject[Number(filterSubject)] || [];
+  }, [filterSubject, topicsBySubject]);
+
   const filteredResources = useMemo(() => {
     return resources.filter((resource) => {
       if (searchQuery && !resource.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -80,28 +102,75 @@ export default function TeacherResourcesPage() {
     });
   }, [resources, searchQuery, filterSubject, filterTopic]);
 
+  useEffect(() => {
+    setFilterTopic('all');
+  }, [filterSubject]);
+
+  const loadTopicsForModalSubject = async (subjectId: number) => {
+    setIsModalTopicsLoading(true);
+    setModalTopicError('');
+    try {
+      const cached = topicsBySubject[subjectId];
+      if (cached) {
+        setModalTopics(cached);
+        return;
+      }
+      const response = await getTeacherTopicsBySubject(subjectId);
+      const topicItems = response.items;
+      setModalTopics(topicItems);
+      setTopicsBySubject((prev) => ({ ...prev, [subjectId]: topicItems }));
+    } catch {
+      setModalTopics([]);
+      setModalTopicError('Khong the tai danh sach topic cho mon hoc da chon');
+    } finally {
+      setIsModalTopicsLoading(false);
+    }
+  };
+
+  const handleModalSubjectChange = async (subjectIdValue: string, resetTopics: boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      subjectId: subjectIdValue,
+      topicIds: resetTopics ? [] : prev.topicIds,
+    }));
+    setModalTopicError('');
+    if (!subjectIdValue) {
+      setModalTopics([]);
+      return;
+    }
+    await loadTopicsForModalSubject(Number(subjectIdValue));
+  };
+
   const handleOpenUpload = () => {
-    const defaultSubjectId = subjects[0]?.subject_id || 0;
     setModalMode('upload');
     setSelectedResource(null);
-    setFormData({ title: '', subjectId: defaultSubjectId, topicIds: [], description: '' });
+    setFormData({ title: '', subjectId: '', topicIds: [], description: '' });
     setSelectedFile(null);
+    setModalTopics([]);
+    setModalTopicError('');
     setFormError('');
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (resource: TeacherDocument) => {
+  const handleOpenEdit = async (resource: TeacherDocument) => {
     setModalMode('edit');
     setSelectedResource(resource);
+    const subjectId = resource.subject_id ? String(resource.subject_id) : '';
     setFormData({
       title: resource.title,
-      subjectId: resource.subject_id,
+      subjectId,
       topicIds: resource.topics.map((topic) => topic.topic_id),
       description: resource.description || '',
     });
     setSelectedFile(null);
+    setModalTopicError('');
     setFormError('');
     setIsModalOpen(true);
+    if (subjectId) {
+      await loadTopicsForModalSubject(Number(subjectId));
+    } else {
+      setModalTopics([]);
+    }
   };
 
   const handleDelete = async (resource: TeacherDocument) => {
@@ -147,6 +216,10 @@ export default function TeacherResourcesPage() {
       setFormError('Vui long chon mon hoc');
       return;
     }
+    if (formData.topicIds.length === 0) {
+      setFormError('Vui long chon it nhat 1 topic');
+      return;
+    }
     if (modalMode === 'upload' && !selectedFile) {
       setFormError('Vui long chon file');
       return;
@@ -159,7 +232,6 @@ export default function TeacherResourcesPage() {
       if (modalMode === 'upload' && selectedFile) {
         const created = await uploadTeacherDocument({
           title: formData.title,
-          subject_id: formData.subjectId,
           topic_ids: formData.topicIds,
           description: formData.description || undefined,
           file: selectedFile,
@@ -168,7 +240,6 @@ export default function TeacherResourcesPage() {
       } else if (selectedResource) {
         const updated = await updateTeacherDocument(selectedResource.document_id, {
           title: formData.title,
-          subject_id: formData.subjectId,
           topic_ids: formData.topicIds,
           description: formData.description || undefined,
           file: selectedFile || undefined,
@@ -212,7 +283,7 @@ export default function TeacherResourcesPage() {
         </select>
         <select value={filterTopic} onChange={(e) => setFilterTopic(e.target.value)} className="px-6 py-3 rounded-xl bg-slate-50 border-none text-[10px] font-black uppercase tracking-widest text-slate-500">
           <option value="all">Tat ca topic</option>
-          {topics.map((topic) => <option key={topic.topic_id} value={String(topic.topic_id)}>{topic.topic_name}</option>)}
+          {visibleFilterTopics.map((topic) => <option key={topic.topic_id} value={String(topic.topic_id)}>{topic.topic_name}</option>)}
         </select>
       </div>
 
@@ -238,6 +309,13 @@ export default function TeacherResourcesPage() {
               </div>
             </div>
             <div className="text-xs text-slate-500 mb-4">{resource.description || 'Khong co mo ta'}</div>
+            <div className="mb-4 flex flex-wrap gap-2">
+              {resource.topics.map((topic) => (
+                <span key={`${resource.document_id}-${topic.topic_id}`} className="bg-red-50 text-[#b20112] px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">
+                  {topic.topic_name}
+                </span>
+              ))}
+            </div>
             <div className="flex items-end justify-between pt-6 border-t border-slate-50">
               <div>
                 <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Ngay tai len</p>
@@ -277,17 +355,55 @@ export default function TeacherResourcesPage() {
 
                 <input type="text" value={formData.title} onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))} placeholder="Ten tai lieu" className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50" />
 
-                <select value={formData.subjectId} onChange={(e) => setFormData((prev) => ({ ...prev, subjectId: Number(e.target.value) }))} className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50">
-                  <option value={0}>Chon mon hoc</option>
-                  {subjects.map((subject) => <option key={subject.subject_id} value={subject.subject_id}>{subject.subject_name}</option>)}
+                <select
+                  value={formData.subjectId}
+                  onChange={(e) => handleModalSubjectChange(e.target.value, true)}
+                  className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50"
+                >
+                  <option value="">Chon mon hoc</option>
+                  {subjects.map((subject) => (
+                    <option key={subject.subject_id} value={String(subject.subject_id)}>
+                      {subject.subject_name}
+                    </option>
+                  ))}
                 </select>
 
-                <select multiple value={formData.topicIds.map(String)} onChange={(e) => {
-                  const values = Array.from(e.target.selectedOptions).map((o) => Number(o.value));
-                  setFormData((prev) => ({ ...prev, topicIds: values }));
-                }} className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50 min-h-28">
-                  {topics.map((topic) => <option key={topic.topic_id} value={topic.topic_id}>{topic.topic_name}</option>)}
-                </select>
+                <div className="w-full p-4 rounded-2xl bg-slate-50 min-h-28 disabled:opacity-60">
+                  {!formData.subjectId ? (
+                    <p className="text-xs font-bold text-slate-400">Vui long chon mon hoc truoc</p>
+                  ) : modalTopics.length === 0 ? (
+                    <p className="text-xs font-bold text-slate-400">Khong co topic</p>
+                  ) : (
+                    <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                      {modalTopics.map((topic) => {
+                        const checked = formData.topicIds.includes(topic.topic_id);
+                        return (
+                          <label key={topic.topic_id} className="flex items-center gap-3 text-xs font-bold text-slate-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              disabled={!formData.subjectId || isModalTopicsLoading}
+                              checked={checked}
+                              onChange={(e) => {
+                                const isChecked = e.target.checked;
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  topicIds: isChecked
+                                    ? [...prev.topicIds, topic.topic_id]
+                                    : prev.topicIds.filter((id) => id !== topic.topic_id),
+                                }));
+                              }}
+                              className="w-4 h-4 accent-[#b20112]"
+                            />
+                            <span>{topic.topic_name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                {!formData.subjectId && <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Chon mon hoc de hien thi topic</p>}
+                {isModalTopicsLoading && <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Dang tai topic...</p>}
+                {modalTopicError && <p className="text-[10px] font-black uppercase tracking-widest text-red-500">{modalTopicError}</p>}
 
                 <textarea rows={3} value={formData.description} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Mo ta" className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50" />
 

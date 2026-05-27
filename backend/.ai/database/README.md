@@ -10,6 +10,10 @@
 - Schema Management: Supabase CLI migrations
 - Architecture Target: Production-ready multi-role learning platform
 
+## ARCHITECTURE_OVERVIEW
+
+- .ai/database/ARCHITECTURE_OVERVIEW.md
+
 ## Architecture Principles
 
 - Avoid ORM abstraction

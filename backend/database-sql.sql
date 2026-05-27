@@ -1,11 +1,11 @@
--- =========================================================
--- BKP SYSTEM DATABASE
--- SUPABASE READY VERSION
--- UPDATED RELATIONSHIPS
--- =========================================================
 
 -- =========================================================
--- DROP OLD TABLES
+-- BKP SYSTEM DATABASE
+-- UPDATED VERSION
+-- CHANGES:
+-- 1. topics thêm subject_id
+-- 2. documents bỏ subject_id
+-- 3. ai_requests dùng document_topic_id
 -- =========================================================
 
 DROP TABLE IF EXISTS student_answers CASCADE;
@@ -35,10 +35,6 @@ DROP TYPE IF EXISTS ai_request_status CASCADE;
 DROP TYPE IF EXISTS question_source CASCADE;
 DROP TYPE IF EXISTS question_status CASCADE;
 DROP TYPE IF EXISTS practice_attempt_status CASCADE;
-
--- =========================================================
--- EXTENSIONS
--- =========================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -91,13 +87,11 @@ CREATE TABLE users (
     user_id BIGSERIAL PRIMARY KEY,
 
     username VARCHAR(100) UNIQUE NOT NULL,
-
     password_hash VARCHAR(255) NOT NULL,
 
     full_name VARCHAR(255) NOT NULL,
 
     is_active BOOLEAN DEFAULT TRUE,
-
     must_change_password BOOLEAN DEFAULT TRUE,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -185,7 +179,6 @@ CREATE TABLE subjects (
     subject_id BIGSERIAL PRIMARY KEY,
 
     subject_code VARCHAR(50) UNIQUE NOT NULL,
-
     subject_name VARCHAR(255) NOT NULL,
 
     description TEXT,
@@ -199,18 +192,33 @@ CREATE TABLE subjects (
 
 -- =========================================================
 -- TOPICS
+-- UPDATED: thêm subject_id
 -- =========================================================
 
 CREATE TABLE topics (
     topic_id BIGSERIAL PRIMARY KEY,
 
-    topic_name VARCHAR(255) NOT NULL UNIQUE,
+    subject_id BIGINT NOT NULL,
+
+    topic_name VARCHAR(255) NOT NULL,
 
     description TEXT,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP,
+
+    CONSTRAINT fk_topics_subject
+        FOREIGN KEY(subject_id)
+        REFERENCES subjects(subject_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_topic_subject
+        UNIQUE(subject_id, topic_name)
 );
+
+CREATE INDEX idx_topics_subject
+ON topics(subject_id);
 
 -- =========================================================
 -- CLASS SUBJECTS
@@ -318,13 +326,13 @@ CREATE TABLE class_teachers (
 
 -- =========================================================
 -- DOCUMENTS
+-- UPDATED: bỏ subject_id
 -- =========================================================
 
 CREATE TABLE documents (
     document_id BIGSERIAL PRIMARY KEY,
 
     teacher_id BIGINT NOT NULL,
-    subject_id BIGINT NOT NULL,
 
     title VARCHAR(500) NOT NULL,
 
@@ -345,22 +353,17 @@ CREATE TABLE documents (
 
     CONSTRAINT fk_documents_teacher
         FOREIGN KEY(teacher_id)
-        REFERENCES users(user_id),
-
-    CONSTRAINT fk_documents_subject
-        FOREIGN KEY(subject_id)
-        REFERENCES subjects(subject_id)
+        REFERENCES users(user_id)
 );
 
 CREATE INDEX idx_documents_teacher_created
 ON documents(teacher_id, created_at);
 
-CREATE INDEX idx_documents_subject_status
-ON documents(subject_id, status);
+CREATE INDEX idx_documents_status
+ON documents(status);
 
 -- =========================================================
 -- DOCUMENT TOPICS
--- MANY TO MANY
 -- =========================================================
 
 CREATE TABLE document_topics (
@@ -393,12 +396,13 @@ ON document_topics(topic_id);
 
 -- =========================================================
 -- AI REQUESTS
+-- UPDATED: dùng document_topic_id
 -- =========================================================
 
 CREATE TABLE ai_requests (
     request_id BIGSERIAL PRIMARY KEY,
 
-    document_id BIGINT NOT NULL,
+    document_topic_id BIGINT NOT NULL,
 
     num_questions INT NOT NULL,
 
@@ -417,13 +421,14 @@ CREATE TABLE ai_requests (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT fk_ai_requests_document
-        FOREIGN KEY(document_id)
-        REFERENCES documents(document_id)
+    CONSTRAINT fk_ai_requests_document_topic
+        FOREIGN KEY(document_topic_id)
+        REFERENCES document_topics(document_topic_id)
+        ON DELETE CASCADE
 );
 
-CREATE INDEX idx_ai_requests_document
-ON ai_requests(document_id);
+CREATE INDEX idx_ai_requests_document_topic
+ON ai_requests(document_topic_id);
 
 CREATE INDEX idx_ai_requests_status_created
 ON ai_requests(status, created_at);
@@ -705,21 +710,21 @@ INSERT INTO users (
 VALUES
 (
     'admin',
-    '$2b$12$7qJ0JwYQ7X7Y3WzQXQ6lE.P8T5NQwM7rjQ5y7h1v6mD1XJ5V1Yw5K',
+    '$2b$12$2PG4GGwGcNh8u2fjrdTVKe41hbycEVsuCsviJxCQrC15zaDuanWLO',
     'System Administrator',
     TRUE,
     FALSE
 ),
 (
     'teacher',
-    '$2b$12$7qJ0JwYQ7X7Y3WzQXQ6lE.P8T5NQwM7rjQ5y7h1v6mD1XJ5V1Yw5K',
+    '$2b$12$2PG4GGwGcNh8u2fjrdTVKe41hbycEVsuCsviJxCQrC15zaDuanWLO',
     'Default Teacher',
     TRUE,
     FALSE
 ),
 (
     'student',
-    '$2b$12$7qJ0JwYQ7X7Y3WzQXQ6lE.P8T5NQwM7rjQ5y7h1v6mD1XJ5V1Yw5K',
+    '$2b$12$2PG4GGwGcNh8u2fjrdTVKe41hbycEVsuCsviJxCQrC15zaDuanWLO',
     'Default Student',
     TRUE,
     FALSE
@@ -752,7 +757,7 @@ ON (
 );
 
 -- =========================================================
--- UPDATE UPDATED_AT FUNCTION
+-- UPDATED_AT FUNCTION
 -- =========================================================
 
 CREATE OR REPLACE FUNCTION update_updated_at_column()

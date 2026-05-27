@@ -11,7 +11,14 @@ from schemas.ai_request_schema import AiRequestCreateRequest, AiRequestUpdateReq
 
 
 async def create_ai_request(payload: AiRequestCreateRequest) -> dict:
-    return await create_ai_request_record({ "teacher_id": payload.teacher_id, "document_id": payload.document_id, "num_questions": payload.num_questions, "difficulty": payload.difficulty })
+    return await create_ai_request_record(
+        {
+            "document_topic_id": payload.document_topic_id,
+            "num_questions": payload.num_questions,
+            "difficulty": payload.difficulty,
+            "content_scope": payload.content_scope,
+        }
+    )
 
 
 async def get_ai_request_by_id(record_id: int) -> dict:

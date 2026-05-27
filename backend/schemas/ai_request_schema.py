@@ -2,10 +2,10 @@ from pydantic import BaseModel, Field
 
 
 class AiRequestCreateRequest(BaseModel):
-    teacher_id: int = Field(ge=1)
-    document_id: int = Field(ge=1)
+    document_topic_id: int = Field(ge=1)
     num_questions: int = Field(ge=1)
     difficulty: str = Field(min_length=1)
+    content_scope: str | None = None
 
 
 class AiRequestUpdateRequest(BaseModel):
@@ -14,3 +14,4 @@ class AiRequestUpdateRequest(BaseModel):
     status: str | None = None
     generated_question_count: int | None = Field(default=None, ge=0)
     retry_count: int | None = Field(default=None, ge=0)
+    error_message: str | None = None

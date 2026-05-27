@@ -41,6 +41,19 @@ def _decode_jwt_token(token: str) -> dict:
             detail="Invalid token",
         ) from exc
 
+
+def _extract_roles_from_payload(payload: dict) -> list[str]:
+    """
+    Prefer role claims embedded in JWT to avoid DB round-trips on every request.
+    Falls back to database lookup only when token has no valid roles claim.
+    """
+    raw_roles = payload.get("roles")
+    if isinstance(raw_roles, list):
+        return [str(role) for role in raw_roles if str(role).strip()]
+    if isinstance(raw_roles, str) and raw_roles.strip():
+        return [raw_roles.strip()]
+    return []
+
 async def require_authenticated_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(
@@ -65,9 +78,9 @@ async def require_authenticated_user(
             detail="Invalid token payload",
         )
 
-    roles = await find_role_codes_by_user_id(
-        user_id
-    )
+    roles = _extract_roles_from_payload(payload)
+    if not roles:
+        roles = await find_role_codes_by_user_id(user_id)
 
     current_user = CurrentUser(
         user_id=user_id,

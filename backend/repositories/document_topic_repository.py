@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 
 from core.supabase import SupabaseManager
 
@@ -55,3 +55,43 @@ async def delete_document_topic_by_id(record_id: int) -> bool:
     response = await asyncio.to_thread(lambda: query.execute())
     rows = response.data or []
     return len(rows) > 0
+
+
+async def list_by_document_id(document_id: int) -> list[dict]:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("document_topics")
+        .select("document_topic_id,document_id,topic_id,topics(topic_id,topic_name,subject_id,subjects(subject_id,subject_name))")
+        .eq("document_id", document_id)
+        .order("document_topic_id")
+        .execute()
+    )
+    return response.data or []
+
+
+async def delete_by_document_id(document_id: int) -> None:
+    supabase = SupabaseManager.get_client()
+    await asyncio.to_thread(
+        lambda: supabase.table("document_topics")
+        .delete()
+        .eq("document_id", document_id)
+        .execute()
+    )
+
+
+async def bulk_create_document_topics(document_id: int, topic_ids: list[int]) -> None:
+    if not topic_ids:
+        return
+    supabase = SupabaseManager.get_client()
+    payload = [{"document_id": document_id, "topic_id": topic_id} for topic_id in sorted(set(topic_ids))]
+    await asyncio.to_thread(
+        lambda: supabase.table("document_topics")
+        .insert(payload)
+        .execute()
+    )
+
+
+async def replace_topics_for_document(document_id: int, topic_ids: list[int]) -> list[dict]:
+    await delete_by_document_id(document_id)
+    await bulk_create_document_topics(document_id, topic_ids)
+    return await list_by_document_id(document_id)

@@ -1,13 +1,11 @@
-import asyncio
-
-from core.supabase import SupabaseManager
+from core.supabase import SupabaseManager, run_supabase_execute
 
 
 async def find_user_by_username(
     username: str,
 ) -> dict | None:
     supabase = SupabaseManager.get_client()
-    response = await asyncio.to_thread(
+    response = await run_supabase_execute(
         lambda: supabase.table("users")
         .select(
             "user_id,username,password_hash,full_name,is_active,must_change_password"
@@ -25,7 +23,7 @@ async def find_user_by_id(
     user_id: int,
 ) -> dict | None:
     supabase = SupabaseManager.get_client()
-    response = await asyncio.to_thread(
+    response = await run_supabase_execute(
         lambda: supabase.table("users")
         .select(
             "user_id,username,password_hash,full_name,is_active,must_change_password,created_at,updated_at,deleted_at"
@@ -41,7 +39,7 @@ async def find_user_by_id(
 
 async def find_role_id_by_code(role_code: str) -> int | None:
     supabase = SupabaseManager.get_client()
-    response = await asyncio.to_thread(
+    response = await run_supabase_execute(
         lambda: supabase.table("roles")
         .select("role_id")
         .eq("role_code", role_code)
@@ -59,7 +57,7 @@ async def add_user_role(
     role_id: int,
 ) -> None:
     supabase = SupabaseManager.get_client()
-    await asyncio.to_thread(
+    await run_supabase_execute(
         lambda: supabase.table("user_roles")
         .insert({"user_id": user_id, "role_id": role_id})
         .execute()
@@ -71,7 +69,7 @@ async def has_user_role(
     role_id: int,
 ) -> bool:
     supabase = SupabaseManager.get_client()
-    response = await asyncio.to_thread(
+    response = await run_supabase_execute(
         lambda: supabase.table("user_roles")
         .select("user_role_id")
         .eq("user_id", user_id)
@@ -85,7 +83,7 @@ async def has_user_role(
 
 async def find_role_codes_by_user_id(user_id: int) -> list[str]:
     supabase = SupabaseManager.get_client()
-    user_roles = await asyncio.to_thread(
+    user_roles = await run_supabase_execute(
         lambda: supabase.table("user_roles")
         .select("role_id")
         .eq("user_id", user_id)
@@ -97,7 +95,7 @@ async def find_role_codes_by_user_id(user_id: int) -> list[str]:
     if not role_ids:
         return []
 
-    roles = await asyncio.to_thread(
+    roles = await run_supabase_execute(
         lambda: supabase.table("roles")
         .select("role_code")
         .in_("role_id", role_ids)

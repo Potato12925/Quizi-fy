@@ -1,3 +1,4 @@
+
 Project BKP_SYSTEM {
   database_type: "PostgreSQL"
 }
@@ -148,17 +149,26 @@ Table subjects {
 
 /* =========================================================
    TOPICS
+   UPDATED: thêm subject_id
 ========================================================= */
 
 Table topics {
   topic_id bigint [pk, increment]
 
-  topic_name varchar(255) [unique, not null]
+  subject_id bigint [not null]
+
+  topic_name varchar(255) [not null]
 
   description text
 
   created_at timestamp
   updated_at timestamp
+  deleted_at timestamp
+
+  indexes {
+    (subject_id)
+    (subject_id, topic_name) [unique]
+  }
 }
 
 /* =========================================================
@@ -231,14 +241,13 @@ Table class_teachers {
 
 /* =========================================================
    DOCUMENTS
+   UPDATED: bỏ subject_id
 ========================================================= */
 
 Table documents {
   document_id bigint [pk, increment]
 
   teacher_id bigint [not null]
-
-  subject_id bigint [not null]
 
   title varchar(500) [not null]
 
@@ -260,7 +269,7 @@ Table documents {
 
   indexes {
     (teacher_id, created_at)
-    (subject_id, status)
+    (status)
   }
 }
 
@@ -286,12 +295,13 @@ Table document_topics {
 
 /* =========================================================
    AI REQUESTS
+   UPDATED: dùng document_topic_id
 ========================================================= */
 
 Table ai_requests {
   request_id bigint [pk, increment]
 
-  document_id bigint [not null]
+  document_topic_id bigint [not null]
 
   num_questions int [not null]
 
@@ -311,7 +321,7 @@ Table ai_requests {
   updated_at timestamp
 
   indexes {
-    (document_id)
+    (document_topic_id)
     (status, created_at)
   }
 }
@@ -513,6 +523,8 @@ Ref: user_roles.role_id > roles.role_id
 
 Ref: classes.owner_id > users.user_id
 
+Ref: topics.subject_id > subjects.subject_id
+
 Ref: class_subjects.class_id > classes.class_id
 Ref: class_subjects.subject_id > subjects.subject_id
 Ref: class_subjects.assigned_teacher_id > users.user_id
@@ -526,12 +538,11 @@ Ref: class_teachers.teacher_id > users.user_id
 Ref: class_teachers.added_by > users.user_id
 
 Ref: documents.teacher_id > users.user_id
-Ref: documents.subject_id > subjects.subject_id
 
 Ref: document_topics.document_id > documents.document_id
 Ref: document_topics.topic_id > topics.topic_id
 
-Ref: ai_requests.document_id > documents.document_id
+Ref: ai_requests.document_topic_id > document_topics.document_topic_id
 
 Ref: questions.teacher_id > users.user_id
 Ref: questions.document_topic_id > document_topics.document_topic_id

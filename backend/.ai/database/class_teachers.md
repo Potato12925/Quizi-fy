@@ -12,6 +12,8 @@ Documentation for `class_teachers` table.
 | `class_id` | `bigint [not null]` |
 | `teacher_id` | `bigint [not null]` |
 | `added_by` | `bigint [not null]` |
+| `joined_at` | `datetime` |
+| `deleted_at` | `datetime` |
 
 ## Relationships
 

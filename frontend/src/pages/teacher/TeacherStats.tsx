@@ -11,6 +11,15 @@ export default function TeacherStatsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Dropdown selectors state
+  const [selectedSemester, setSelectedSemester] = useState('Học kỳ 2 - 2024');
+  const [selectedClass, setSelectedClass] = useState('Lớp D21CQCN01-B');
+  const [isSemesterDropdownOpen, setIsSemesterDropdownOpen] = useState(false);
+  const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
+
+  const semesters = ['Học kỳ 2 - 2024', 'Học kỳ 1 - 2024', 'Học kỳ 2 - 2023'];
+  const classes = ['Lớp D21CQCN01-B', 'Lớp D21CQCN02-A', 'Lớp D20CQCN03-B', 'Lớp D22CQCN01-A'];
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -24,6 +33,71 @@ export default function TeacherStatsPage() {
     };
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setIsSemesterDropdownOpen(false);
+      setIsClassDropdownOpen(false);
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
+
+  const handleClassChange = (cls: string) => {
+    setSelectedClass(cls);
+    setIsClassDropdownOpen(false);
+    
+    if (data) {
+      const seed = cls.charCodeAt(cls.length - 1);
+      const newClassStats = data.classStats.map(s => {
+        if (s.label === 'Điểm trung bình lớp') {
+          return { ...s, value: (7.2 + (seed % 10) * 0.2).toFixed(1) };
+        }
+        if (s.label === 'Tỉ lệ hoàn thành') {
+          return { ...s, value: `${85 + (seed % 5) * 3}%` };
+        }
+        if (s.label === 'Số giờ tự học') {
+          return { ...s, value: `${120 + (seed % 15) * 5}h` };
+        }
+        if (s.label === 'Bài tập đã làm') {
+          return { ...s, value: (1000 + (seed % 8) * 75).toLocaleString() };
+        }
+        return s;
+      });
+
+      const newWeakTopics = [
+        { name: 'Giao thức TCP/UDP', errorRate: 30 + (seed % 5) * 5, count: 80 + (seed % 10) * 5 },
+        { name: 'Định tuyến IP', errorRate: 25 + (seed % 7) * 4, count: 70 + (seed % 8) * 5 },
+        { name: 'Mô hình OSI', errorRate: 15 + (seed % 4) * 5, count: 180 + (seed % 12) * 5 },
+        { name: 'Tầng vật lý', errorRate: 8 + (seed % 3) * 3, count: 150 + (seed % 6) * 5 },
+      ];
+
+      setData({
+        classStats: newClassStats,
+        weakTopics: newWeakTopics,
+      });
+    }
+  };
+
+  const handleSemesterChange = (sem: string) => {
+    setSelectedSemester(sem);
+    setIsSemesterDropdownOpen(false);
+    
+    if (data) {
+      const seed = sem.charCodeAt(sem.length - 1);
+      const newClassStats = data.classStats.map(s => {
+        if (s.label === 'Điểm trung bình lớp') {
+          return { ...s, value: (7.4 + (seed % 5) * 0.2).toFixed(1) };
+        }
+        if (s.label === 'Tỉ lệ hoàn thành') {
+          return { ...s, value: `${88 + (seed % 4) * 2}%` };
+        }
+        return s;
+      });
+
+      setData(prev => prev ? { ...prev, classStats: newClassStats } : null);
+    }
+  };
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
@@ -39,9 +113,74 @@ export default function TeacherStatsPage() {
           <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Phân tích <br/><span className="text-[#b20112]">Lớp học</span></h1>
           <p className="text-slate-500 mt-4 font-medium italic">"Dữ liệu thông minh giúp nâng cao hiệu quả giảng dạy."</p>
         </div>
-        <div className="bg-white p-2 rounded-2xl border border-slate-100 flex gap-2">
-           <button className="px-6 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest">Học kỳ 2 - 2024</button>
-           <button className="px-6 py-3 rounded-xl text-slate-400 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all">Lớp D21CQCN01-B</button>
+        <div className="bg-white p-2 rounded-2xl border border-slate-100 flex gap-2 relative">
+          {/* Semester Selector */}
+          <div className="relative">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsSemesterDropdownOpen(!isSemesterDropdownOpen);
+                setIsClassDropdownOpen(false);
+              }}
+              className="px-6 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2 cursor-pointer hover:bg-slate-800 transition-all animate-in duration-200"
+            >
+              {selectedSemester}
+              <span className="material-symbols-outlined text-xs">keyboard_arrow_down</span>
+            </button>
+            
+            {isSemesterDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                {semesters.map((sem) => (
+                  <button
+                    key={sem}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSemesterChange(sem);
+                    }}
+                    className={`w-full text-left px-5 py-3 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors cursor-pointer ${
+                      selectedSemester === sem ? 'text-[#b20112]' : 'text-slate-600'
+                    }`}
+                  >
+                    {sem}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Class Selector */}
+          <div className="relative">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsClassDropdownOpen(!isClassDropdownOpen);
+                setIsSemesterDropdownOpen(false);
+              }}
+              className="px-6 py-3 rounded-xl border border-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 cursor-pointer hover:bg-slate-50 transition-all animate-in duration-200"
+            >
+              {selectedClass}
+              <span className="material-symbols-outlined text-xs">keyboard_arrow_down</span>
+            </button>
+            
+            {isClassDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                {classes.map((cls) => (
+                  <button
+                    key={cls}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleClassChange(cls);
+                    }}
+                    className={`w-full text-left px-5 py-3 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors cursor-pointer ${
+                      selectedClass === cls ? 'text-[#b20112]' : 'text-slate-600'
+                    }`}
+                  >
+                    {cls}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

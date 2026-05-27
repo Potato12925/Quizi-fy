@@ -11,6 +11,9 @@ Documentation for `topics` table.
 | `topic_id` | `bigint [pk, increment]` |
 | `subject_id` | `bigint [not null]` |
 | `topic_name` | `varchar(255) [not null]` |
+| `description` | `text` |
+| `created_at` | `datetime` |
+| `updated_at` | `datetime` |
 
 ## Relationships
 

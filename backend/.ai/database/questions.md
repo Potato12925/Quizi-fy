@@ -12,10 +12,17 @@ Documentation for `questions` table.
 | `teacher_id` | `bigint [not null]` |
 | `subject_id` | `bigint [not null]` |
 | `topic_id` | `bigint [not null]` |
+| `document_id` | `bigint` |
+| `ai_request_id` | `bigint` |
 | `content` | `text [not null]` |
 | `difficulty` | `difficulty_level [not null]` |
 | `source` | `question_source [not null]` |
 | `status` | `question_status [default: 'draft']` |
+| `explanation` | `text` |
+| `approved_by` | `bigint` |
+| `created_at` | `datetime` |
+| `updated_at` | `datetime` |
+| `deleted_at` | `datetime` |
 
 ## Relationships
 

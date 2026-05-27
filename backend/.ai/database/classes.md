@@ -6,14 +6,17 @@ Documentation for `classes` table.
 
 ## Columns
 
-| Column        | Definition                          |
-| ------------- | ----------------------------------- |
-| `class_id`    | `bigint [pk, increment]`            |
-| `class_code`  | `varchar(50) [unique, not null]`    |
-| `class_name`  | `varchar(255) [not null]`           |
-| `description` | `varchar(255) [null]`               |
-| `owner_id`    | `bigint [not null]`                 |
-| `status`      | `active_status [default: 'active']` |
+| Column | Definition |
+|---|---|
+| `class_id` | `bigint [pk, increment]` |
+| `class_code` | `varchar(50) [unique, not null]` |
+| `class_name` | `varchar(255) [not null]` |
+| `description` | `text` |
+| `owner_id` | `bigint [not null]` |
+| `status` | `active_status [default: 'active']` |
+| `created_at` | `datetime` |
+| `updated_at` | `datetime` |
+| `deleted_at` | `datetime` |
 
 ## Relationships
 

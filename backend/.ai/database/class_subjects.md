@@ -11,7 +11,11 @@ Documentation for `class_subjects` table.
 | `class_subject_id` | `bigint [pk, increment]` |
 | `class_id` | `bigint [not null]` |
 | `subject_id` | `bigint [not null]` |
+| `assigned_teacher_id` | `bigint` |
 | `status` | `active_status [default: 'active']` |
+| `created_at` | `datetime` |
+| `updated_at` | `datetime` |
+| `deleted_at` | `datetime` |
 
 ## Relationships
 

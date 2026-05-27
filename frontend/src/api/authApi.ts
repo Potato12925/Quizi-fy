@@ -6,6 +6,9 @@ export interface AuthUser {
   user_id: number;
   username: string;
   roles: UserRole[];
+  full_name?: string;
+  is_active: boolean;
+  must_change_password: boolean
 }
 
 export interface LoginRequest {
@@ -35,6 +38,7 @@ interface BackendLoginData {
 
 export interface LoginResponse {
   accessToken: string;
+  token_type: string;
   user: AuthUser;
 }
 
@@ -48,10 +52,14 @@ export const loginApi = async (payload: LoginRequest): Promise<LoginResponse> =>
 
   return {
     accessToken: result.access_token,
+    token_type: result.token_type,
     user: {
       user_id: result.user.user_id,
       username: result.user.username,
       roles: result.user.roles,
+      full_name: result.user.full_name,
+      is_active: result.user.is_active,
+      must_change_password: result.user.must_change_password
     },
   };
 };

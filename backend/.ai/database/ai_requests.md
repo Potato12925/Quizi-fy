@@ -13,9 +13,13 @@ Documentation for `ai_requests` table.
 | `document_id` | `bigint [not null]` |
 | `num_questions` | `int [not null]` |
 | `difficulty` | `difficulty_level [not null]` |
+| `content_scope` | `text` |
 | `status` | `ai_request_status [default: 'pending']` |
 | `generated_question_count` | `int [default: 0]` |
 | `retry_count` | `int [default: 0]` |
+| `error_message` | `text` |
+| `created_at` | `datetime` |
+| `updated_at` | `datetime` |
 
 ## Relationships
 

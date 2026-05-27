@@ -60,7 +60,7 @@ export default function ResultsPage() {
              />
            </svg>
            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-6xl font-black text-slate-900 tracking-tighter">{results.score}<span className="text-2xl text-slate-300">/10</span></span>
+              <span className="text-6xl font-black text-slate-900 tracking-tighter">{results.score}<span className="text-2xl text-slate-300">/{results.total}</span></span>
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Điểm số</span>
            </div>
         </div>
@@ -75,6 +75,8 @@ export default function ResultsPage() {
               <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Số câu hỏi</p>
                  <p className="text-2xl font-black text-slate-900 tracking-tight">{results.total}</p>
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Thời gian</p>
+                 <p className="text-2xl font-black text-slate-900 tracking-tight">{results.time}</p>
               </div>
               <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Độ chính xác</p>
@@ -133,7 +135,7 @@ export default function ResultsPage() {
                              isCorrect ? 'border-emerald-500 bg-emerald-50/50' : 
                              isUser && !isCorrect ? 'border-[#b20112] bg-red-50/50' : 'border-slate-50 bg-slate-50/30'
                            }`}>
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs transition-all ${
                                 isCorrect ? 'bg-emerald-500 text-white' : 
                                 isUser ? 'bg-[#b20112] text-white' : 'bg-white text-slate-300'
                               }`}>
@@ -151,10 +153,11 @@ export default function ResultsPage() {
 
                     <div className="bg-slate-900 rounded-[1.5rem] p-8 relative overflow-hidden group">
                        <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:rotate-12 transition-transform">
-                          <span className="material-symbols-outlined text-5xl text-white">psychology</span>
+                          <span className="material-symbols-outlined text-5xl text-white">school</span>
                        </div>
                        <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                           <span className="material-symbols-outlined text-sm">auto_awesome</span> Giải thích từ AI
+                          <span className="material-symbols-outlined text-sm">history_edu</span> Giải thích từ giáo viên
                        </p>
                        <p className="text-white/80 text-xs leading-relaxed font-medium">
                           {q.explanation || 'Chưa có giải thích cho câu hỏi này.'}

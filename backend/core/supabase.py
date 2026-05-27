@@ -16,7 +16,7 @@ class SupabaseManager:
 
             cls._client = create_client(
                 Config.SUPABASE_URL,
-                Config.SUPABASE_KEY,
+                Config.SUPABASE_SERVICE_ROLE_KEY,
             )
 
         return cls._client

@@ -18,9 +18,9 @@ export default function StudentDashboard() {
   if (error) return <ErrorState message={error} />;
   
   const subjects = data?.recentSubjects || [
-    { id: '1', name: 'Mạng máy tính', questions: 150, color: 'text-[#b20112]', icon: 'language' },
-    { id: '2', name: 'Cấu trúc dữ liệu', questions: 200, color: 'text-emerald-600', icon: 'account_tree' },
-    { id: '3', name: 'Hệ điều hành', questions: 120, color: 'text-blue-600', icon: 'terminal' },
+    { id: '1', name: 'Toán học', questions: 150, color: 'text-[#b20112]', icon: 'calculate' },
+    { id: '2', name: 'Vật lý', questions: 200, color: 'text-emerald-600', icon: 'bolt' },
+    { id: '3', name: 'Tiếng Anh', questions: 120, color: 'text-blue-600', icon: 'translate' },
   ];
 
   return (
@@ -38,10 +38,10 @@ export default function StudentDashboard() {
             </div>
             <div className="space-y-6">
               <h1 className="text-5xl md:text-6xl font-black tracking-tighter leading-[0.9] uppercase italic max-w-2xl">
-                 Chào Minh, hôm nay thầy trò mình ôn tập gì nhỉ?
+                 Chào Minh, hôm nay chúng mình cùng ôn bài gì nào?
               </h1>
               <p className="text-white/70 text-lg font-medium max-w-2xl leading-relaxed">
-                 AI đã chuẩn bị sẵn các bộ câu hỏi mới nhất dựa trên tài liệu bài giảng trên lớp của thầy. Hãy chọn một môn học để bắt đầu hành trình chinh phục kiến thức ngay.
+                 Hệ thống đã chuẩn bị sẵn các bộ câu hỏi ôn tập bám sát chương trình SGK và các đề thi thử mới nhất. Chọn môn học để bắt đầu ngay nhé!
               </p>
             </div>
          </div>
@@ -82,14 +82,14 @@ export default function StudentDashboard() {
                <div className="space-y-8">
                   <div className="flex justify-between items-center group cursor-pointer">
                      <div>
-                        <p className="text-sm font-black text-slate-800 tracking-tight">Cấu trúc dữ liệu</p>
+                        <p className="text-sm font-black text-slate-800 tracking-tight">Vật lý 12</p>
                         <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mt-1">Hôm qua, 14:20</p>
                      </div>
                      <span className="bg-red-50 text-[#b20112] px-3 py-1 rounded-lg text-xs font-black">9/10</span>
                   </div>
                   <div className="flex justify-between items-center group cursor-pointer">
                      <div>
-                        <p className="text-sm font-black text-slate-800 tracking-tight">Mạng máy tính</p>
+                        <p className="text-sm font-black text-slate-800 tracking-tight">Toán học (Đại số)</p>
                         <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mt-1">2 ngày trước</p>
                      </div>
                      <span className="bg-red-50 text-[#b20112] px-3 py-1 rounded-lg text-xs font-black">8/10</span>

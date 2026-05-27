@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { getResources, uploadResource, updateResource, deleteResource } from '@/api/teacherApi';
-import type { TeacherResource, UploadResourcePayload } from '@/api/teacherApi';
+import { getResources, uploadResource, updateResource, deleteResource, getTopicsBySubject, type DbTopic, type UploadResourcePayload, type TeacherResource } from '@/api/teacherApi';
 
 import LoadingState from '@/components/common/LoadingState';
 import ErrorState from '@/components/common/ErrorState';
@@ -34,6 +33,10 @@ export default function TeacherResourcesPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Topics states
+  const [availableTopics, setAvailableTopics] = useState<DbTopic[]>([]);
+  const [selectedTopicIds, setSelectedTopicIds] = useState<number[]>([]);
+
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -50,6 +53,22 @@ export default function TeacherResourcesPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Fetch topics whenever subjectId changes
+  useEffect(() => {
+    const loadTopics = async () => {
+      try {
+        const data = await getTopicsBySubject(formData.subjectId);
+        setAvailableTopics(data);
+        if (modalMode === 'upload') {
+          setSelectedTopicIds([]);
+        }
+      } catch (err) {
+        console.error('Lỗi tải chương học', err);
+      }
+    };
+    loadTopics();
+  }, [formData.subjectId]);
 
   // Filter logic
   useEffect(() => {
@@ -73,6 +92,7 @@ export default function TeacherResourcesPage() {
   const handleOpenUpload = () => {
     setModalMode('upload');
     setFormData({ title: '', subjectId: 1, topicId: 1, description: '' });
+    setSelectedTopicIds([]);
     setSelectedFile(null);
     setFormError('');
     setIsModalOpen(true);
@@ -87,6 +107,7 @@ export default function TeacherResourcesPage() {
       topicId: res.topicId || 1,
       description: res.description || '',
     });
+    setSelectedTopicIds(res.topicIds || (res.topicId ? [res.topicId] : []));
     setSelectedFile(null);
     setFormError('');
     setIsModalOpen(true);
@@ -120,6 +141,10 @@ export default function TeacherResourcesPage() {
       setFormError('Vui lòng nhập tên tài liệu');
       return;
     }
+    if (selectedTopicIds.length === 0) {
+      setFormError('Vui lòng chọn ít nhất 1 chương học');
+      return;
+    }
 
     setIsSubmitting(true);
     setFormError('');
@@ -129,22 +154,36 @@ export default function TeacherResourcesPage() {
         const payload: UploadResourcePayload = {
           title: formData.title,
           subject_id: formData.subjectId,
-          topic_id: formData.topicId,
+          topic_id: selectedTopicIds[0] || formData.topicId,
+          topic_ids: selectedTopicIds,
           description: formData.description,
           file: selectedFile!,
         };
         const newRes = await uploadResource(payload);
+        const topicNames = availableTopics.filter(t => selectedTopicIds.includes(t.topic_id)).map(t => t.topic_name).join(', ');
+        newRes.topic = topicNames || 'Tổng quan';
+        newRes.topicIds = selectedTopicIds;
         setResources(prev => [newRes, ...prev]);
       } else if (selectedResource) {
         const payload: Partial<UploadResourcePayload> = {
           title: formData.title,
           subject_id: formData.subjectId,
-          topic_id: formData.topicId,
+          topic_id: selectedTopicIds[0] || formData.topicId,
+          topic_ids: selectedTopicIds,
           description: formData.description,
         };
         const result = await updateResource(selectedResource.id, payload);
         if (result.success) {
-          setResources(prev => prev.map(r => r.id === selectedResource.id ? { ...r, name: formData.title, description: formData.description } : r));
+          const topicNames = availableTopics.filter(t => selectedTopicIds.includes(t.topic_id)).map(t => t.topic_name).join(', ');
+          setResources(prev => prev.map(r => r.id === selectedResource.id ? { 
+            ...r, 
+            name: formData.title, 
+            description: formData.description,
+            subjectId: formData.subjectId,
+            topicId: selectedTopicIds[0] || formData.topicId,
+            topicIds: selectedTopicIds,
+            topic: topicNames || 'Tổng quan'
+          } : r));
         }
       }
       setIsModalOpen(false);
@@ -259,10 +298,15 @@ export default function TeacherResourcesPage() {
                       </div>
                       <div>
                          <h4 className="text-base font-black text-slate-800 tracking-tight leading-none mb-2">{res.name}</h4>
-                         <div className="flex gap-2">
-                            <span className="bg-slate-50 text-slate-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">{res.subject}</span>
-                            <span className="bg-slate-50 text-slate-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">{res.size}</span>
-                         </div>
+                          <div className="flex flex-wrap gap-2">
+                             <span className="bg-slate-50 text-slate-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">{res.subject}</span>
+                             <span className="bg-slate-50 text-slate-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">{res.size}</span>
+                             {res.topic && (
+                               <span className="bg-red-50 text-[#b20112] px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest max-w-[200px] truncate" title={res.topic}>
+                                 {res.topic}
+                               </span>
+                             )}
+                          </div>
                       </div>
                    </div>
                    
@@ -389,17 +433,34 @@ export default function TeacherResourcesPage() {
                              <option value={3}>Hệ điều hành</option>
                           </select>
                        </div>
-                       <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Chủ đề (Topic)</label>
-                          <select 
-                            value={formData.topicId}
-                            onChange={e => setFormData({ ...formData, topicId: parseInt(e.target.value) })}
-                            className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold focus:ring-2 focus:ring-red-500/20 cursor-pointer"
-                          >
-                             <option value={1}>Chương 1: Tổng quan</option>
-                             <option value={2}>Chương 2: Tầng ứng dụng</option>
-                             <option value={3}>Chương 3: Tầng vận chuyển</option>
-                          </select>
+                       <div className="space-y-2 col-span-full">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Chọn chương giảng dạy (Chọn nhiều)</label>
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 max-h-36 overflow-y-auto space-y-2">
+                             {availableTopics.length === 0 ? (
+                               <p className="text-xs text-slate-400 font-medium italic">Không có chương học nào cho môn này. Vui lòng tạo chương trước.</p>
+                             ) : (
+                               availableTopics.map(topic => {
+                                 const isChecked = selectedTopicIds.includes(topic.topic_id);
+                                 return (
+                                   <label key={topic.topic_id} className="flex items-center gap-3 cursor-pointer hover:bg-slate-100/50 p-1.5 rounded-lg transition-colors">
+                                      <input 
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {
+                                          if (isChecked) {
+                                            setSelectedTopicIds(prev => prev.filter(id => id !== topic.topic_id));
+                                          } else {
+                                            setSelectedTopicIds(prev => [...prev, topic.topic_id]);
+                                          }
+                                        }}
+                                        className="rounded border-slate-300 text-[#b20112] focus:ring-[#b20112] cursor-pointer"
+                                      />
+                                      <span className="text-xs font-bold text-slate-700">{topic.topic_name}</span>
+                                   </label>
+                                 );
+                               })
+                             )}
+                          </div>
                        </div>
                     </div>
 

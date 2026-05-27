@@ -11,6 +11,7 @@ Documentation for `user_roles` table.
 | `user_role_id` | `bigint [pk, increment]` |
 | `user_id` | `bigint [not null]` |
 | `role_id` | `bigint [not null]` |
+| `assigned_at` | `datetime` |
 
 ## Relationships
 

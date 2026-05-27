@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -15,6 +16,11 @@ class SetRoleRequest(BaseModel):
 class AuthMeResponse(BaseModel):
     user_id: int
     username: str
+    password_hash: str
     full_name: str
     is_active: bool
+    must_change_password: bool
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
     roles: list[str]

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { generateQuestions, saveGeneratedQuestions, getTopicsBySubject, getResources, type GeneratedQuestion, type DbTopic, type TeacherResource } from '@/api/teacherApi';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function AiGeneratorPage() {
+  const { user } = useAuth();
   const location = useLocation();
   const passedDocId = location.state?.documentId;
 
@@ -31,8 +33,9 @@ export default function AiGeneratorPage() {
   // Load resources and pre-select subject
   useEffect(() => {
     const loadInitialData = async () => {
+      if (!user?.user_id) return;
       try {
-        const resList = await getResources();
+        const resList = await getResources(user.user_id);
         setResources(resList);
         
         if (passedDocId) {
@@ -46,7 +49,7 @@ export default function AiGeneratorPage() {
       }
     };
     loadInitialData();
-  }, [passedDocId]);
+  }, [passedDocId, user?.user_id]);
 
   // Load topics dynamically based on subjectId
   useEffect(() => {

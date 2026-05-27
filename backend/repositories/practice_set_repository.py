@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from core.supabase import SupabaseManager
 
 
-SELECT_FIELDS = "practice_set_id,student_id,subject_id,num_questions_requested,prioritize_unanswered"
+SELECT_FIELDS = "practice_set_id,student_id,subject_id,document_topic_id,difficulty,num_questions_requested,num_questions_actual,time_limit_minutes,prioritize_unanswered,created_at"
 HAS_DELETED = False
 
 

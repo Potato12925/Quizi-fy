@@ -28,15 +28,18 @@ async def get_practice_attempt_by_id(record_id: int) -> dict:
 async def start_attempt(payload: PracticeAttemptStartRequest) -> dict:
     return await create_practice_attempt_record({
         "practice_set_id": payload.practice_set_id,
-        "status": "in_progress"
+        "status": "in_progress",
+        "started_at": datetime.now(timezone.utc).isoformat()
     })
 
 async def autosave_answers(attempt_id: int, payload: StudentAnswerSaveRequest) -> list[dict]:
+    answered_at = datetime.now(timezone.utc).isoformat()
     payloads = [
         {
             "attempt_id": attempt_id,
             "question_id": ans.question_id,
-            "selected_option_id": ans.selected_option_id
+            "selected_option_id": ans.selected_option_id,
+            "answered_at": answered_at
         }
         for ans in payload.answers
     ]

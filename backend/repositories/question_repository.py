@@ -18,11 +18,11 @@ async def find_question_by_id(record_id: int) -> dict | None:
     return rows[0] if rows else None
 
 
-async def get_random_question_ids(subject_id: int, topic_id: int | None, difficulty: str | None, limit: int) -> list[int]:
+async def get_random_question_ids(subject_id: int, document_topic_id: int | None, difficulty: str | None, limit: int) -> list[int]:
     supabase = SupabaseManager.get_client()
-    query = supabase.table("questions").select("question_id").eq("subject_id", subject_id).eq("status", "approved")
-    if topic_id:
-        query = query.eq("topic_id", topic_id)
+    query = supabase.table("questions").select("question_id").eq("status", "approved")
+    if document_topic_id:
+        query = query.eq("document_topic_id", document_topic_id)
     if difficulty and difficulty != "mix":
         query = query.eq("difficulty", difficulty)
     if HAS_DELETED:

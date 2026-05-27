@@ -67,12 +67,14 @@ export default function ResultsPage() {
 
         <div className="flex-1 space-y-8 relative z-10 text-center md:text-left">
            <div>
-              <h2 className="text-4xl font-black text-slate-900 tracking-tighter mb-2">Chúc mừng Minh!</h2>
-              <p className="text-slate-500 font-medium">Bạn đã hoàn thành bài ôn tập với kết quả khá tốt.</p>
+              <h2 className="text-4xl font-black text-slate-900 tracking-tighter mb-2">Hoàn thành bài tập!</h2>
+              <p className="text-slate-500 font-medium">Bạn đã hoàn thành bài ôn tập. Dưới đây là kết quả chi tiết.</p>
            </div>
            
            <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
               <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Số câu hỏi</p>
+                 <p className="text-2xl font-black text-slate-900 tracking-tight">{results.total}</p>
                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Thời gian</p>
                  <p className="text-2xl font-black text-slate-900 tracking-tight">{results.time}</p>
               </div>
@@ -82,7 +84,7 @@ export default function ResultsPage() {
               </div>
               <div className="hidden sm:block bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Xếp hạng</p>
-                 <p className="text-2xl font-black text-amber-500 tracking-tight">Giỏi</p>
+                 <p className="text-2xl font-black text-amber-500 tracking-tight">{results.score >= 8 ? 'Giỏi' : results.score >= 5 ? 'Khá' : 'TB'}</p>
               </div>
            </div>
         </div>
@@ -90,12 +92,16 @@ export default function ResultsPage() {
 
       {/* Action Buttons */}
       <section className="flex flex-wrap gap-4 justify-center md:justify-start px-4">
-         <button className="px-10 py-5 rounded-2xl bg-[#b20112] text-white text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-red-900/20 hover:bg-[#d62828] active:scale-95 transition-all flex items-center gap-3">
-            <span className="material-symbols-outlined text-xl">refresh</span> Làm bộ đề mới
-         </button>
-         <button className="px-10 py-5 rounded-2xl bg-white border border-slate-100 text-slate-900 text-xs font-black uppercase tracking-[0.2em] shadow-sm hover:border-[#b20112] transition-all flex items-center gap-3">
-            <span className="material-symbols-outlined text-xl">history</span> Xem lịch sử
-         </button>
+         <Link to="/student/practice/setup">
+            <button className="px-10 py-5 rounded-2xl bg-[#b20112] text-white text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-red-900/20 hover:bg-[#d62828] active:scale-95 transition-all flex items-center gap-3">
+               <span className="material-symbols-outlined text-xl">refresh</span> Làm bộ đề mới
+            </button>
+         </Link>
+         <Link to="/student/history">
+            <button className="px-10 py-5 rounded-2xl bg-white border border-slate-100 text-slate-900 text-xs font-black uppercase tracking-[0.2em] shadow-sm hover:border-[#b20112] transition-all flex items-center gap-3">
+               <span className="material-symbols-outlined text-xl">history</span> Xem lịch sử
+            </button>
+         </Link>
          <Link to="/student/dashboard">
             <button className="px-10 py-5 rounded-2xl bg-slate-900 text-white text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-slate-900/10 hover:bg-slate-800 transition-all flex items-center gap-3">
                <span className="material-symbols-outlined text-xl">home</span> Dashboard
@@ -120,11 +126,12 @@ export default function ResultsPage() {
                     <h4 className="text-xl font-black text-slate-800 leading-relaxed tracking-tight">{q.text}</h4>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       {['A', 'B', 'C', 'D'].map((label, i) => {
-                         const isCorrect = i === q.correctAnswer;
-                         const isUser = i === q.userAnswer;
+                       {q.options.map((opt, i) => {
+                         const label = String.fromCharCode(65 + i);
+                         const isCorrect = opt.id === q.correctAnswer;
+                         const isUser = opt.id === q.userAnswer;
                          return (
-                           <div key={i} className={`p-5 rounded-2xl border-2 flex items-center gap-4 transition-all ${
+                           <div key={opt.id} className={`p-5 rounded-2xl border-2 flex items-center gap-4 transition-all ${
                              isCorrect ? 'border-emerald-500 bg-emerald-50/50' : 
                              isUser && !isCorrect ? 'border-[#b20112] bg-red-50/50' : 'border-slate-50 bg-slate-50/30'
                            }`}>
@@ -135,7 +142,7 @@ export default function ResultsPage() {
                                  {label}
                               </div>
                               <span className={`font-bold text-sm ${isCorrect ? 'text-emerald-700' : isUser ? 'text-[#b20112]' : 'text-slate-500'}`}>
-                                 {q.options[i] || `Option ${i+1}`}
+                                 {opt.text || `Option ${i+1}`}
                               </span>
                               {isCorrect && <span className="material-symbols-outlined text-emerald-500 ml-auto">check_circle</span>}
                               {isUser && !isCorrect && <span className="material-symbols-outlined text-[#b20112] ml-auto">cancel</span>}
@@ -149,10 +156,11 @@ export default function ResultsPage() {
                           <span className="material-symbols-outlined text-5xl text-white">school</span>
                        </div>
                        <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <span className="material-symbols-outlined text-sm">auto_awesome</span> Giải thích từ AI
                           <span className="material-symbols-outlined text-sm">history_edu</span> Giải thích từ giáo viên
                        </p>
                        <p className="text-white/80 text-xs leading-relaxed font-medium">
-                          {q.explanation}
+                          {q.explanation || 'Chưa có giải thích cho câu hỏi này.'}
                        </p>
                     </div>
                  </div>

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, Suspense } from 'react';
-import { Link } from 'react-router-dom';
-import { useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { getMySubjects, createPracticeSession } from '../../api/studentApi';
 
 function SetupContent() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialSubject = searchParams.get('subjectId') || '';
 
@@ -13,6 +14,21 @@ function SetupContent() {
     topics: [] as string[],
     mode: 'random-all' 
   });
+  
+  const [subjects, setSubjects] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    getMySubjects().then(res => {
+        // Map backend subject array to frontend
+        const mapped = res.map(r => ({
+            id: r.subject_id.toString(),
+            name: r.subject.subject_name,
+            class: r.class.class_code
+        }));
+        setSubjects(mapped);
+    });
+  }, []);
 
   // Sync state if query param changes
   useEffect(() => {
@@ -20,11 +36,24 @@ function SetupContent() {
     if (sId) setConfig(prev => ({ ...prev, subject: sId }));
   }, [searchParams]);
 
-  const subjects = [
-    { id: '1', name: 'Mạng máy tính', class: 'D21CQCN01-B' },
-    { id: '2', name: 'Cấu trúc dữ liệu và Giải thuật', class: 'D21CQCN01-B' },
-    { id: '3', name: 'Hệ điều hành', class: 'D21CQCN02-B' },
-  ];
+  const handleStart = async () => {
+    if (!config.subject) return;
+    setLoading(true);
+    try {
+        const res = await createPracticeSession({
+            subject: config.subject,
+            quantity: config.quantity,
+            level: config.level,
+            topics: config.topics,
+            mode: config.mode
+        });
+        navigate(`/student/practice/${res.practiceId}`);
+    } catch(e) {
+        console.error(e);
+        alert("Có lỗi xảy ra khi tạo bộ đề");
+        setLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
@@ -47,7 +76,7 @@ function SetupContent() {
                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Chọn môn học ôn luyện</h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {subjects.map((s) => (
+              {subjects.length === 0 ? <p className="text-sm text-slate-500">Chưa có môn học nào.</p> : subjects.map((s) => (
                 <div 
                   key={s.id}
                   onClick={() => setConfig({...config, subject: s.id})}
@@ -123,18 +152,17 @@ function SetupContent() {
                  </div>
 
                  <div className="pt-6">
-                    <Link to="/student/practice/demo">
-                       <button 
-                        disabled={!config.subject}
-                        className={`w-full py-6 rounded-[2rem] font-black text-[10px] uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-3 ${
-                          config.subject 
-                          ? 'bg-[#b20112] text-white shadow-2xl shadow-red-900/40 hover:bg-[#d62828] active:scale-95' 
-                          : 'bg-white/5 text-white/20 cursor-not-allowed border border-white/5'
-                        }`}
-                       >
-                          Bắt đầu làm bài <span className="material-symbols-outlined text-xl">play_arrow</span>
-                       </button>
-                    </Link>
+                    <button 
+                    onClick={handleStart}
+                    disabled={!config.subject || loading}
+                    className={`w-full py-6 rounded-[2rem] font-black text-[10px] uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-3 ${
+                        config.subject && !loading
+                        ? 'bg-[#b20112] text-white shadow-2xl shadow-red-900/40 hover:bg-[#d62828] active:scale-95' 
+                        : 'bg-white/5 text-white/20 cursor-not-allowed border border-white/5'
+                    }`}
+                    >
+                        {loading ? 'Đang tạo...' : 'Bắt đầu làm bài'} <span className="material-symbols-outlined text-xl">play_arrow</span>
+                    </button>
                  </div>
               </div>
            </div>

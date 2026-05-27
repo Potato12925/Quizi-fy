@@ -138,7 +138,7 @@ export default function ProgressPage() {
             <span className="material-symbols-outlined text-[#b20112]">bar_chart</span> Hiệu suất theo môn học
          </h3>
          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-20 gap-y-12">
-            {subjectPerformance.map((s, idx) => (
+            {data?.subjectPerformance.map((s: any, idx: number) => (
               <div key={idx} className="space-y-4">
                  <div className="flex justify-between items-end">
                     <p className="text-sm font-black text-slate-800 tracking-tight">{s.name}</p>

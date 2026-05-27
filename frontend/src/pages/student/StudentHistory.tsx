@@ -127,7 +127,7 @@ export default function HistoryPage() {
               </div>
 
               <div className="flex gap-3">
-                 <Link to="/student/results">
+                 <Link to={`/student/results/${attempt.id}`}>
                     <button className="px-6 py-3 rounded-xl bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:bg-[#b20112] hover:text-white transition-all shadow-sm">
                        Xem lại
                     </button>

@@ -1,33 +1,39 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { getPracticeDetail, autosaveAnswers, submitPractice } from '../../api/studentApi';
+import type { Question } from '../../api/studentApi';
 
 export default function PracticePage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [timeLeft, setTimeLeft] = useState(1200); // 20 minutes
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  const questions = [
-    {
-      id: 1,
-      text: 'Trong mô hình OSI, tầng nào chịu trách nhiệm nén dữ liệu và mã hóa?',
-      options: ['Tầng ứng dụng (Application)', 'Tầng trình diễn (Presentation)', 'Tầng phiên (Session)', 'Tầng giao vận (Transport)'],
-    },
-    {
-      id: 2,
-      text: 'Giao thức nào sau đây được sử dụng để truyền tải file trên Internet?',
-      options: ['HTTP', 'SMTP', 'FTP', 'DNS'],
-    },
-    {
-      id: 3,
-      text: 'Địa chỉ IPv4 có độ dài bao nhiêu bit?',
-      options: ['16 bit', '32 bit', '64 bit', '128 bit'],
-    },
-    {
-      id: 4,
-      text: 'Thiết bị Switch hoạt động ở tầng nào của mô hình OSI?',
-      options: ['Tầng 1 (Physical)', 'Tầng 2 (Data Link)', 'Tầng 3 (Network)', 'Tầng 4 (Transport)'],
-    },
-  ];
+  useEffect(() => {
+    if (id) {
+        getPracticeDetail(id).then(res => {
+            setQuestions(res.questions);
+            // Pre-fill answers if any
+            const initAns: Record<number, number> = {};
+            res.questions.forEach((q, idx) => {
+                if (q.selectedOptionId) {
+                    initAns[idx] = q.selectedOptionId;
+                }
+            });
+            setAnswers(initAns);
+            setLoading(false);
+        }).catch(err => {
+            console.error(err);
+            setLoading(false);
+            alert("Không thể lấy đề thi");
+            navigate('/student/dashboard');
+        });
+    }
+  }, [id, navigate]);
 
   // Timer effect
   useEffect(() => {
@@ -43,9 +49,45 @@ export default function PracticePage() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleSelectAnswer = (optionIdx: number) => {
-    setAnswers({ ...answers, [currentQuestion]: optionIdx });
+  const handleSelectAnswer = (optionId: number, questionIdx: number) => {
+    const newAnswers = { ...answers, [questionIdx]: optionId };
+    setAnswers(newAnswers);
+    
+    // Autosave
+    if (id) {
+        autosaveAnswers(id, {
+            answers: [
+                {
+                    question_id: questions[questionIdx].id,
+                    selected_option_id: optionId
+                }
+            ]
+        });
+    }
   };
+
+  const handleSubmit = async () => {
+    if (!id) return;
+    const confirm = window.confirm("Bạn có chắc chắn muốn nộp bài?");
+    if (!confirm) return;
+    
+    setSubmitting(true);
+    try {
+        await submitPractice(id);
+        navigate(`/student/results/${id}`);
+    } catch(e) {
+        alert("Lỗi nộp bài");
+        setSubmitting(false);
+    }
+  }
+
+  if (loading) {
+      return <div className="min-h-screen flex items-center justify-center text-slate-500 font-black uppercase tracking-widest">Đang tải đề thi...</div>;
+  }
+
+  if (questions.length === 0) {
+      return <div className="min-h-screen flex items-center justify-center text-slate-500 font-black uppercase tracking-widest">Đề thi trống.</div>;
+  }
 
   const progress = (Object.keys(answers).length / questions.length) * 100;
 
@@ -72,11 +114,12 @@ export default function PracticePage() {
               <span className="material-symbols-outlined text-[#b20112] text-xl">timer</span>
               <span className="text-2xl font-black text-slate-900 font-mono tracking-tight">{formatTime(timeLeft)}</span>
            </div>
-           <Link to="/student/results/demo">
-             <button className="bg-[#b20112] text-white px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-red-900/20 hover:bg-[#d62828] active:scale-95 transition-all">
-                Nộp bài tập
-             </button>
-           </Link>
+           <button 
+             onClick={handleSubmit}
+             disabled={submitting}
+             className="bg-[#b20112] text-white px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-red-900/20 hover:bg-[#d62828] active:scale-95 transition-all">
+              {submitting ? 'Đang nộp...' : 'Nộp bài tập'}
+           </button>
         </div>
       </header>
 
@@ -107,14 +150,14 @@ export default function PracticePage() {
                 <div className="grid grid-cols-1 gap-4">
                   {questions[currentQuestion].options.map((opt, idx) => (
                     <div 
-                      key={idx}
-                      onClick={() => handleSelectAnswer(idx)}
-                      className={`p-6 rounded-2xl border-2 transition-all cursor-pointer flex items-center gap-5 group ${answers[currentQuestion] === idx ? 'border-[#b20112] bg-red-50/20' : 'border-slate-50 bg-slate-50/50 hover:border-slate-200'}`}
+                      key={opt.id}
+                      onClick={() => handleSelectAnswer(opt.id, currentQuestion)}
+                      className={`p-6 rounded-2xl border-2 transition-all cursor-pointer flex items-center gap-5 group ${answers[currentQuestion] === opt.id ? 'border-[#b20112] bg-red-50/20' : 'border-slate-50 bg-slate-50/50 hover:border-slate-200'}`}
                     >
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all ${answers[currentQuestion] === idx ? 'bg-[#b20112] text-white shadow-lg' : 'bg-white text-slate-400 group-hover:text-slate-600'}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all ${answers[currentQuestion] === opt.id ? 'bg-[#b20112] text-white shadow-lg' : 'bg-white text-slate-400 group-hover:text-slate-600'}`}>
                         {String.fromCharCode(65 + idx)}
                       </div>
-                      <span className={`font-bold text-sm ${answers[currentQuestion] === idx ? 'text-[#b20112]' : 'text-slate-600'}`}>{opt}</span>
+                      <span className={`font-bold text-sm ${answers[currentQuestion] === opt.id ? 'text-[#b20112]' : 'text-slate-600'}`}>{opt.text}</span>
                     </div>
                   ))}
                 </div>

@@ -20,7 +20,7 @@ async def post_topic(payload: TopicCreateRequest, _: CurrentUser = Depends(requi
 
 
 @router.get("", summary="List topics")
-async def get_topic_list(page: int = Query(default=1, ge=1), limit: int = Query(default=20, ge=1, le=100), _: CurrentUser = Depends(require_roles("admin", "teacher"))):
+async def get_topic_list(page: int = Query(default=1, ge=1), limit: int = Query(default=20, ge=1, le=200), _: CurrentUser = Depends(require_roles("admin", "teacher"))):
     try:
         result = await get_topics(page=page, limit=limit)
         return success_response(data=result["items"], meta=result["pagination"], message="Topic loaded successfully", status_code=200)

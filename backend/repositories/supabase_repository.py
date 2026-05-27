@@ -1,13 +1,11 @@
-import asyncio
-
-from core.supabase import SupabaseManager
+from core.supabase import SupabaseManager, run_supabase_execute
 
 
 async def check_supabase_connection() -> tuple[bool, str]:
     try:
         supabase = SupabaseManager.get_client()
 
-        await asyncio.to_thread(
+        await run_supabase_execute(
             lambda: supabase.table("users").select("user_id").limit(1).execute()
         )
 

@@ -11,7 +11,7 @@ from schemas.topic_schema import TopicCreateRequest, TopicUpdateRequest
 
 
 async def create_topic(payload: TopicCreateRequest) -> dict:
-    return await create_topic_record({ "subject_id": payload.subject_id, "topic_name": payload.topic_name ,"description": payload.description})
+    return await create_topic_record({"topic_name": payload.topic_name, "description": payload.description})
 
 
 async def get_topic_by_id(record_id: int) -> dict:

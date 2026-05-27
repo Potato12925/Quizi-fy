@@ -9,10 +9,16 @@ export interface DbDocument {
   title: string;
   description?: string;
   file_url: string;
+  file_hash?: string;
   file_type: string;
   file_size: number;
   status: string;
   created_at: string;
+  updated_at?: string;
+  subject?: { subject_id: number; subject_name: string };
+  topics?: { topic_id: number; topic_name: string }[];
+  ai_request_count?: number;
+  question_count?: number;
 }
 
 export interface DbSubject {
@@ -128,12 +134,13 @@ export const mapDbDocumentToTeacherResource = (db: DbDocument, usage: number = 0
   name: db.title,
   size: `${(db.file_size / (1024 * 1024)).toFixed(1)} MB`,
   date: new Date(db.created_at || Date.now()).toLocaleDateString('vi-VN'),
-  usage: usage,
-  subject: subjectName,
-  topic: topicName || 'Tổng quan',
+  usage: db.question_count ?? usage,
+  subject: db.subject?.subject_name || subjectName,
+  topic: db.topics?.[0]?.topic_name || topicName || 'Tong quan',
+  description: db.description,
+  status: db.status,
   subjectId: db.subject_id,
-  topicId: db.topic_id,
-  topicIds: db.topic_id ? [db.topic_id] : [],
+  topicIds: db.topics?.map((topic) => topic.topic_id) || [],
 });
 
 export interface BankSubject {
@@ -614,6 +621,36 @@ export interface UploadResourcePayload {
   file: File;
 }
 
+export interface TeacherDocument {
+  document_id: number;
+  teacher_id: number;
+  subject_id: number;
+  title: string;
+  description?: string;
+  file_url: string;
+  file_type: string;
+  file_size: number;
+  status: string;
+  created_at: string;
+  updated_at?: string;
+  subject: { subject_id: number; subject_name: string };
+  topics: { topic_id: number; topic_name: string }[];
+  ai_request_count?: number;
+  question_count?: number;
+  warning?: { has_related_history: boolean; message: string };
+}
+
+export interface TeacherDocumentListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  subject_id?: number;
+  topic_id?: number;
+  uploaded_from?: string;
+  uploaded_to?: string;
+  status?: 'active' | 'inactive';
+}
+
 /**
  * GET /subjects
  */
@@ -637,19 +674,10 @@ export const getSubjects = async (userId: number): Promise<DbSubject[]> => {
  * GET /topics
  */
 export const getTopics = async (userId: number): Promise<DbTopic[]> => {
-  const [topicsRes, docsRes] = await Promise.all([
-    api.get<ApiEnvelope<DbTopic[]>>('/topics', {
-      params: { page: '1', limit: '100' },
-    }),
-    api.get<ApiEnvelope<DbDocument[]>>('/documents', {
-      params: { page: '1', limit: '100', teacher_id: userId.toString() },
-    }),
-  ]);
-
-  const topics = topicsRes.data || [];
-  const docs = (docsRes.data || []).filter((doc) => doc.teacher_id === userId);
-  const subjectIds = new Set(docs.map((doc) => doc.subject_id));
-  return topics.filter((topic) => subjectIds.has(topic.subject_id));
+  const topicsRes = await api.get<ApiEnvelope<DbTopic[]>>('/topics', {
+    params: { page: '1', limit: '200' },
+  });
+  return topicsRes.data || [];
 };
 
 /**
@@ -660,7 +688,10 @@ export const uploadDocument = async (payload: UploadResourcePayload): Promise<Db
   formData.append('file', payload.file);
   formData.append('title', payload.title);
   formData.append('subject_id', payload.subject_id.toString());
-  if (payload.topic_id !== undefined) formData.append('topic_id', payload.topic_id.toString());
+  if (payload.topic_id !== undefined) formData.append('topic_ids', payload.topic_id.toString());
+  for (const topicId of payload.topic_ids || []) {
+    formData.append('topic_ids', topicId.toString());
+  }
   if (payload.description) formData.append('description', payload.description);
 
   const res = await api.post<ApiEnvelope<DbDocument>>('/documents/upload', formData);
@@ -799,10 +830,10 @@ export const updateTeacherSettings = async (payload: Partial<TeacherSettings>): 
 
 export interface DbTopic {
   topic_id: number;
-  subject_id: number;
+  subject_id?: number;
   topic_name: string;
   description?: string;
-  status: string;
+  status?: string;
 }
 
 // Local mock storage for teacher topics
@@ -905,3 +936,5 @@ export const deleteTopic = async (id: string | number): Promise<void> => {
     });
   }
 };
+
+

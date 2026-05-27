@@ -14,17 +14,20 @@ class DocumentCreateRequest(BaseModel):
 class DocumentUpdateRequest(BaseModel):
     subject_id: int | None = Field(default=None, ge=1)
     title: str | None = Field(default=None, min_length=1, max_length=500)
+    description: str | None = Field(default=None, max_length=1000)
     file_url: str | None = Field(default=None, min_length=1)
     file_type: str | None = Field(default=None, min_length=1, max_length=20)
     file_size: int | None = Field(default=None, ge=1)
     status: str | None = None
+    topic_ids: list[int] | None = Field(default=None)
 
 
 class DocumentUploadRequest(BaseModel):
     subject_id: int = Field(ge=1)
-    topic_id: int | None = Field(default=None, ge=1)
+    topic_ids: list[int] = Field(default_factory=list)
     title: str = Field(min_length=1, max_length=500)
     description: str | None = Field(default=None, max_length=1000)
+
     @field_validator("title")
     @classmethod
     def normalize_title(cls, value: str) -> str:
@@ -33,12 +36,19 @@ class DocumentUploadRequest(BaseModel):
             raise ValueError("Title is required")
         return normalized
 
+    @field_validator("topic_ids")
+    @classmethod
+    def validate_topic_ids(cls, value: list[int]) -> list[int]:
+        unique_ids = sorted(set(value))
+        if any(topic_id < 1 for topic_id in unique_ids):
+            raise ValueError("topic_ids must contain positive integers")
+        return unique_ids
+
 
 class DocumentUploadResponse(BaseModel):
     document_id: int
     teacher_id: int
     subject_id: int
-    topic_id: int | None = None
     title: str
     description: str | None = None
     file_url: str

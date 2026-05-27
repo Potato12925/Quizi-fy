@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from core.supabase import SupabaseManager
 
 
-SELECT_FIELDS = "topic_id,subject_id,topic_name,description,created_at, updated_at"
+SELECT_FIELDS = "topic_id,topic_name,description,created_at,updated_at"
 HAS_DELETED = False
 
 
@@ -49,10 +49,13 @@ async def update_topic_by_id(record_id: int, payload: dict) -> dict | None:
 
 
 async def soft_delete_topic_by_id(record_id: int) -> bool:
-    supabase = SupabaseManager.get_client()
-    query = supabase.table("topics").delete().eq("topic_id", record_id)
     if HAS_DELETED:
+        supabase = SupabaseManager.get_client()
+        query = supabase.table("topics").update({"deleted_at": datetime.now(timezone.utc).isoformat()}).eq("topic_id", record_id)
         query = query.is_("deleted_at", None)
-    response = await asyncio.to_thread(lambda: query.execute())
+        response = await asyncio.to_thread(lambda: query.execute())
+    else:
+        supabase = SupabaseManager.get_client()
+        response = await asyncio.to_thread(lambda: supabase.table("topics").delete().eq("topic_id", record_id).execute())
     rows = response.data or []
     return len(rows) > 0

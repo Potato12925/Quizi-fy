@@ -34,6 +34,9 @@ from controllers.teacher_ai_generator_controller import (
 from controllers.teacher_dashboard_controller import (
     router as teacher_dashboard_router,
 )
+from controllers.teacher_stats_controller import (
+    router as teacher_stats_router,
+)
 from controllers.topic_controller import router as topic_router
 from controllers.user_role_controller import router as user_role_router
 from controllers.user_controller import router as user_router
@@ -172,5 +175,10 @@ def register_routes(app: FastAPI) -> None:
 
     app.include_router(
         teacher_dashboard_router,
+        prefix="/api/v1",
+    )
+
+    app.include_router(
+        teacher_stats_router,
         prefix="/api/v1",
     )

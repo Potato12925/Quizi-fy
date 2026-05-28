@@ -76,7 +76,7 @@ export default function TeacherResourcesPage() {
       setSubjects(nextSubjects);
       setTopicsBySubject(nextTopicsBySubject);
     } catch {
-      setError('Khong the tai du lieu');
+      setError('Không thể tải dữ liệu');
     } finally {
       setIsLoading(false);
     }
@@ -121,7 +121,7 @@ export default function TeacherResourcesPage() {
       setTopicsBySubject((prev) => ({ ...prev, [subjectId]: topicItems }));
     } catch {
       setModalTopics([]);
-      setModalTopicError('Khong the tai danh sach topic cho mon hoc da chon');
+      setModalTopicError('Không thể tải danh sách topic cho môn học đã chọn');
     } finally {
       setIsModalTopicsLoading(false);
     }
@@ -175,8 +175,8 @@ export default function TeacherResourcesPage() {
 
   const handleDelete = async (resource: TeacherDocument) => {
     const warning = resource.question_count || resource.ai_request_count
-      ? `Tai lieu "${resource.title}" da duoc su dung tao du lieu AI. Ban van muon an/xoa mem?`
-      : `Ban co chac chan muon xoa tai lieu "${resource.title}" khong?`;
+      ? `Tài liệu "${resource.title}" đã được sử dụng tạo dữ liệu AI. Bạn vẫn muốn ẩn/xóa mềm?`
+      : `Bạn có chắc chắn muốn xóa tài liệu "${resource.title}" không?`;
     if (!window.confirm(warning)) return;
 
     await softDeleteTeacherDocument(resource.document_id);
@@ -189,15 +189,15 @@ export default function TeacherResourcesPage() {
 
     const extensionOk = file.name.toLowerCase().endsWith('.pdf') || file.name.toLowerCase().endsWith('.docx') || file.name.toLowerCase().endsWith('.txt');
     if (!ALLOWED_FILE_TYPES.includes(file.type) && !extensionOk) {
-      setFormError('Chi ho tro PDF, DOCX, TXT');
+      setFormError('Chỉ hỗ trợ PDF, DOCX, TXT');
       return;
     }
     if (file.size <= 0) {
-      setFormError('File trong');
+      setFormError('File trống');
       return;
     }
     if (file.size > MAX_FILE_SIZE) {
-      setFormError('Dung luong toi da 20MB');
+      setFormError('Dung lượng tối đa 20MB');
       return;
     }
 
@@ -209,19 +209,19 @@ export default function TeacherResourcesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title.trim()) {
-      setFormError('Vui long nhap ten tai lieu');
+      setFormError('Vui lòng nhập tên tài liệu');
       return;
     }
     if (!formData.subjectId) {
-      setFormError('Vui long chon mon hoc');
+      setFormError('Vui lòng chọn môn học');
       return;
     }
     if (formData.topicIds.length === 0) {
-      setFormError('Vui long chon it nhat 1 topic');
+      setFormError('Vui lòng chọn ít nhất 1 topic');
       return;
     }
     if (modalMode === 'upload' && !selectedFile) {
-      setFormError('Vui long chon file');
+      setFormError('Vui lòng chọn file');
       return;
     }
 
@@ -248,7 +248,7 @@ export default function TeacherResourcesPage() {
       }
       setIsModalOpen(false);
     } catch {
-      setFormError('Da xay ra loi. Vui long thu lai.');
+      setFormError('Đã xảy ra lỗi. Vui lòng thử lại.');
     } finally {
       setIsSubmitting(false);
     }
@@ -261,28 +261,28 @@ export default function TeacherResourcesPage() {
     <div className="pb-20 space-y-12 duration-700 animate-in fade-in slide-in-from-bottom-8">
       <div className="flex flex-col items-start justify-between gap-6 pt-2 md:flex-row md:items-end">
         <div>
-          <h1 className="text-5xl italic font-black leading-none tracking-tighter uppercase text-slate-900">Tai lieu <br /><span className="text-[#b20112]">Hoc tap</span></h1>
-          <p className="mt-4 italic font-medium text-slate-500">"Kho nguyen lieu de khoi tao tri thuc AI."</p>
+          <h1 className="text-5xl italic font-black leading-none tracking-tighter uppercase text-slate-900">Tài liệu <br /><span className="text-[#b20112]">Học tập</span></h1>
+          <p className="mt-4 italic font-medium text-slate-500">"Kho nguyên liệu để khởi tạo tri thức AI."</p>
         </div>
         <button onClick={handleOpenUpload} className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-slate-900/20 hover:bg-black transition-all flex items-center gap-3">
-          <span className="text-xl material-symbols-outlined">upload_file</span> Tai tai lieu moi
+          <span className="text-xl material-symbols-outlined">upload_file</span> Tải tài liệu mới
         </button>
       </div>
 
       <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-wrap gap-4 items-center justify-between">
         <input
           type="text"
-          placeholder="Tim kiem tai lieu..."
+          placeholder="Tìm kiếm tài liệu..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full md:flex-1 py-3 px-4 text-xs font-bold transition-all border-none rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500/20"
         />
         <select value={filterSubject} onChange={(e) => setFilterSubject(e.target.value)} className="px-6 py-3 rounded-xl bg-slate-50 border-none text-[10px] font-black uppercase tracking-widest text-slate-500">
-          <option value="all">Tat ca mon hoc</option>
+          <option value="all">Tất cả môn học</option>
           {subjects.map((subject) => <option key={subject.subject_id} value={String(subject.subject_id)}>{subject.subject_name}</option>)}
         </select>
         <select value={filterTopic} onChange={(e) => setFilterTopic(e.target.value)} className="px-6 py-3 rounded-xl bg-slate-50 border-none text-[10px] font-black uppercase tracking-widest text-slate-500">
-          <option value="all">Tat ca topic</option>
+          <option value="all">Tất cả topic</option>
           {visibleFilterTopics.map((topic) => <option key={topic.topic_id} value={String(topic.topic_id)}>{topic.topic_name}</option>)}
         </select>
       </div>
@@ -308,7 +308,7 @@ export default function TeacherResourcesPage() {
                 </button>
               </div>
             </div>
-            <div className="text-xs text-slate-500 mb-4">{resource.description || 'Khong co mo ta'}</div>
+            <div className="text-xs text-slate-500 mb-4">{resource.description || 'Không có mô tả'}</div>
             <div className="mb-4 flex flex-wrap gap-2">
               {resource.topics.map((topic) => (
                 <span key={`${resource.document_id}-${topic.topic_id}`} className="bg-red-50 text-[#b20112] px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">
@@ -318,16 +318,16 @@ export default function TeacherResourcesPage() {
             </div>
             <div className="flex items-end justify-between pt-6 border-t border-slate-50">
               <div>
-                <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Ngay tai len</p>
+                <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Ngày tải lên</p>
                 <p className="text-xs font-bold text-slate-600">{fmtDate(resource.created_at)}</p>
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-right">
                   <p className="text-sm font-black text-slate-900">{resource.question_count || 0}</p>
-                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Cau hoi</p>
+                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Câu hỏi</p>
                 </div>
                 <Link to="/teacher/ai-generator" state={{ documentId: resource.document_id }} className="bg-[#b20112] text-white px-5 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-black transition-all">
-                  Tao cau hoi
+                  Tạo câu hỏi
                 </Link>
               </div>
             </div>
@@ -335,7 +335,7 @@ export default function TeacherResourcesPage() {
         )) : (
           <div className="col-span-full border-4 border-dashed border-slate-100 rounded-[3rem] p-20 flex flex-col items-center text-center">
             <span className="mb-6 text-6xl material-symbols-outlined text-slate-100">inventory_2</span>
-            <p className="text-sm font-black tracking-widest uppercase text-slate-400">Khong tim thay tai lieu phu hop</p>
+            <p className="text-sm font-black tracking-widest uppercase text-slate-400">Không tìm thấy tài liệu phù hợp</p>
           </div>
         )}
       </div>
@@ -345,22 +345,22 @@ export default function TeacherResourcesPage() {
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => !isSubmitting && setIsModalOpen(false)} />
           <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl relative z-10 overflow-hidden">
             <div className="p-10 sm:p-12">
-              <h2 className="text-3xl italic font-black tracking-tighter uppercase text-slate-900 mb-8">{modalMode === 'upload' ? 'Upload' : 'Chinh sua'} <span className="text-[#b20112]">Tai lieu</span></h2>
+              <h2 className="text-3xl italic font-black tracking-tighter uppercase text-slate-900 mb-8">{modalMode === 'upload' ? 'Upload' : 'Chỉnh sửa'} <span className="text-[#b20112]">Tài liệu</span></h2>
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed rounded-3xl p-6 text-center cursor-pointer border-slate-100 hover:border-[#b20112]">
                   <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,.docx,.txt" />
-                  <p className="text-xs font-black tracking-widest uppercase text-slate-400">{selectedFile ? `${selectedFile.name} (${fmtFileSize(selectedFile.size)})` : 'Chon file PDF, DOCX, TXT (max 20MB)'}</p>
+                  <p className="text-xs font-black tracking-widest uppercase text-slate-400">{selectedFile ? `${selectedFile.name} (${fmtFileSize(selectedFile.size)})` : 'Chọn file PDF, DOCX, TXT (max 20MB)'}</p>
                 </div>
 
-                <input type="text" value={formData.title} onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))} placeholder="Ten tai lieu" className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50" />
+                <input type="text" value={formData.title} onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))} placeholder="Tên tài liệu" className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50" />
 
                 <select
                   value={formData.subjectId}
                   onChange={(e) => handleModalSubjectChange(e.target.value, true)}
                   className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50"
                 >
-                  <option value="">Chon mon hoc</option>
+                  <option value="">Chọn môn học</option>
                   {subjects.map((subject) => (
                     <option key={subject.subject_id} value={String(subject.subject_id)}>
                       {subject.subject_name}
@@ -370,9 +370,9 @@ export default function TeacherResourcesPage() {
 
                 <div className="w-full p-4 rounded-2xl bg-slate-50 border border-slate-100 min-h-28">
                   {!formData.subjectId ? (
-                    <p className="text-xs font-bold text-slate-400">Vui long chon mon hoc truoc</p>
+                    <p className="text-xs font-bold text-slate-400">Vui lòng chọn môn học trước</p>
                   ) : modalTopics.length === 0 ? (
-                    <p className="text-xs font-bold text-slate-400">Khong co topic</p>
+                    <p className="text-xs font-bold text-slate-400">Không có topic</p>
                   ) : (
                     <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
                       {modalTopics.map((topic) => {
@@ -417,18 +417,18 @@ export default function TeacherResourcesPage() {
                     </div>
                   )}
                 </div>
-                {!formData.subjectId && <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Chon mon hoc de hien thi topic</p>}
-                {isModalTopicsLoading && <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Dang tai topic...</p>}
+                {!formData.subjectId && <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Chọn môn học để hiển thị topic</p>}
+                {isModalTopicsLoading && <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Đang tải topic...</p>}
                 {modalTopicError && <p className="text-[10px] font-black uppercase tracking-widest text-red-500">{modalTopicError}</p>}
 
-                <textarea rows={3} value={formData.description} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Mo ta" className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50" />
+                <textarea rows={3} value={formData.description} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Mô tả" className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50" />
 
                 {formError && <div className="p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 text-[10px] font-black uppercase tracking-widest">{formError}</div>}
 
                 <div className="flex justify-end gap-4 pt-4 border-t border-slate-100">
-                  <button type="button" onClick={() => setIsModalOpen(false)} disabled={isSubmitting} className="px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-400">Huy bo</button>
+                  <button type="button" onClick={() => setIsModalOpen(false)} disabled={isSubmitting} className="px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-400">Hủy bỏ</button>
                   <button type="submit" disabled={isSubmitting} className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50">
-                    {isSubmitting ? 'Dang xu ly...' : modalMode === 'upload' ? 'Tai len ngay' : 'Cap nhat'}
+                    {isSubmitting ? 'Đang xử lý...' : modalMode === 'upload' ? 'Tải lên ngay' : 'Cập nhật'}
                   </button>
                 </div>
               </form>

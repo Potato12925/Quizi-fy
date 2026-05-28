@@ -39,27 +39,27 @@ const formatDate = (value?: string | null) => {
 };
 
 const toTimeAgo = (value?: string | null) => {
-  if (!value) return 'vua xong';
+  if (!value) return 'vừa xong';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'vua xong';
+  if (Number.isNaN(date.getTime())) return 'vừa xong';
   const diffMs = Date.now() - date.getTime();
   const minutes = Math.max(1, Math.floor(diffMs / 60000));
-  if (minutes < 60) return `${minutes} phut truoc`;
+  if (minutes < 60) return `${minutes} phút trước`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} gio truoc`;
+  if (hours < 24) return `${hours} giờ trước`;
   const days = Math.floor(hours / 24);
-  return `${days} ngay truoc`;
+  return `${days} ngày trước`;
 };
 
 const statusUiByAiStatus = (
   status: string | null,
 ): { label: string; color: string } => {
-  if (status === 'completed') return { label: 'Da xu ly AI', color: 'text-emerald-600 bg-emerald-50' };
-  if (status === 'processing') return { label: 'Dang xu ly', color: 'text-blue-600 bg-blue-50' };
-  if (status === 'pending') return { label: 'Dang cho', color: 'text-amber-600 bg-amber-50' };
-  if (status === 'failed') return { label: 'That bai', color: 'text-red-600 bg-red-50' };
-  if (status === 'cancelled') return { label: 'Da huy', color: 'text-slate-600 bg-slate-100' };
-  return { label: 'Chua tao AI', color: 'text-slate-500 bg-slate-100' };
+  if (status === 'completed') return { label: 'Đã xử lý AI', color: 'text-emerald-600 bg-emerald-50' };
+  if (status === 'processing') return { label: 'Đang xử lý', color: 'text-blue-600 bg-blue-50' };
+  if (status === 'pending') return { label: 'Đang chờ', color: 'text-amber-600 bg-amber-50' };
+  if (status === 'failed') return { label: 'Thất bại', color: 'text-red-600 bg-red-50' };
+  if (status === 'cancelled') return { label: 'Đã hủy', color: 'text-slate-600 bg-slate-100' };
+  return { label: 'Chưa tạo AI', color: 'text-slate-500 bg-slate-100' };
 };
 
 const cardFromRequestStatus = (status: string): { icon: string; bg: string } => {
@@ -110,7 +110,7 @@ export default function TeacherDashboard() {
       const result = await getTeacherDashboardStats(5);
       setData(result);
     } catch {
-      setError('Khong the tai du lieu dashboard');
+      setError('Không thể tải dữ liệu dashboard');
     } finally {
       if (showLoading) setIsLoading(false);
     }
@@ -154,16 +154,16 @@ export default function TeacherDashboard() {
     const { summary, ai_request_statuses, question_statuses } = data;
     return [
       {
-        label: 'Tong so cau hoi',
+        label: 'Tổng số câu hỏi',
         value: formatNumber(summary.total_questions),
-        growth: `${data.insights.question_approval_rate_pct.toFixed(1)}% da duyet`,
-        sub: `${formatNumber(question_statuses.draft)} draft | ${formatNumber(question_statuses.approved)} approved`,
+        growth: `${data.insights.question_approval_rate_pct.toFixed(1)}% đã duyệt`,
+        sub: `${formatNumber(question_statuses.draft)} nháp | ${formatNumber(question_statuses.approved)} đã duyệt`,
         icon: 'quiz',
         color: 'text-[#b20112]',
         bg: 'bg-red-50',
       },
       {
-        label: 'Tai lieu da tai',
+        label: 'Tài liệu đã tải',
         value: formatNumber(summary.total_documents),
         sub: `${formatNumber(summary.total_ai_requests)} AI requests`,
         icon: 'description',
@@ -171,18 +171,18 @@ export default function TeacherDashboard() {
         bg: 'bg-amber-50',
       },
       {
-        label: 'Chu de giang day',
+        label: 'Chủ đề giảng dạy',
         value: formatNumber(summary.total_topics),
-        sub: `${formatNumber(summary.total_assigned_subjects)} mon duoc phan cong`,
+        sub: `${formatNumber(summary.total_assigned_subjects)} môn được phân công`,
         icon: 'topic',
         color: 'text-blue-600',
         bg: 'bg-blue-50',
       },
       {
-        label: 'Tien trinh AI',
+        label: 'Tiến trình AI',
         value: formatNumber(summary.total_ai_requests),
         growth: `${data.insights.ai_completion_rate_pct.toFixed(1)}% completed`,
-        sub: `${formatNumber(ai_request_statuses.pending + ai_request_statuses.processing)} dang cho/xu ly`,
+        sub: `${formatNumber(ai_request_statuses.pending + ai_request_statuses.processing)} đang chờ/xử lý`,
         icon: 'auto_awesome',
         color: 'text-emerald-600',
         bg: 'bg-emerald-50',
@@ -195,8 +195,8 @@ export default function TeacherDashboard() {
     return data.recent_ai_requests.map((request) => {
       const iconUi = cardFromRequestStatus(request.status);
       return {
-        title: request.document_title || `Yeu cau #${request.request_id}`,
-        info: `${request.num_questions} cau hoi | ${toTimeAgo(request.created_at)}`,
+        title: request.document_title || `Yêu cầu #${request.request_id}`,
+        info: `${request.num_questions} câu hỏi | ${toTimeAgo(request.created_at)}`,
         icon: iconUi.icon,
         bg: iconUi.bg,
       };
@@ -241,19 +241,19 @@ export default function TeacherDashboard() {
 
     const isTxtByExtension = file.name.toLowerCase().endsWith('.txt');
     if (!ALLOWED_TYPES.includes(file.type) && !isTxtByExtension) {
-      setFormError('Chi ho tro file PDF, DOCX, TXT');
+      setFormError('Chỉ hỗ trợ file PDF, DOCX, TXT');
       setSelectedFile(null);
       return;
     }
 
     if (file.size <= 0) {
-      setFormError('File rong');
+      setFormError('File rỗng');
       setSelectedFile(null);
       return;
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      setFormError('Dung luong toi da 20MB');
+      setFormError('Dung lượng tối đa 20MB');
       setSelectedFile(null);
       return;
     }
@@ -268,15 +268,15 @@ export default function TeacherDashboard() {
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile) {
-      setFormError('Vui long chon file tai lieu');
+      setFormError('Vui lòng chọn file tài liệu');
       return;
     }
     if (!uploadFormData.title.trim()) {
-      setFormError('Vui long nhap ten tai lieu');
+      setFormError('Vui lòng nhập tên tài liệu');
       return;
     }
     if (!uploadFormData.topicId) {
-      setFormError('Vui long chon topic');
+      setFormError('Vui lòng chọn topic');
       return;
     }
 
@@ -295,7 +295,7 @@ export default function TeacherDashboard() {
       setShowSuccess(true);
       window.setTimeout(() => setShowSuccess(false), 3000);
     } catch {
-      setFormError('Khong the tai len tai lieu. Vui long thu lai.');
+      setFormError('Không thể tải lên tài liệu. Vui lòng thử lại.');
     } finally {
       setIsSubmitting(false);
     }
@@ -321,8 +321,8 @@ export default function TeacherDashboard() {
           <div className="bg-emerald-500 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-emerald-400/20">
             <span className="material-symbols-outlined text-2xl">check_circle</span>
             <div>
-              <p className="text-xs font-black uppercase tracking-widest leading-none">Thanh cong!</p>
-              <p className="text-[10px] font-medium opacity-90 mt-1">Tai lieu da duoc tai len va san sang xu ly.</p>
+              <p className="text-xs font-black uppercase tracking-widest leading-none">Thành công!</p>
+              <p className="text-[10px] font-medium opacity-90 mt-1">Tài liệu đã được tải lên và sẵn sàng xử lý.</p>
             </div>
           </div>
         </div>
@@ -331,10 +331,10 @@ export default function TeacherDashboard() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 pt-2">
         <div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tighter">
-            Chao buoi sang, {user?.full_name || user?.username || 'Giao vien'}
+            Chào buổi sáng, {user?.full_name || user?.username || 'Giáo viên'}
           </h1>
           <p className="text-slate-500 mt-2 font-medium">
-            He thong AI da san sang xu ly cac tai lieu va yeu cau moi cua thay/co.
+            Hệ thống AI đã sẵn sàng xử lý các tài liệu và yêu cầu mới của thầy/cô.
           </p>
         </div>
         <Link to="/teacher/ai-generator" className="w-full md:w-auto">
@@ -342,7 +342,7 @@ export default function TeacherDashboard() {
             <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>
               auto_awesome
             </span>
-            Tao cau hoi bang AI
+            Tạo câu hỏi bằng AI
           </button>
         </Link>
       </div>
@@ -369,15 +369,15 @@ export default function TeacherDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-4 space-y-6">
           <div className="flex justify-between items-center px-2">
-            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Moi tao</h3>
+            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Mới tạo</h3>
             <button className="text-[10px] font-black text-[#b20112] uppercase tracking-widest hover:underline decoration-2 underline-offset-4">
-              Xem tat ca
+              Xem tất cả
             </button>
           </div>
 
           <div className="space-y-4">
             {recentAiCards.length === 0 ? (
-              <EmptyState title="Chua co yeu cau AI" message="Hay tao yeu cau AI dau tien tu tai lieu cua ban." />
+              <EmptyState title="Chưa có yêu cầu AI" message="Hãy tạo yêu cầu AI đầu tiên từ tài liệu của bạn." />
             ) : (
               recentAiCards.map((q, idx) => (
                 <div key={idx} className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-5 hover:border-[#b20112] hover:shadow-lg transition-all cursor-pointer group">
@@ -394,9 +394,9 @@ export default function TeacherDashboard() {
           </div>
 
           <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-3">
-            <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider">Phe duyet gan day</h4>
+            <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider">Phê duyệt gần đây</h4>
             {recentApprovedQuestions.length === 0 ? (
-              <p className="text-xs font-bold text-slate-400">Chua co cau hoi approved gan day.</p>
+              <p className="text-xs font-bold text-slate-400">Chưa có câu hỏi được duyệt gần đây.</p>
             ) : (
               recentApprovedQuestions.map((item) => (
                 <div key={item.question_id} className="border border-slate-100 rounded-xl p-3">
@@ -412,7 +412,7 @@ export default function TeacherDashboard() {
 
         <div className="lg:col-span-8 bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm flex flex-col">
           <div className="flex justify-between items-center mb-10">
-            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Tai lieu tai len</h3>
+            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Tài liệu tải lên</h3>
             <div className="flex gap-3">
               <button className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-[#b20112] transition-colors">
                 <span className="material-symbols-outlined text-xl">filter_list</span>
@@ -430,17 +430,17 @@ export default function TeacherDashboard() {
             <table className="w-full text-left">
               <thead>
                 <tr className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-50">
-                  <th className="pb-6">Ten tai lieu</th>
-                  <th className="pb-6">Ngay tai</th>
-                  <th className="pb-6">Trang thai</th>
-                  <th className="pb-6 text-right">Thao tac</th>
+                  <th className="pb-6">Tên tài liệu</th>
+                  <th className="pb-6">Ngày tải</th>
+                  <th className="pb-6">Trạng thái</th>
+                  <th className="pb-6 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50/50">
                 {recentMaterials.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="py-8">
-                      <EmptyState title="Chua co tai lieu" message="Tai lieu moi cua ban se hien thi tai day." />
+                      <EmptyState title="Chưa có tài liệu" message="Tài liệu mới của bạn sẽ hiển thị tại đây." />
                     </td>
                   </tr>
                 ) : (
@@ -472,7 +472,7 @@ export default function TeacherDashboard() {
 
           <Link to="/teacher/resources" className="w-full mt-8 pt-8 border-t border-slate-50 text-center">
             <button className="text-[10px] font-black text-slate-400 hover:text-[#b20112] transition-all uppercase tracking-[0.3em]">
-              Xem tat ca tai lieu
+              Xem tất cả tài liệu
             </button>
           </Link>
         </div>
@@ -489,7 +489,7 @@ export default function TeacherDashboard() {
                     Upload <span className="text-[#b20112]">Nhanh</span>
                   </h2>
                   <p className="text-slate-400 text-xs font-bold mt-1 uppercase tracking-widest">
-                    Tai tai lieu moi len kho luu tru truc tiep tu Dashboard
+                    Tải tài liệu mới lên kho lưu trữ trực tiếp từ Dashboard
                   </p>
                 </div>
                 <button
@@ -524,17 +524,17 @@ export default function TeacherDashboard() {
                   ) : (
                     <div>
                       <span className="material-symbols-outlined text-4xl text-slate-200 mb-2">cloud_upload</span>
-                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Keo tha hoac click de chon file</p>
-                      <p className="text-[9px] text-slate-300 uppercase tracking-widest mt-2">Ho tro PDF, DOCX, TXT (Max 20MB)</p>
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Kéo thả hoặc click để chọn file</p>
+                      <p className="text-[9px] text-slate-300 uppercase tracking-widest mt-2">Hỗ trợ PDF, DOCX, TXT (Max 20MB)</p>
                     </div>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Ten tai lieu hien thi</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Tên tài liệu hiển thị</label>
                   <input
                     type="text"
-                    placeholder="Vi du: Tai lieu mon Toan - Chuong 1"
+                    placeholder="Ví dụ: Tài liệu môn Toán - Chương 1"
                     value={uploadFormData.title}
                     onChange={(e) => setUploadFormData((prev) => ({ ...prev, title: e.target.value }))}
                     className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold focus:ring-2 focus:ring-red-500/20"
@@ -543,7 +543,7 @@ export default function TeacherDashboard() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Mon hoc</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Môn học</label>
                     <select
                       value={uploadFormData.subjectId ?? ''}
                       onChange={(e) => {
@@ -557,7 +557,7 @@ export default function TeacherDashboard() {
                       }}
                       className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold focus:ring-2 focus:ring-red-500/20 cursor-pointer"
                     >
-                      {!uploadSubjects.length && <option value="">Khong co mon hoc</option>}
+                      {!uploadSubjects.length && <option value="">Không có môn học</option>}
                       {uploadSubjects.map((subject) => (
                         <option key={subject.subject_id} value={subject.subject_id}>
                           {subject.subject_name}
@@ -566,13 +566,13 @@ export default function TeacherDashboard() {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Chu de (Topic)</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Chủ đề (Topic)</label>
                     <select
                       value={uploadFormData.topicId ?? ''}
                       onChange={(e) => setUploadFormData((prev) => ({ ...prev, topicId: Number(e.target.value) }))}
                       className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold focus:ring-2 focus:ring-red-500/20 cursor-pointer"
                     >
-                      {!currentTopics.length && <option value="">Khong co topic</option>}
+                      {!currentTopics.length && <option value="">Không có topic</option>}
                       {currentTopics.map((topic) => (
                         <option key={topic.topic_id} value={topic.topic_id}>
                           {topic.topic_name}
@@ -583,10 +583,10 @@ export default function TeacherDashboard() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Mo ta (tuy chon)</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Mô tả (tùy chọn)</label>
                   <textarea
                     rows={3}
-                    placeholder="Nhap mo ta ngan cho tai lieu"
+                    placeholder="Nhập mô tả ngắn cho tài liệu"
                     value={uploadFormData.description}
                     onChange={(e) => setUploadFormData((prev) => ({ ...prev, description: e.target.value }))}
                     className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold focus:ring-2 focus:ring-red-500/20 resize-none"
@@ -606,7 +606,7 @@ export default function TeacherDashboard() {
                     disabled={isSubmitting}
                     className="px-10 py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all"
                   >
-                    Huy bo
+                    Hủy bỏ
                   </button>
                   <button
                     type="submit"
@@ -615,11 +615,11 @@ export default function TeacherDashboard() {
                   >
                     {isSubmitting ? (
                       <>
-                        <span className="material-symbols-outlined animate-spin">sync</span> Dang tai...
+                        <span className="material-symbols-outlined animate-spin">sync</span> Đang tải...
                       </>
                     ) : (
                       <>
-                        <span className="material-symbols-outlined">check_circle</span> Tai len ngay
+                        <span className="material-symbols-outlined">check_circle</span> Tải lên ngay
                       </>
                     )}
                   </button>
@@ -636,20 +636,20 @@ export default function TeacherDashboard() {
         </div>
         <div className="relative z-10 space-y-6 max-w-2xl text-center lg:text-left">
           <span className="bg-white/20 text-white text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-[0.2em] backdrop-blur-md border border-white/20">AI Insights</span>
-          <h2 className="text-4xl font-black text-white leading-[1.1] tracking-tighter">Toi uu hoa noi dung giang day</h2>
+          <h2 className="text-4xl font-black text-white leading-[1.1] tracking-tighter">Tối ưu hóa nội dung giảng dạy</h2>
           <p className="text-white/70 font-medium leading-relaxed">
             {topApproved
-              ? `Cau hoi duoc duyet gan nhat thuoc mon ${topApproved.subject_name || 'N/A'} (${topApproved.topic_name || 'N/A'}). Ban co the tiep tuc tao them bo cau hoi cung boi canh nay.`
-              : 'Hay tao bo cau hoi AI moi tu tai lieu de he thong xay dung thong ke va goi y chi tiet hon cho lop hoc.'}
+              ? `Câu hỏi được duyệt gần nhất thuộc môn ${topApproved.subject_name || 'N/A'} (${topApproved.topic_name || 'N/A'}). Bạn có thể tiếp tục tạo thêm bộ câu hỏi cùng bối cảnh này.`
+              : 'Hãy tạo bộ câu hỏi AI mới từ tài liệu để hệ thống xây dựng thống kê và gợi ý chi tiết hơn cho lớp học.'}
           </p>
           <div className="flex flex-wrap gap-4 pt-4 justify-center lg:justify-start">
             <Link to="/teacher/ai-generator">
               <button className="bg-white text-[#b20112] px-10 py-4 rounded-2xl font-black text-sm shadow-xl hover:bg-red-50 hover:scale-105 active:scale-95 transition-all uppercase tracking-widest">
-                Tao ngay
+                Tạo ngay
               </button>
             </Link>
             <button className="text-white/60 font-black text-sm hover:text-white transition-colors uppercase tracking-widest">
-              De sau
+              Để sau
             </button>
           </div>
         </div>
@@ -657,7 +657,7 @@ export default function TeacherDashboard() {
         <div className="relative mt-12 lg:mt-0 w-80 h-56 bg-white/10 backdrop-blur-2xl rounded-[2.5rem] p-8 border border-white/20 shadow-inner group">
           <div className="space-y-4">
             <div className="flex justify-between items-end">
-              <p className="text-[10px] font-black text-white/50 uppercase tracking-widest">Hieu suat phe duyet</p>
+              <p className="text-[10px] font-black text-white/50 uppercase tracking-widest">Hiệu suất phê duyệt</p>
               <span className="text-white font-black text-2xl tracking-tighter">{approvalPct}%</span>
             </div>
             <div className="w-full h-3 bg-white/10 rounded-full overflow-hidden">
@@ -665,11 +665,11 @@ export default function TeacherDashboard() {
             </div>
             <div className="grid grid-cols-2 gap-4 mt-6">
               <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                <p className="text-[8px] font-black text-white/40 uppercase tracking-widest mb-1">De</p>
+                <p className="text-[8px] font-black text-white/40 uppercase tracking-widest mb-1">Dễ</p>
                 <p className="text-white font-black">{easyPct}%</p>
               </div>
               <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                <p className="text-[8px] font-black text-white/40 uppercase tracking-widest mb-1">Kho</p>
+                <p className="text-[8px] font-black text-white/40 uppercase tracking-widest mb-1">Khó</p>
                 <p className="text-white font-black">{hardPct}%</p>
               </div>
             </div>

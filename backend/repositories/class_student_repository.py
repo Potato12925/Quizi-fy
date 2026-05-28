@@ -5,7 +5,7 @@ from core.supabase import SupabaseManager
 
 
 SELECT_FIELDS = "class_student_id,class_id,student_id"
-HAS_DELETED = False
+HAS_DELETED = True
 
 
 async def find_class_student_by_id(record_id: int) -> dict | None:
@@ -58,7 +58,11 @@ async def update_class_student_by_id(record_id: int, payload: dict) -> dict | No
 
 async def soft_delete_class_student_by_id(record_id: int) -> bool:
     supabase = SupabaseManager.get_client()
-    query = supabase.table("class_students").delete().eq("class_student_id", record_id)
+    query = (
+        supabase.table("class_students")
+        .update({"deleted_at": datetime.now(timezone.utc).isoformat()})
+        .eq("class_student_id", record_id)
+    )
     if HAS_DELETED:
         query = query.is_("deleted_at", None)
     response = await asyncio.to_thread(lambda: query.execute())

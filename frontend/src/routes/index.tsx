@@ -33,6 +33,7 @@ import StudentPracticeSetup from '@/pages/student/StudentPracticeSetup';
 import StudentPracticeDetail from '@/pages/student/StudentPracticeDetail';
 import StudentProgress from '@/pages/student/StudentProgress';
 import StudentResults from '@/pages/student/StudentResults';
+import StudentSettings from '@/pages/student/StudentSettings';
 
 export const router = createBrowserRouter([
   {
@@ -166,7 +167,10 @@ export const router = createBrowserRouter([
             path: 'results/:id',
             element: <StudentResults />,
           },
-
+          {
+            path: 'settings',
+            element: <StudentSettings />,
+          },
         ]
       }
     ],

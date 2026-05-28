@@ -92,3 +92,6 @@ secrets/
 *.cfg
 *.exe
 Scripts/
+
+
+test_supabase.py

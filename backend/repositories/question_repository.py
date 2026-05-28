@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from core.supabase import SupabaseManager
 
 
-SELECT_FIELDS = "question_id,teacher_id,subject_id,topic_id,content,difficulty,source,status"
+SELECT_FIELDS = "question_id,teacher_id,document_topic_id,ai_request_id,content,difficulty,source,status,explanation"
 HAS_DELETED = True
 
 
@@ -20,7 +20,12 @@ async def find_question_by_id(record_id: int) -> dict | None:
 
 async def get_random_question_ids(subject_id: int, document_topic_id: int | None, difficulty: str | None, limit: int) -> list[int]:
     supabase = SupabaseManager.get_client()
-    query = supabase.table("questions").select("question_id").eq("status", "approved")
+    query = (
+        supabase.table("questions")
+        .select("question_id, document_topics!inner(topics!inner(subject_id))")
+        .eq("status", "approved")
+        .eq("document_topics.topics.subject_id", subject_id)
+    )
     if document_topic_id:
         query = query.eq("document_topic_id", document_topic_id)
     if difficulty and difficulty != "mix":

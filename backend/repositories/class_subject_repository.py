@@ -32,7 +32,7 @@ async def list_my_subjects(student_id: int) -> list[dict]:
         return []
     subjects_resp = await asyncio.to_thread(
         lambda: supabase.table("class_subjects")
-        .select("subject_id, subjects(*)")
+        .select("subject_id, subject:subjects(*), class:classes(*)")
         .in_("class_id", class_ids)
         .eq("status", "active")
         .is_("deleted_at", None)

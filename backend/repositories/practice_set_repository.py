@@ -56,3 +56,14 @@ async def soft_delete_practice_set_by_id(record_id: int) -> bool:
     response = await asyncio.to_thread(lambda: query.execute())
     rows = response.data or []
     return len(rows) > 0
+
+
+async def find_practice_sets_with_subjects_by_student(student_id: int) -> list[dict]:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("practice_sets")
+        .select("practice_set_id, subjects(subject_name)")
+        .eq("student_id", student_id)
+        .execute()
+    )
+    return response.data or []

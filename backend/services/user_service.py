@@ -12,7 +12,10 @@ from repositories.user_repository import (
     soft_delete_user_by_id,
     update_user_by_id,
 )
-from schemas.user_schema import UserCreateRequest, UserUpdateRequest
+from schemas.user_schema import UserCreateRequest, UserUpdateRequest, ChangePasswordRequest
+from middlewares.auth_middleware import CurrentUser
+from services.auth_service import _verify_password
+from repositories.auth_repository import find_user_by_id as find_user_with_hash
 
 try:
     import bcrypt
@@ -160,3 +163,26 @@ async def delete_user(user_id: int) -> dict:
         raise ValueError("User not found")
 
     return {"user_id": user_id, "deleted": True}
+
+
+async def change_password_for_user(
+    current_user: CurrentUser,
+    payload: ChangePasswordRequest,
+) -> dict:
+    user = await find_user_with_hash(current_user.user_id)
+    if not user:
+        raise ValueError("User not found")
+
+    password_hash = str(user.get("password_hash", ""))
+    if not password_hash:
+        raise ValueError("No password hash found for this user")
+
+    if not _verify_password(payload.old_password, password_hash):
+        raise ValueError("Mật khẩu cũ không chính xác")
+
+    new_hash = _hash_password(payload.new_password)
+    updated = await update_user_by_id(current_user.user_id, {"password_hash": new_hash})
+    if not updated:
+        raise ValueError("Không thể cập nhật mật khẩu")
+
+    return {"success": True}

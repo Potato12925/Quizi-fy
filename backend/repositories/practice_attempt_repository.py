@@ -70,3 +70,17 @@ async def soft_delete_practice_attempt_by_id(record_id: int) -> bool:
     response = await asyncio.to_thread(lambda: query.execute())
     rows = response.data or []
     return len(rows) > 0
+
+
+async def find_submitted_attempts_by_practice_set_ids(ps_ids: list[int]) -> list[dict]:
+    if not ps_ids:
+        return []
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("practice_attempts")
+        .select("attempt_id, practice_set_id, started_at, submitted_at, total_correct, total_wrong, score")
+        .in_("practice_set_id", ps_ids)
+        .eq("status", "submitted")
+        .execute()
+    )
+    return response.data or []

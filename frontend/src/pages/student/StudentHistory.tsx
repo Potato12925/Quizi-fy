@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getStudentHistory } from '@/api/studentApi';
+import { getStudentHistory, exportStudentHistoryPdf } from '@/api/studentApi';
 import type { HistoryItem } from '@/api/studentApi';
 
 import LoadingState from '@/components/common/LoadingState';
@@ -11,6 +11,7 @@ export default function HistoryPage() {
   const [attempts, setAttempts] = useState<HistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -38,8 +39,21 @@ export default function HistoryPage() {
           <p className="text-slate-500 mt-2 font-medium">Theo dõi sự tiến bộ của bạn qua từng bài tập.</p>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
-           <button className="flex-1 md:flex-none px-8 py-4 rounded-2xl bg-white border border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#b20112] transition-all shadow-sm">
-             Tải báo cáo (PDF)
+           <button 
+             onClick={async () => {
+               setIsExporting(true);
+               try {
+                 await exportStudentHistoryPdf();
+               } finally {
+                 setIsExporting(false);
+               }
+             }}
+             disabled={isExporting}
+             className={`flex-1 md:flex-none px-8 py-4 rounded-2xl bg-white border border-slate-100 text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${
+               isExporting ? 'text-slate-300 cursor-not-allowed' : 'text-slate-400 hover:text-[#b20112]'
+             }`}
+           >
+             {isExporting ? 'Đang xuất...' : 'Tải báo cáo (PDF)'}
            </button>
         </div>
       </div>

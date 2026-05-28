@@ -29,3 +29,8 @@ class UserResponse(BaseModel):
     is_active: bool
     must_change_password: bool
     roles: list[str]
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=6, max_length=255)
+    new_password: str = Field(..., min_length=6, max_length=255)

@@ -1,498 +1,779 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { generateQuestions, saveGeneratedQuestions, getTopicsBySubject, getResources, type GeneratedQuestion, type DbTopic, type TeacherResource } from '@/api/teacherApi';
-import { useAuth } from '@/contexts/AuthContext';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
-export default function AiGeneratorPage() {
-  const { user } = useAuth();
+import {
+  bulkApproveTeacherQuestions,
+  bulkRejectTeacherQuestions,
+  createTeacherAiRequest,
+  createTeacherManualQuestionFromAiGenerator,
+  getTeacherAiGeneratorOptions,
+  getTeacherAiRequestQuestions,
+  getTeacherAiRequests,
+  patchTeacherQuestion,
+  retryTeacherAiRequest,
+  type AiGeneratorOptionDocumentTopic,
+  type AiGeneratorOptionsResponse,
+  type Difficulty,
+  type TeacherAiQuestionItem,
+  type TeacherAiRequestItem,
+} from '@/api/teacherAIGeneratorApi';
+
+type EditableQuestion = {
+  content: string;
+  difficulty: Difficulty;
+  explanation: string;
+  options: string[];
+  correct_option_index: number;
+};
+
+type ManualDraftForm = {
+  content: string;
+  difficulty: Difficulty;
+  explanation: string;
+  options: string[];
+  correct_option_index: number;
+};
+
+const DEFAULT_MANUAL_FORM: ManualDraftForm = {
+  content: '',
+  difficulty: 'medium',
+  explanation: '',
+  options: ['', '', '', ''],
+  correct_option_index: 0,
+};
+
+export default function TeacherAIGeneratorPage() {
   const location = useLocation();
-  const passedDocId = location.state?.documentId;
+  const preselectedDocumentId = Number(location.state?.documentId || 0) || null;
 
-  const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({
-    subjectId: 1,
-    topicId: 1,
-    documentId: passedDocId ? String(passedDocId) : 'all',
-    rangeType: 'all', // 'all' | 'partial'
-    partialText: '',
-    level: 'Trung bình',
-    quantity: 20,
-    language: 'Tiếng Việt'
+  const [options, setOptions] = useState<AiGeneratorOptionsResponse>({
+    subjects: [],
+    topics: [],
+    documents: [],
+    document_topics: [],
   });
+  const [requests, setRequests] = useState<TeacherAiRequestItem[]>([]);
+  const [activeRequestId, setActiveRequestId] = useState<number | null>(null);
+  const [requestQuestions, setRequestQuestions] = useState<TeacherAiQuestionItem[]>([]);
+  const [questionEdits, setQuestionEdits] = useState<Record<number, EditableQuestion>>({});
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<number[]>([]);
 
-  const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
-  const [expandedSource, setExpandedSource] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [subjectId, setSubjectId] = useState<number | null>(null);
+  const [topicId, setTopicId] = useState<number | null>(null);
+  const [documentId, setDocumentId] = useState<number | null>(null);
+
+  const [numQuestions, setNumQuestions] = useState(10);
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [contentScope, setContentScope] = useState('');
+
+  const [manualForm, setManualForm] = useState<ManualDraftForm>(DEFAULT_MANUAL_FORM);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+
+  const [loading, setLoading] = useState(true);
+  const [refreshingRequests, setRefreshingRequests] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
-  const navigate = useNavigate();
+  const [info, setInfo] = useState('');
 
-  const [resources, setResources] = useState<TeacherResource[]>([]);
-  const [availableTopics, setAvailableTopics] = useState<DbTopic[]>([]);
+  const currentDocumentTopic = useMemo(() => {
+    if (!subjectId || !topicId || !documentId) return null;
+    return (
+      options.document_topics.find(
+        (item) =>
+          item.subject_id === subjectId &&
+          item.topic_id === topicId &&
+          item.document_id === documentId,
+      ) || null
+    );
+  }, [subjectId, topicId, documentId, options.document_topics]);
 
-  // Load resources and pre-select subject
+  const activeRequest = useMemo(
+    () => requests.find((item) => item.request_id === activeRequestId) || null,
+    [requests, activeRequestId],
+  );
+
+  const hasUnsavedChanges = useMemo(() => Object.keys(questionEdits).length > 0, [questionEdits]);
+
+  const filteredTopics = useMemo(
+    () => options.topics.filter((item) => item.subject_id === subjectId),
+    [options.topics, subjectId],
+  );
+
+  const filteredDocuments = useMemo(() => {
+    if (!subjectId || !topicId) return [];
+    const documentIds = new Set(
+      options.document_topics
+        .filter((item) => item.subject_id === subjectId && item.topic_id === topicId)
+        .map((item) => item.document_id),
+    );
+    return options.documents.filter((item) => documentIds.has(item.document_id));
+  }, [options.document_topics, options.documents, subjectId, topicId]);
+
+  const contextHasActiveRequest = useMemo(() => {
+    if (!currentDocumentTopic) return false;
+    return requests.some(
+      (item) =>
+        item.document_topic_id === currentDocumentTopic.document_topic_id &&
+        (item.status === 'pending' || item.status === 'processing'),
+    );
+  }, [currentDocumentTopic, requests]);
+
+  const normalizeQuestionForEdit = (question: TeacherAiQuestionItem): EditableQuestion => {
+    const sortedOptions = [...question.options].sort((a, b) => a.order_num - b.order_num);
+    const correctOptionIndex = sortedOptions.findIndex((opt) => opt.is_correct);
+    return {
+      content: question.content,
+      difficulty: question.difficulty,
+      explanation: question.explanation || '',
+      options: sortedOptions.map((opt) => opt.option_text).slice(0, 4),
+      correct_option_index: correctOptionIndex >= 0 ? correctOptionIndex : 0,
+    };
+  };
+
+  const loadRequestQuestions = async (requestId: number) => {
+    const items = await getTeacherAiRequestQuestions(requestId);
+    setRequestQuestions(items);
+    setQuestionEdits({});
+    setSelectedQuestionIds([]);
+  };
+
+  const applyInitialSelections = (nextOptions: AiGeneratorOptionsResponse) => {
+    if (nextOptions.subjects.length === 0) {
+      setSubjectId(null);
+      setTopicId(null);
+      setDocumentId(null);
+      return;
+    }
+
+    let selectedSubject = nextOptions.subjects[0].subject_id;
+    let selectedTopic: number | null = null;
+    let selectedDocument: number | null = null;
+
+    if (preselectedDocumentId) {
+      const preselectedDocumentTopic = nextOptions.document_topics.find(
+        (item) => item.document_id === preselectedDocumentId,
+      );
+      if (preselectedDocumentTopic) {
+        selectedSubject = preselectedDocumentTopic.subject_id;
+        selectedTopic = preselectedDocumentTopic.topic_id;
+        selectedDocument = preselectedDocumentTopic.document_id;
+      }
+    }
+
+    if (!selectedTopic) {
+      const firstTopic = nextOptions.topics.find((item) => item.subject_id === selectedSubject);
+      selectedTopic = firstTopic?.topic_id || null;
+    }
+
+    if (!selectedDocument && selectedTopic) {
+      const firstDocTopic = nextOptions.document_topics.find(
+        (item) => item.subject_id === selectedSubject && item.topic_id === selectedTopic,
+      );
+      selectedDocument = firstDocTopic?.document_id || null;
+    }
+
+    setSubjectId(selectedSubject);
+    setTopicId(selectedTopic);
+    setDocumentId(selectedDocument);
+  };
+
+  const refreshRequests = async (preserveSelection = true) => {
+    setRefreshingRequests(true);
+    try {
+      const response = await getTeacherAiRequests(1, 100);
+      setRequests(response.items);
+      if (response.items.length === 0) {
+        setActiveRequestId(null);
+        setRequestQuestions([]);
+        return;
+      }
+
+      const currentId = preserveSelection ? activeRequestId : null;
+      const exists = currentId ? response.items.some((item) => item.request_id === currentId) : false;
+      const nextActiveId = exists ? currentId : response.items[0].request_id;
+      setActiveRequestId(nextActiveId);
+      if (nextActiveId) {
+        await loadRequestQuestions(nextActiveId);
+      }
+    } finally {
+      setRefreshingRequests(false);
+    }
+  };
+
   useEffect(() => {
-    const loadInitialData = async () => {
-      if (!user?.user_id) return;
+    const loadPageData = async () => {
+      setLoading(true);
+      setError('');
       try {
-        const resList = await getResources(user.user_id);
-        setResources(resList);
-        
-        if (passedDocId) {
-          const doc = resList.find(r => String(r.id) === String(passedDocId));
-          if (doc && doc.subjectId) {
-            setFormData(prev => ({ ...prev, subjectId: doc.subjectId! }));
-          }
+        const [loadedOptions, loadedRequests] = await Promise.all([
+          getTeacherAiGeneratorOptions(),
+          getTeacherAiRequests(1, 100),
+        ]);
+        setOptions(loadedOptions);
+        applyInitialSelections(loadedOptions);
+        setRequests(loadedRequests.items);
+        if (loadedRequests.items.length > 0) {
+          const latestRequestId = loadedRequests.items[0].request_id;
+          setActiveRequestId(latestRequestId);
+          await loadRequestQuestions(latestRequestId);
         }
-      } catch (err) {
-        console.error('Lỗi tải tài liệu', err);
+      } catch {
+        setError('Unable to load AI generator data');
+      } finally {
+        setLoading(false);
       }
     };
-    loadInitialData();
-  }, [passedDocId, user?.user_id]);
+    loadPageData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Load topics dynamically based on subjectId
   useEffect(() => {
-    const loadTopics = async () => {
-      try {
-        const topics = await getTopicsBySubject(formData.subjectId);
-        setAvailableTopics(topics);
-        if (topics.length > 0) {
-          setFormData(prev => ({ ...prev, topicId: topics[0].topic_id }));
-        }
-      } catch (err) {
-        console.error('Lỗi tải chương học', err);
-      }
+    if (!hasUnsavedChanges) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
     };
-    loadTopics();
-  }, [formData.subjectId]);
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnsavedChanges]);
 
-  const nextStep = () => setStep(step + 1);
-  const prevStep = () => setStep(step - 1);
+  useEffect(() => {
+    const hasInProgress = requests.some((item) => item.status === 'pending' || item.status === 'processing');
+    if (!hasInProgress) return;
+    const interval = window.setInterval(() => {
+      refreshRequests(true).catch(() => undefined);
+    }, 8000);
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests, activeRequestId]);
 
-  const handleGenerate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.subjectId) {
-      setError('Vui lòng chọn môn học');
+  const onSubjectChange = (nextSubjectId: number) => {
+    setSubjectId(nextSubjectId);
+    const nextTopic = options.topics.find((item) => item.subject_id === nextSubjectId);
+    if (!nextTopic) {
+      setTopicId(null);
+      setDocumentId(null);
       return;
     }
 
-    if (!formData.topicId) {
-      setError('Vui lòng chọn chương học để lưu trữ câu hỏi');
+    setTopicId(nextTopic.topic_id);
+    const nextDocTopic = options.document_topics.find(
+      (item) => item.subject_id === nextSubjectId && item.topic_id === nextTopic.topic_id,
+    );
+    setDocumentId(nextDocTopic?.document_id || null);
+  };
+
+  const onTopicChange = (nextTopicId: number) => {
+    setTopicId(nextTopicId);
+    if (!subjectId) {
+      setDocumentId(null);
       return;
     }
+    const nextDocTopic = options.document_topics.find(
+      (item) => item.subject_id === subjectId && item.topic_id === nextTopicId,
+    );
+    setDocumentId(nextDocTopic?.document_id || null);
+  };
 
-    if (formData.rangeType === 'partial' && !formData.partialText.trim()) {
-      setError('Vui lòng nhập phần trích dẫn văn bản giới hạn nội dung');
-      return;
-    }
-
-    if (!formData.level) {
-      setError('Vui lòng chọn mức độ khó');
-      return;
-    }
-
-    if (!formData.quantity || formData.quantity < 1 || formData.quantity > 100) {
-      setError('Số lượng câu hỏi phải từ 1 đến 100');
-      return;
-    }
-
+  const onGenerate = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError('');
-    setStep(3); // Show processing UI
-    setIsGenerating(true);
+    setInfo('');
 
-    try {
-      const result = await generateQuestions(formData);
-      setQuestions(result);
-      setStep(4); // Move to review step
-    } catch {
-        setError('Lỗi tạo câu hỏi');
-      setStep(2); // Go back if error
-    } finally {
-      setIsGenerating(false);
+    if (!currentDocumentTopic) {
+      setError('Please select a valid subject-topic-document combination.');
+      return;
     }
-  };
-
-  const handleSave = async () => {
-    const approvedQuestions = questions.filter(q => q.isApproved);
-    if (approvedQuestions.length === 0) {
-      alert('Chưa có câu hỏi nào được duyệt!');
+    if (contextHasActiveRequest) {
+      setError('There is already a pending/processing request for this document-topic.');
       return;
     }
 
-    setIsSaving(true);
+    setGenerating(true);
     try {
-      const questionsToSave = approvedQuestions.map(q => ({
-        ...q,
-        topicId: String(formData.topicId)
-      }));
-      await saveGeneratedQuestions({ questions: questionsToSave });
-      alert('Đã lưu câu hỏi thành công!');
-      navigate('/teacher/question-bank');
-    } catch {
-      alert('Lỗi lưu câu hỏi');
+      const created = await createTeacherAiRequest({
+        document_topic_id: currentDocumentTopic.document_topic_id,
+        num_questions: numQuestions,
+        difficulty,
+        content_scope: contentScope.trim() || undefined,
+      });
+      setRequests((prev) => [created, ...prev]);
+      setActiveRequestId(created.request_id);
+      setRequestQuestions([]);
+      setInfo('AI request queued. Questions will appear after processing.');
+    } catch (caught: unknown) {
+      const message = caught instanceof Error ? caught.message : 'Unable to create AI request.';
+      setError(message);
     } finally {
-      setIsSaving(false);
+      setGenerating(false);
     }
   };
 
-  const toggleApprove = (id: string) => {
-    setQuestions(questions.map(q => q.id === id ? { ...q, isApproved: !q.isApproved } : q));
-  };
-
-  const handleEdit = (idx: number, field: string, value: any, optIdx?: number) => {
-    const newQuestions = [...questions];
-    if (optIdx !== undefined) {
-      newQuestions[idx].options[optIdx] = value;
-    } else {
-      newQuestions[idx] = { ...newQuestions[idx], [field]: value };
+  const onRetryFailedRequest = async (requestId: number) => {
+    setActionLoading(true);
+    setError('');
+    setInfo('');
+    try {
+      await retryTeacherAiRequest(requestId);
+      await refreshRequests(true);
+      setInfo('Retry request has been queued.');
+    } catch (caught: unknown) {
+      const message = caught instanceof Error ? caught.message : 'Unable to retry AI request.';
+      setError(message);
+    } finally {
+      setActionLoading(false);
     }
-    newQuestions[idx].isApproved = false;
-    setQuestions(newQuestions);
   };
 
-  const approvedCount = questions.filter(q => q.isApproved).length;
-  const isAllApproved = approvedCount === questions.length && questions.length > 0;
+  const onChangeQuestionEdit = (questionId: number, next: EditableQuestion) => {
+    setQuestionEdits((prev) => ({ ...prev, [questionId]: next }));
+  };
+
+  const onSaveQuestion = async (questionId: number) => {
+    const payload = questionEdits[questionId];
+    if (!payload) return;
+    setActionLoading(true);
+    setError('');
+    try {
+      const updated = await patchTeacherQuestion(questionId, payload);
+      setRequestQuestions((prev) => prev.map((item) => (item.question_id === questionId ? updated : item)));
+      setQuestionEdits((prev) => {
+        const next = { ...prev };
+        delete next[questionId];
+        return next;
+      });
+    } catch (caught: unknown) {
+      const message = caught instanceof Error ? caught.message : 'Unable to save question.';
+      setError(message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const onToggleQuestionSelect = (questionId: number, checked: boolean) => {
+    setSelectedQuestionIds((prev) => {
+      if (checked) {
+        if (prev.includes(questionId)) return prev;
+        return [...prev, questionId];
+      }
+      return prev.filter((item) => item !== questionId);
+    });
+  };
+
+  const onBulkStatus = async (mode: 'approve' | 'reject') => {
+    if (selectedQuestionIds.length === 0) {
+      setError('Please select at least one draft question.');
+      return;
+    }
+    setActionLoading(true);
+    setError('');
+    setInfo('');
+    try {
+      if (mode === 'approve') {
+        await bulkApproveTeacherQuestions({ question_ids: selectedQuestionIds });
+      } else {
+        await bulkRejectTeacherQuestions({ question_ids: selectedQuestionIds });
+      }
+      if (activeRequestId) {
+        await loadRequestQuestions(activeRequestId);
+      }
+      setSelectedQuestionIds([]);
+      setInfo(mode === 'approve' ? 'Selected questions approved.' : 'Selected questions rejected.');
+    } catch (caught: unknown) {
+      const message = caught instanceof Error ? caught.message : 'Unable to update question statuses.';
+      setError(message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const onCreateManualDraft = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    setInfo('');
+    if (!currentDocumentTopic) {
+      setError('Please select a valid document-topic before creating a manual draft.');
+      return;
+    }
+    if (!manualForm.content.trim()) {
+      setError('Manual question content is required.');
+      return;
+    }
+    if (manualForm.options.some((item) => !item.trim())) {
+      setError('All manual options must be filled.');
+      return;
+    }
+
+    setManualSubmitting(true);
+    try {
+      await createTeacherManualQuestionFromAiGenerator({
+        document_topic_id: currentDocumentTopic.document_topic_id,
+        content: manualForm.content.trim(),
+        difficulty: manualForm.difficulty,
+        explanation: manualForm.explanation.trim() || undefined,
+        options: manualForm.options.map((item) => item.trim()),
+        correct_option_index: manualForm.correct_option_index,
+      });
+      setManualForm(DEFAULT_MANUAL_FORM);
+      setInfo('Manual draft question created.');
+    } catch (caught: unknown) {
+      const message = caught instanceof Error ? caught.message : 'Unable to create manual draft question.';
+      setError(message);
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-sm font-bold text-slate-500">Loading AI generator...</div>;
+  }
 
   return (
-    <div className="min-h-screen bg-[#f9f9f9] text-[#1a1c1c] font-sans pb-24">
-      {/* Import Material Symbols */}
-      <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <div className="space-y-8 pb-20">
+      <div className="space-y-1">
+        <h1 className="text-3xl font-black tracking-tight text-slate-900">Teacher AI Question Generator</h1>
+        <p className="text-sm text-slate-500">
+          Generation requests and draft questions are persisted in database and can be reviewed anytime.
+        </p>
+      </div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-slate-50/80 backdrop-blur-xl shadow-[0px_12px_32px_rgba(147,0,10,0.06)] flex items-center justify-between px-6 py-4 w-full">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-full bg-[#d62828] flex items-center justify-center text-white font-bold text-sm overflow-hidden border-2 border-[#ffdad6]">
-            <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAvM0S4MsBPNPJhU-zrBiqAM7h3sCY7Fa-y70x1pukUjhC5aSrNhNC-YR8NsLqClRS55fpCPM5L3TudsHQanfoWWGiX4Y2cHBF0aLcGrstlkNxOBg-r2drMNS5YLDnUGGzvkkoeqYJQ6gfrLEtYsgttuK-zknztDK0FFGPmJ-vvR65tQLKWoDu9LUVJsvV7YuTryC_tvhngvA9WOpVZabdcnlrYM6TNb2k_NQHSUW34kNbzU7Mys2ZT17DKJnCK4-VVQSi7Uv80SVg" alt="Avatar" className="w-full h-full object-cover" />
+      {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-600">{error}</div>}
+      {info && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">{info}</div>}
+
+      <form onSubmit={onGenerate} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-black text-slate-900">Generate AI Questions</h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          <select
+            value={subjectId ?? ''}
+            onChange={(e) => onSubjectChange(Number(e.target.value))}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          >
+            {options.subjects.map((item) => (
+              <option key={item.subject_id} value={item.subject_id}>
+                {item.subject_name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={topicId ?? ''}
+            onChange={(e) => onTopicChange(Number(e.target.value))}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          >
+            {filteredTopics.map((item) => (
+              <option key={item.topic_id} value={item.topic_id}>
+                {item.topic_name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={documentId ?? ''}
+            onChange={(e) => setDocumentId(Number(e.target.value))}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          >
+            {filteredDocuments.length === 0 && <option value="">No document available</option>}
+            {filteredDocuments.map((item) => (
+              <option key={item.document_id} value={item.document_id}>
+                {item.document_title}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <input
+            type="number"
+            min={1}
+            max={100}
+            value={numQuestions}
+            onChange={(e) => setNumQuestions(Number(e.target.value))}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            placeholder="Number of questions"
+          />
+
+          <select
+            value={difficulty}
+            onChange={(e) => setDifficulty(e.target.value as Difficulty)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+
+          <button
+            type="submit"
+            disabled={generating || contextHasActiveRequest || !currentDocumentTopic}
+            className="rounded-xl bg-[#9B0F06] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {generating ? 'Generating...' : 'Generate'}
+          </button>
+        </div>
+
+        <textarea
+          value={contentScope}
+          onChange={(e) => setContentScope(e.target.value)}
+          placeholder="Optional content scope"
+          rows={3}
+          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+        />
+        {currentDocumentTopic && (
+          <p className="text-xs text-slate-500">
+            Using `document_topic_id`: <strong>{currentDocumentTopic.document_topic_id}</strong>
+          </p>
+        )}
+      </form>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-black text-slate-900">AI Requests</h2>
+            <button
+              type="button"
+              onClick={() => refreshRequests(true)}
+              className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold text-slate-700"
+              disabled={refreshingRequests}
+            >
+              {refreshingRequests ? 'Refreshing...' : 'Refresh'}
+            </button>
           </div>
-          <h1 className="text-xl font-bold tracking-tighter text-[#b20112]">Quizify AI</h1>
-        </div>
-        <div className="flex items-center gap-4">
-          <button className="material-symbols-outlined text-slate-600 p-2 hover:bg-red-50 rounded-full transition-all">notifications</button>
-          <Link to="/teacher/dashboard" className="material-symbols-outlined text-slate-500 p-2 hover:bg-red-50 rounded-full transition-all">close</Link>
-        </div>
-      </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-12">
-        {/* Stepper */}
-        <nav className="flex justify-between items-center mb-16 relative">
-          <div className="absolute top-5 left-0 w-full h-[2px] bg-[#e2e2e2] -z-10"></div>
-          
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex flex-col items-center gap-2 bg-[#f9f9f9] px-4">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-                step === i ? 'bg-[#b20112] text-white shadow-lg ring-4 ring-white' : 
-                step > i ? 'bg-green-100 text-green-700 border-2 border-green-200' : 
-                'bg-[#e2e2e2] text-[#5c403d]'
-              }`}>
-                {step > i ? <span className="material-symbols-outlined text-sm">check</span> : <span className="text-sm font-bold">{i}</span>}
-              </div>
-              <span className={`text-[10px] font-bold uppercase tracking-wider ${step >= i ? 'text-[#b20112]' : 'text-slate-400'}`}>
-                {i === 1 ? '1. Tải tài liệu' : i === 2 ? '2. Cấu hình' : i === 3 ? '3. Xử lý' : '4. Duyệt & Lưu'}
-              </span>
-            </div>
-          ))}
-        </nav>
-
-        {/* STEP 1: UPLOAD (RESTORED) */}
-        {step === 1 && (
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="md:col-span-12 space-y-8 bg-white p-10 md:p-12 rounded-[2.5rem] border border-slate-100 shadow-sm">
-              <div className="space-y-2">
-                <h2 className="text-4xl font-extrabold tracking-tight leading-tight">Chọn nguồn tài nguyên tài liệu</h2>
-                <p className="text-lg text-[#5c403d] leading-relaxed font-medium">Chọn phạm vi tài liệu giảng dạy để AI phân tích và thiết lập bộ câu hỏi.</p>
-              </div>
-
-              {error && <div className="p-4 bg-red-50 text-red-500 rounded-xl font-bold text-xs">{error}</div>}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
-                <div className="space-y-4">
-                  <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Chọn môn học</label>
-                  <select 
-                    value={formData.subjectId}
-                    onChange={e => setFormData({ ...formData, subjectId: parseInt(e.target.value) })}
-                    className="w-full bg-[#f3f3f3] border-none rounded-xl px-6 py-4 text-on-surface focus:ring-2 focus:ring-[#d62828] outline-none font-bold"
-                  >
-                    <option value={1}>Mạng máy tính</option>
-                    <option value={2}>Cấu trúc dữ liệu và Giải thuật</option>
-                    <option value={3}>Hệ điều hành</option>
-                  </select>
-                </div>
-
-                <div className="space-y-4">
-                  <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Phạm vi tài liệu nguồn</label>
-                  <div className="flex gap-4 p-1 bg-[#e8e8e8] rounded-xl">
-                    <button 
-                      type="button" 
-                      onClick={() => setFormData({ ...formData, documentId: 'all' })}
-                      className={`flex-1 py-3.5 text-xs font-bold rounded-lg transition-all ${formData.documentId === 'all' ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}
-                    >
-                      Tất cả tài liệu môn học
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        const firstDoc = resources.find(r => r.subjectId === formData.subjectId);
-                        setFormData({ ...formData, documentId: firstDoc ? String(firstDoc.id) : '' });
-                      }}
-                      className={`flex-1 py-3.5 text-xs font-bold rounded-lg transition-all ${formData.documentId !== 'all' ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}
-                    >
-                      Chọn tài liệu cụ thể
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {formData.documentId !== 'all' && (
-                <div className="space-y-6 pt-4 border-t border-slate-100 animate-in fade-in duration-300">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-4">
-                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Chọn tệp tài liệu cụ thể</label>
-                      <select 
-                        value={formData.documentId}
-                        onChange={e => setFormData({ ...formData, documentId: e.target.value })}
-                        className="w-full bg-[#f3f3f3] border-none rounded-xl px-6 py-4 text-on-surface focus:ring-2 focus:ring-[#d62828] outline-none font-bold"
-                      >
-                        <option value="">-- Chọn tệp tài liệu --</option>
-                        {resources.filter(r => r.subjectId === formData.subjectId).map(doc => (
-                          <option key={doc.id} value={doc.id}>{doc.name} ({doc.size})</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-4">
-                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Độ dài nội dung đọc</label>
-                      <div className="flex gap-4 p-1 bg-[#e8e8e8] rounded-xl">
-                        <button 
-                          type="button" 
-                          onClick={() => setFormData({ ...formData, rangeType: 'all' })}
-                          className={`flex-1 py-3.5 text-xs font-bold rounded-lg transition-all ${formData.rangeType === 'all' ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}
-                        >
-                          Toàn bộ tài liệu
-                        </button>
-                        <button 
-                          type="button" 
-                          onClick={() => setFormData({ ...formData, rangeType: 'partial' })}
-                          className={`flex-1 py-3.5 text-xs font-bold rounded-lg transition-all ${formData.rangeType === 'partial' ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}
-                        >
-                          Một phần tài liệu
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {formData.rangeType === 'partial' && (
-                    <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
-                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Nhập đoạn văn bản trích dẫn giới hạn nội dung tạo câu hỏi</label>
-                      <textarea 
-                        rows={6}
-                        placeholder="Hãy copy và dán một phần bài viết hoặc nội dung chính xác trong giáo trình tại đây để AI phân tích..."
-                        value={formData.partialText}
-                        onChange={e => setFormData({ ...formData, partialText: e.target.value })}
-                        className="w-full p-6 rounded-3xl bg-[#f3f3f3] border-none text-xs font-bold focus:ring-2 focus:ring-[#d62828] resize-none"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex justify-end pt-6 border-t border-slate-50">
-                <button 
+          <div className="max-h-[420px] space-y-2 overflow-auto">
+            {requests.length === 0 && <p className="text-sm text-slate-500">No AI request yet.</p>}
+            {requests.map((item) => (
+              <div
+                key={item.request_id}
+                className={`rounded-xl border p-3 ${activeRequestId === item.request_id ? 'border-[#9B0F06] bg-red-50/40' : 'border-slate-200'}`}
+              >
+                <button
+                  type="button"
                   onClick={() => {
-                    if (formData.documentId !== 'all' && !formData.documentId) {
-                      setError('Vui lòng chọn tài liệu cụ thể');
-                      return;
-                    }
-                    setError('');
-                    nextStep();
+                    setActiveRequestId(item.request_id);
+                    loadRequestQuestions(item.request_id).catch(() => undefined);
                   }}
-                  className="bg-[#b20112] text-white px-10 py-4 rounded-xl font-bold shadow-md hover:bg-black transition-all uppercase tracking-widest text-xs flex items-center gap-2"
+                  className="w-full text-left"
                 >
-                  Tiếp tục cấu hình <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                  <p className="text-sm font-bold text-slate-800">
+                    Request #{item.request_id} - {item.status}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {item.document_topic.document_title} / {item.document_topic.topic_name}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {item.num_questions} question(s), {item.difficulty}
+                  </p>
+                  {item.error_message && <p className="mt-1 text-xs font-bold text-red-600">{item.error_message}</p>}
                 </button>
+                {item.status === 'failed' && (
+                  <button
+                    type="button"
+                    onClick={() => onRetryFailedRequest(item.request_id)}
+                    disabled={actionLoading}
+                    className="mt-2 rounded-lg bg-slate-900 px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
+                  >
+                    Retry
+                  </button>
+                )}
               </div>
-            </div>
+            ))}
           </div>
+        </div>
+
+        <form onSubmit={onCreateManualDraft} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-black text-slate-900">Create Manual Draft Question</h2>
+          <textarea
+            value={manualForm.content}
+            onChange={(e) => setManualForm((prev) => ({ ...prev, content: e.target.value }))}
+            rows={3}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            placeholder="Question content"
+          />
+          <select
+            value={manualForm.difficulty}
+            onChange={(e) => setManualForm((prev) => ({ ...prev, difficulty: e.target.value as Difficulty }))}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+          {manualForm.options.map((opt, idx) => (
+            <input
+              key={idx}
+              value={opt}
+              onChange={(e) =>
+                setManualForm((prev) => {
+                  const nextOptions = [...prev.options];
+                  nextOptions[idx] = e.target.value;
+                  return { ...prev, options: nextOptions };
+                })
+              }
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              placeholder={`Option ${String.fromCharCode(65 + idx)}`}
+            />
+          ))}
+          <div className="grid grid-cols-2 gap-3">
+            <select
+              value={manualForm.correct_option_index}
+              onChange={(e) =>
+                setManualForm((prev) => ({ ...prev, correct_option_index: Number(e.target.value) }))
+              }
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            >
+              <option value={0}>Correct: A</option>
+              <option value={1}>Correct: B</option>
+              <option value={2}>Correct: C</option>
+              <option value={3}>Correct: D</option>
+            </select>
+            <button
+              type="submit"
+              disabled={manualSubmitting || !currentDocumentTopic}
+              className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {manualSubmitting ? 'Saving...' : 'Create Draft'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-black text-slate-900">Draft Questions Review</h2>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => onBulkStatus('approve')}
+              disabled={actionLoading || selectedQuestionIds.length === 0}
+              className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
+            >
+              Approve Selected
+            </button>
+            <button
+              type="button"
+              onClick={() => onBulkStatus('reject')}
+              disabled={actionLoading || selectedQuestionIds.length === 0}
+              className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
+            >
+              Reject Selected
+            </button>
+          </div>
+        </div>
+
+        {activeRequest && (
+          <p className="text-xs text-slate-500">
+            Active request: #{activeRequest.request_id} ({activeRequest.status})
+          </p>
         )}
 
-        {/* STEP 2: CONFIG (RESTORED) */}
-        {step === 2 && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 animate-in fade-in slide-in-from-right-4 duration-500">
-            <aside className="lg:col-span-3 space-y-8">
-               <div className="rounded-xl overflow-hidden shadow-sm border border-slate-100">
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUVZ5nWRiO3ygovmn4sN0uEJ_yAc1t3kCFcUBlTd2XL0JnvivaOlk6L5nMQSernACk-_KBu2bl28AEJ2niiRIC9yQHPgW1CAE9j6_0LpduRXoD4bEszGiiOR65AHJG5QEQqLKizNdbfFGYP7vk0sha7xhasdpI9qe5c-RqD-4HYuWxFnGxSAlueobJ7rBpZjkGJJEZ0bBXhZ1v-6v-S88d2JdYb-Mmo0daTdzDpdtCG2tVQG25LzBho5UmpczDLRybhlRA-xFJyXs" alt="Decoration" className="w-full h-40 object-cover" />
-                <div className="p-4 bg-[#f3f3f3]">
-                  <p className="text-[10px] text-[#5c403d] italic">"Giáo dục là vũ khí mạnh nhất để thay đổi thế giới."</p>
+        {requestQuestions.length === 0 && <p className="text-sm text-slate-500">No generated question yet.</p>}
+
+        <div className="space-y-4">
+          {requestQuestions.map((question) => {
+            const editState = questionEdits[question.question_id] || normalizeQuestionForEdit(question);
+            const isChecked = selectedQuestionIds.includes(question.question_id);
+            return (
+              <div key={question.question_id} className="space-y-2 rounded-xl border border-slate-200 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(e) => onToggleQuestionSelect(question.question_id, e.target.checked)}
+                  />
+                  <span className="text-xs font-bold text-slate-500">#{question.question_id}</span>
+                  <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">
+                    {question.status}
+                  </span>
                 </div>
-              </div>
-            </aside>
-            <section className="lg:col-span-9">
-              <div className="bg-white rounded-[2rem] p-8 md:p-12 shadow-[0px_12px_32px_rgba(147,0,10,0.06)]">
-                {error && <div className="mb-6 p-4 bg-red-50 text-red-500 rounded-xl font-bold">{error}</div>}
-                <form className="space-y-10" onSubmit={handleGenerate}>
-                  <div className="space-y-4">
-                    <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Lưu bộ câu hỏi vào chương (Topic)</label>
-                    <select 
-                      value={formData.topicId}
-                      onChange={e => setFormData({ ...formData, topicId: parseInt(e.target.value) })}
-                      className="w-full bg-[#f3f3f3] border-none rounded-xl px-6 py-4 text-on-surface focus:ring-2 focus:ring-[#d62828] outline-none font-bold cursor-pointer"
-                    >
-                      {availableTopics.map(topic => (
-                        <option key={topic.topic_id} value={topic.topic_id}>{topic.topic_name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-6">
-                    <div className="flex justify-between items-center">
-                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Số lượng câu hỏi</label>
-                      <span className="bg-[#d62828] text-white px-3 py-1 rounded-lg text-xs font-bold">{formData.quantity} CÂU</span>
-                    </div>
-                    <input type="range" min="10" max="100" step="10" value={formData.quantity} onChange={(e) => setFormData({...formData, quantity: parseInt(e.target.value)})} className="w-full h-2 bg-[#e8e8e8] rounded-full appearance-none cursor-pointer accent-[#d62828]" />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                    <div className="space-y-4">
-                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Mức độ khó</label>
-                      <div className="flex p-1 bg-[#e8e8e8] rounded-xl gap-1">
-                        {['Dễ', 'Trung bình', 'Khó'].map(l => (
-                          <button key={l} type="button" onClick={() => setFormData({...formData, level: l})} className={`flex-1 py-3 text-xs font-bold rounded-lg transition-all ${formData.level === l ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}>{l}</button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col md:flex-row gap-4 pt-8">
-                    <button type="button" onClick={prevStep} className="flex-1 py-4 text-sm font-bold border-2 border-[#e5bdb9] text-[#b20112] rounded-xl hover:bg-red-50 transition-all flex items-center justify-center gap-2">
-                      Quay lại
-                    </button>
-                    <button type="submit" disabled={isGenerating} className="flex-[2] py-4 text-sm font-bold bg-gradient-to-r from-[#d62828] to-[#ffb3b3] text-white rounded-xl shadow-lg uppercase tracking-widest flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed">
-                      {isGenerating ? 'Đang tạo...' : <>Bắt đầu tạo <span className="material-symbols-outlined text-base" style={{fontVariationSettings: "'FILL' 1"}}>bolt</span></>}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </section>
-          </div>
-        )}
 
-        {/* STEP 3: PROCESSING (RESTORED) */}
-        {step === 3 && (
-          <div className="flex-1 flex flex-col items-center justify-center py-12 animate-in zoom-in-95 duration-700">
-            <div className="relative w-80 h-80 flex items-center justify-center mb-12" onClick={nextStep}>
-              <div className="absolute inset-0 border-4 border-[#d62828]/20 rounded-full"></div>
-              <div className="absolute inset-0 border-4 border-[#b20112] border-t-transparent rounded-full animate-spin duration-[3s]"></div>
-              <div className="w-64 h-64 rounded-full bg-white shadow-xl flex flex-col items-center justify-center relative overflow-hidden backdrop-blur-md">
-                <div className="absolute inset-0 bg-[#b20112]/5 animate-pulse"></div>
-                <span className="material-symbols-outlined text-[#b20112] text-6xl mb-4" style={{fontVariationSettings: "'FILL' 1"}}>psychology</span>
-                <div className="text-4xl font-extrabold tracking-tighter">94%</div>
-                <div className="text-xs font-medium text-[#5c403d] uppercase tracking-widest mt-1">Đang xử lý</div>
-              </div>
-            </div>
-            <h2 className="text-2xl font-bold tracking-tight mb-2">Đang phân tích tài liệu...</h2>
-          </div>
-        )}
+                <textarea
+                  value={editState.content}
+                  onChange={(e) =>
+                    onChangeQuestionEdit(question.question_id, {
+                      ...editState,
+                      content: e.target.value,
+                    })
+                  }
+                  rows={3}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
 
-        {/* STEP 4: ENHANCED REVIEW & APPROVAL (ONLY THIS STEP UPDATED) */}
-        {step === 4 && (
-          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700 pb-32">
-            <div className="mb-8 flex justify-between items-end">
-              <div>
-                <h2 className="text-3xl font-extrabold tracking-tight mb-2">Kết quả tạo câu hỏi</h2>
-                <p className="text-[#5c403d] max-w-2xl font-medium">Bạn cần kiểm tra và xác nhận từng câu hỏi trước khi lưu vào ngân hàng.</p>
-              </div>
-              <div className="bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100 text-right">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tiến độ duyệt</p>
-                 <p className="text-xl font-black text-[#b20112] leading-none">{approvedCount}/{questions.length}</p>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              {questions.map((q, idx) => (
-                <article key={q.id} className={`bg-white rounded-[2rem] p-8 shadow-[0px_4px_20px_rgba(0,0,0,0.03)] border-l-[6px] transition-all duration-500 ${q.isApproved ? 'border-emerald-500 bg-emerald-50/10' : 'border-[#b20112]'}`}>
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="flex items-center gap-3">
-                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black transition-colors ${q.isApproved ? 'bg-emerald-500 text-white' : 'bg-[#b20112] text-white'}`}>
-                         {q.isApproved ? '✓' : idx + 1}
-                      </span>
-                      <span className="px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-bold rounded-full uppercase tracking-widest">Trắc nghiệm</span>
-                    </div>
-                    <div className="flex gap-2">
-                       <button onClick={() => setExpandedSource(expandedSource === q.id ? null : q.id)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 border transition-all ${expandedSource === q.id ? 'bg-[#b20112] text-white border-[#b20112]' : 'bg-white text-slate-400 border-slate-100 hover:text-slate-600'}`}>
-                          <span className="material-symbols-outlined text-sm">menu_book</span> {expandedSource === q.id ? 'Đóng nguồn' : 'Xem nguồn'}
-                       </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <textarea 
-                      className="w-full bg-transparent border-none p-0 font-bold text-slate-800 text-lg outline-none focus:ring-0 resize-none leading-relaxed"
-                      rows={2}
-                      value={q.text}
-                      onChange={(e) => handleEdit(idx, 'text', e.target.value)}
+                <div className="grid gap-2 md:grid-cols-2">
+                  {editState.options.map((opt, idx) => (
+                    <input
+                      key={idx}
+                      value={opt}
+                      onChange={(e) => {
+                        const nextOptions = [...editState.options];
+                        nextOptions[idx] = e.target.value;
+                        onChangeQuestionEdit(question.question_id, {
+                          ...editState,
+                          options: nextOptions,
+                        });
+                      }}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      placeholder={`Option ${String.fromCharCode(65 + idx)}`}
                     />
-                    
-                    <div className="grid md:grid-cols-2 gap-4">
-                      {q.options.map((opt, optIdx) => (
-                        <div key={optIdx} className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 cursor-pointer ${q.correctAnswer === optIdx ? 'border-[#b20112] bg-red-50/30' : 'border-slate-50 bg-slate-50'}`} onClick={() => handleEdit(idx, 'correctAnswer', optIdx)}>
-                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${q.correctAnswer === optIdx ? 'border-[#b20112] bg-[#b20112]' : 'border-slate-300'}`}>
-                              {q.correctAnswer === optIdx && <span className="text-white text-[10px]">✓</span>}
-                           </div>
-                           <input 
-                             type="text" 
-                             className="flex-1 bg-transparent border-none font-medium text-sm text-slate-700 outline-none"
-                             value={opt}
-                             onChange={(e) => handleEdit(idx, 'options', e.target.value, optIdx)}
-                             onClick={(e) => e.stopPropagation()}
-                           />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {expandedSource === q.id && (
-                     <div className="mt-6 p-6 bg-slate-900 rounded-2xl animate-in slide-in-from-top-2 duration-300">
-                        <p className="text-[10px] font-black text-[#b20112] uppercase tracking-widest mb-2">Trích dẫn tài liệu</p>
-                        <p className="text-white/80 text-xs italic font-medium leading-relaxed">"{q.sourceSnippet}"</p>
-                     </div>
-                  )}
-
-                  <div className="mt-8 pt-6 border-t border-slate-50 flex justify-end items-center">
-                    <button 
-                      onClick={() => toggleApprove(q.id)}
-                      className={`px-10 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${q.isApproved ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-900 text-white hover:bg-[#b20112]'}`}
-                    >
-                      {q.isApproved ? 'Đã duyệt ✓' : 'Xác nhận duyệt'}
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            {/* Fixed Bottom Action Bar */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-md px-6 py-8 border-t border-slate-100 z-50 shadow-2xl">
-              <div className="max-w-5xl mx-auto flex items-center justify-between gap-6">
-                <div className="hidden md:block">
-                  <p className="font-bold text-slate-900 uppercase text-xs tracking-tight">Trạng thái: {approvedCount}/{questions.length} câu đã duyệt</p>
-                  <div className="w-48 h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
-                     <div className="h-full bg-[#b20112] transition-all duration-1000" style={{ width: `${(approvedCount/questions.length)*100}%` }}></div>
-                  </div>
+                  ))}
                 </div>
-                <button 
-                  disabled={!isAllApproved || isSaving}
-                  onClick={handleSave} 
-                  className={`flex-1 md:flex-none md:min-w-[400px] h-14 rounded-xl font-bold text-lg shadow-lg transition-all flex items-center justify-center gap-3 active:scale-95 ${
-                    isAllApproved && !isSaving
-                    ? 'bg-gradient-to-r from-[#d62828] to-[#ffb3b3] text-white hover:brightness-110' 
-                    : 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none border border-slate-200'
-                  }`}
-                >
-                  <span className="material-symbols-outlined">database</span> 
-                  {isSaving ? 'Đang lưu...' : isAllApproved ? 'Lưu vào ngân hàng câu hỏi' : 'Vui lòng duyệt hết các câu'}
-                </button>
+
+                <div className="grid gap-2 md:grid-cols-3">
+                  <select
+                    value={editState.difficulty}
+                    onChange={(e) =>
+                      onChangeQuestionEdit(question.question_id, {
+                        ...editState,
+                        difficulty: e.target.value as Difficulty,
+                      })
+                    }
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  >
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                  <select
+                    value={editState.correct_option_index}
+                    onChange={(e) =>
+                      onChangeQuestionEdit(question.question_id, {
+                        ...editState,
+                        correct_option_index: Number(e.target.value),
+                      })
+                    }
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  >
+                    <option value={0}>Correct: A</option>
+                    <option value={1}>Correct: B</option>
+                    <option value={2}>Correct: C</option>
+                    <option value={3}>Correct: D</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => onSaveQuestion(question.question_id)}
+                    disabled={actionLoading}
+                    className="rounded-lg bg-[#9B0F06] px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    Save Draft Edit
+                  </button>
+                </div>
+
+                <input
+                  value={editState.explanation}
+                  onChange={(e) =>
+                    onChangeQuestionEdit(question.question_id, {
+                      ...editState,
+                      explanation: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  placeholder="Explanation"
+                />
               </div>
-            </div>
-          </div>
-        )}
-      </main>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

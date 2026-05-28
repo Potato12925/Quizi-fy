@@ -149,7 +149,7 @@ async def create_teacher_manual_question(current_user: CurrentUser, payload: Man
             "content": payload.content,
             "difficulty": payload.difficulty,
             "source": "manual",
-            "status": payload.status,
+            "status": "draft",
             "explanation": payload.explanation,
         }
     )

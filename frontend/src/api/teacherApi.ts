@@ -616,6 +616,7 @@ export const getResources = async (userId: number): Promise<TeacherResource[]> =
 
 export interface UploadResourcePayload {
   title: string;
+  subject_id?: number;
   topic_id?: number;
   topic_ids?: number[];
   description?: string;

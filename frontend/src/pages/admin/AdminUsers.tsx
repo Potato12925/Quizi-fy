@@ -190,7 +190,7 @@ export default function AdminUsersPage() {
         </div>
         <button onClick={openCreateModal} className="bg-[#b20112] text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
           <span className="text-xl material-symbols-outlined">person_add</span>
-          Thêm người dùng
+          Thêm tài khoản
         </button>
       </div>
 
@@ -216,7 +216,7 @@ export default function AdminUsersPage() {
         </div>
 
         {users.length === 0 ? (
-          <div className="p-8"><EmptyState title="Không có tài khoản" message="Chưa có dữ liệu phù hợp bộ lọc hiện tại." actionLabel="Thêm người dùng" onAction={openCreateModal} /></div>
+          <div className="p-8"><EmptyState title="Không có tài khoản" message="Chưa có dữ liệu phù hợp bộ lọc hiện tại." actionLabel="Thêm tài khoản" onAction={openCreateModal} /></div>
         ) : (
           <div className="w-full overflow-x-auto">
             <table className="w-full text-left border-collapse">

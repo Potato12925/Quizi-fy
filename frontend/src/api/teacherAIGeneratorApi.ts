@@ -47,6 +47,7 @@ export interface TeacherAiRequestItem {
   generated_question_count: number;
   retry_count: number;
   error_message?: string | null;
+  is_reviewed: boolean;
   created_at: string;
   updated_at: string;
   document_topic: TeacherDocumentTopicOption;
@@ -90,6 +91,31 @@ export interface CreateTeacherAiRequestPayload {
 
 export interface BulkQuestionStatusPayload {
   question_ids: number[];
+}
+
+export interface TeacherAiReviewOptionPayload {
+  option_text: string;
+  order_num: number;
+  is_correct: boolean;
+}
+
+export interface TeacherAiReviewQuestionPayload {
+  question_id: number;
+  content: string;
+  difficulty: Difficulty;
+  status: Extract<QuestionStatus, 'draft' | 'approved' | 'rejected'>;
+  explanation?: string | null;
+  options: TeacherAiReviewOptionPayload[];
+}
+
+export interface TeacherAiRequestConfirmReviewPayload {
+  questions: TeacherAiReviewQuestionPayload[];
+}
+
+export interface TeacherAiRequestConfirmReviewResult {
+  request: TeacherAiRequestItem;
+  updated_question_ids: number[];
+  updated_count: number;
 }
 
 export const getTeacherAssignedSubjects = async (): Promise<TeacherAssignedSubject[]> => {
@@ -159,4 +185,12 @@ export const setTeacherGeneratedQuestionStatus = async (questionId: number, stat
 
 export const softDeleteTeacherGeneratedQuestion = async (questionId: number): Promise<void> => {
   await api.delete<ApiEnvelope<{ question_id: number; deleted: boolean }>>(`/teacher/question-bank/${questionId}`);
+};
+
+export const confirmTeacherAiRequestReview = async (
+  requestId: number,
+  payload: TeacherAiRequestConfirmReviewPayload,
+): Promise<TeacherAiRequestConfirmReviewResult> => {
+  const res = await api.post<ApiEnvelope<TeacherAiRequestConfirmReviewResult>>(`/teacher/ai-requests/${requestId}/confirm-review`, payload);
+  return res.data;
 };

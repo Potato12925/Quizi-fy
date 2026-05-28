@@ -6,7 +6,7 @@ from core.supabase import SupabaseManager
 
 AI_REQUEST_SELECT = (
     "request_id,document_topic_id,num_questions,difficulty,content_scope,status,"
-    "generated_question_count,retry_count,error_message,created_at,updated_at"
+    "generated_question_count,retry_count,error_message,is_reviewed,created_at,updated_at"
 )
 QUESTION_SELECT = (
     "question_id,teacher_id,document_topic_id,ai_request_id,content,difficulty,source,status,explanation,"

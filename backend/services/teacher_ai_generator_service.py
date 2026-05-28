@@ -22,7 +22,9 @@ from repositories.teacher_ai_generator_repository import (
     update_teacher_question_by_id,
 )
 from schemas.teacher_ai_generator_schema import (
+    TeacherAiRequestConfirmReviewPayload,
     TeacherAiRequestCreatePayload,
+    TeacherAiReviewOptionPayload,
     TeacherBulkQuestionStatusPayload,
     TeacherManualQuestionPayload,
     TeacherQuestionUpdatePayload,
@@ -84,6 +86,40 @@ def _serialize_question_item(item: dict, document_topic_map: dict[int, dict]) ->
         "subject_name": doc_topic.get("subject_name"),
         "options": options,
     }
+
+
+def _sorted_options(options: list[dict]) -> list[dict]:
+    return sorted(options, key=lambda option: int(option.get("order_num") or 0))
+
+
+def _serialize_review_options(options: list[dict]) -> list[dict]:
+    sorted_options = _sorted_options(options)
+    result: list[dict] = []
+    for index, option in enumerate(sorted_options):
+        result.append(
+            {
+                "option_label": chr(ord("A") + index),
+                "option_text": str(option.get("option_text") or ""),
+                "order_num": index + 1,
+                "is_correct": bool(option.get("is_correct")),
+            }
+        )
+    return result
+
+
+def _normalize_review_option_payload(options: list[TeacherAiReviewOptionPayload]) -> list[dict]:
+    sorted_payload = sorted(options, key=lambda item: item.order_num)
+    result: list[dict] = []
+    for index, option in enumerate(sorted_payload):
+        result.append(
+            {
+                "option_label": chr(ord("A") + index),
+                "option_text": option.option_text,
+                "order_num": index + 1,
+                "is_correct": option.is_correct,
+            }
+        )
+    return result
 
 
 async def get_teacher_ai_generator_options(current_user: CurrentUser) -> dict:
@@ -238,6 +274,109 @@ async def list_teacher_ai_request_questions(current_user: CurrentUser, request_i
         _serialize_question_item(item, {serialized_doc_topic["document_topic_id"]: serialized_doc_topic})
         for item in questions
     ]
+
+
+async def confirm_teacher_ai_request_review(
+    current_user: CurrentUser,
+    request_id: int,
+    payload: TeacherAiRequestConfirmReviewPayload,
+) -> dict:
+    request = await find_ai_request_by_id(request_id)
+    if not request:
+        raise ValueError("AI request not found")
+
+    doc_topic = await find_teacher_document_topic_row(current_user.user_id, int(request["document_topic_id"]))
+    if not doc_topic:
+        raise TeacherAiAuthorizationError("You do not have permission to review this AI request")
+    if request.get("status") != "completed":
+        raise TeacherAiValidationError("Only completed AI requests can be reviewed")
+    if bool(request.get("is_reviewed")):
+        raise TeacherAiValidationError("This AI request was already reviewed and is read-only")
+
+    existing_questions = await list_questions_by_ai_request_id(request_id=request_id, teacher_id=current_user.user_id)
+    if not existing_questions:
+        raise TeacherAiValidationError("No generated questions found for this AI request")
+
+    existing_map = {int(item["question_id"]): item for item in existing_questions}
+    existing_ids = set(existing_map.keys())
+    payload_ids = {item.question_id for item in payload.questions}
+
+    if payload_ids != existing_ids:
+        missing_ids = sorted(existing_ids - payload_ids)
+        extra_ids = sorted(payload_ids - existing_ids)
+        details: list[str] = []
+        if missing_ids:
+            details.append(f"missing={missing_ids}")
+        if extra_ids:
+            details.append(f"extra={extra_ids}")
+        raise TeacherAiValidationError(f"Review payload does not match generated questions ({', '.join(details)})")
+
+    updated_question_ids: list[int] = []
+    for question_payload in payload.questions:
+        existing = existing_map[question_payload.question_id]
+        old_options = _serialize_review_options(existing.get("question_options") or [])
+        new_options = _normalize_review_option_payload(question_payload.options)
+
+        old_snapshot = {
+            "content": existing.get("content"),
+            "difficulty": existing.get("difficulty"),
+            "status": existing.get("status"),
+            "explanation": existing.get("explanation"),
+            "options": old_options,
+        }
+        new_snapshot = {
+            "content": question_payload.content,
+            "difficulty": question_payload.difficulty,
+            "status": question_payload.status,
+            "explanation": question_payload.explanation,
+            "options": new_options,
+        }
+
+        if old_snapshot == new_snapshot:
+            continue
+
+        await update_teacher_question_by_id(
+            question_id=question_payload.question_id,
+            teacher_id=current_user.user_id,
+            payload={
+                "content": question_payload.content,
+                "difficulty": question_payload.difficulty,
+                "status": question_payload.status,
+                "explanation": question_payload.explanation,
+            },
+        )
+
+        ordered_options = [item["option_text"] for item in new_options]
+        correct_option_index = next(index for index, item in enumerate(new_options) if item["is_correct"])
+        await replace_question_options(
+            question_id=question_payload.question_id,
+            options=ordered_options,
+            correct_option_index=correct_option_index,
+        )
+
+        await create_question_history_record(
+            {
+                "question_id": question_payload.question_id,
+                "changed_by": current_user.user_id,
+                "old_data": old_snapshot,
+                "new_data": new_snapshot,
+                "change_type": "teacher_ai_review_confirm",
+            }
+        )
+        updated_question_ids.append(question_payload.question_id)
+
+    locked_request = await update_ai_request_by_id(
+        request_id,
+        {
+            "is_reviewed": True,
+        },
+    )
+
+    return {
+        "request": locked_request or {**request, "is_reviewed": True},
+        "updated_question_ids": sorted(updated_question_ids),
+        "updated_count": len(updated_question_ids),
+    }
 
 
 async def retry_teacher_ai_request(current_user: CurrentUser, request_id: int) -> dict:

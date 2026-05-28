@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from core.responses import error_response, success_response
 from middlewares.auth_middleware import CurrentUser, require_roles
 from schemas.teacher_ai_generator_schema import (
+    TeacherAiRequestConfirmReviewPayload,
     TeacherAiRequestCreatePayload,
     TeacherBulkQuestionStatusPayload,
     TeacherManualQuestionPayload,
@@ -15,6 +16,7 @@ from services.teacher_ai_generator_service import (
     bulk_reject_teacher_questions,
     create_teacher_ai_request,
     create_teacher_manual_question,
+    confirm_teacher_ai_request_review,
     get_teacher_ai_generator_options,
     get_teacher_ai_request_detail,
     list_teacher_ai_request_questions,
@@ -114,6 +116,29 @@ async def retry_teacher_ai_request_route(
         return error_response(message=str(exc), status_code=404, error_code="TEACHER_AI_REQUEST_NOT_FOUND")
     except Exception:
         return error_response(message="Unable to retry AI request", status_code=500, error_code="TEACHER_AI_REQUEST_RETRY_FAILED")
+
+
+@router.post("/ai-requests/{request_id}/confirm-review", summary="Confirm AI review and lock request")
+async def confirm_teacher_ai_request_review_route(
+    request_id: int,
+    payload: TeacherAiRequestConfirmReviewPayload,
+    current_user: CurrentUser = Depends(require_roles("teacher")),
+):
+    try:
+        result = await confirm_teacher_ai_request_review(
+            current_user=current_user,
+            request_id=request_id,
+            payload=payload,
+        )
+        return success_response(data=result, message="AI request review confirmed successfully", status_code=200)
+    except TeacherAiAuthorizationError as exc:
+        return error_response(message=str(exc), status_code=403, error_code="TEACHER_AI_REQUEST_CONFIRM_FORBIDDEN")
+    except TeacherAiValidationError as exc:
+        return error_response(message=str(exc), status_code=400, error_code="TEACHER_AI_REQUEST_CONFIRM_INVALID")
+    except ValueError as exc:
+        return error_response(message=str(exc), status_code=404, error_code="TEACHER_AI_REQUEST_NOT_FOUND")
+    except Exception:
+        return error_response(message="Unable to confirm AI review", status_code=500, error_code="TEACHER_AI_REQUEST_CONFIRM_FAILED")
 
 
 @router.patch("/questions/{question_id}", summary="Update teacher question")

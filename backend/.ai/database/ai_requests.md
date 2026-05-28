@@ -17,6 +17,7 @@ Tracks AI generation jobs per document-topic relation.
 | `generated_question_count` | `int [default: 0]` |
 | `retry_count` | `int [default: 0]` |
 | `error_message` | `text` |
+| `is_reviewed` | `boolean [default: false]` |
 | `created_at` | `timestamp` |
 | `updated_at` | `timestamp` |
 

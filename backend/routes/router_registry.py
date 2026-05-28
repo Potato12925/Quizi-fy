@@ -25,6 +25,12 @@ from controllers.subject_controller import router as subject_router
 from controllers.teacher_topic_management_controller import (
     router as teacher_topic_management_router,
 )
+from controllers.teacher_question_bank_controller import (
+    router as teacher_question_bank_router,
+)
+from controllers.teacher_ai_generator_controller import (
+    router as teacher_ai_generator_router,
+)
 from controllers.topic_controller import router as topic_router
 from controllers.user_role_controller import router as user_role_router
 from controllers.user_controller import router as user_router
@@ -148,5 +154,15 @@ def register_routes(app: FastAPI) -> None:
 
     app.include_router(
         teacher_topic_management_router,
+        prefix="/api/v1",
+    )
+
+    app.include_router(
+        teacher_question_bank_router,
+        prefix="/api/v1",
+    )
+
+    app.include_router(
+        teacher_ai_generator_router,
         prefix="/api/v1",
     )

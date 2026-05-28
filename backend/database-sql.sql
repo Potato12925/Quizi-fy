@@ -177,6 +177,7 @@ CREATE TABLE ai_requests (
     generated_question_count INT DEFAULT 0,
     retry_count INT DEFAULT 0,
     error_message TEXT,
+    is_reviewed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

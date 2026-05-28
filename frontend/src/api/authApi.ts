@@ -82,3 +82,15 @@ export const logoutApi = async (): Promise<void> => {
     throw error;
   }
 };
+
+export interface ChangePasswordRequest {
+  oldPassword: string;
+  newPassword: string;
+}
+
+export const changePasswordApi = async (payload: ChangePasswordRequest): Promise<void> => {
+  await api.post<void>('/user/change-password', {
+    old_password: payload.oldPassword,
+    new_password: payload.newPassword,
+  });
+};

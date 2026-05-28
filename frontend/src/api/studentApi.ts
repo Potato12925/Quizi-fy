@@ -6,8 +6,9 @@ export default interface SubjectStat {
   name: string;
   questions: number;
   color: string;
-  icon: string;
+  icon?: string;
   class?: string;
+  indexNum?: string;
 }
 
 export interface Metric {
@@ -98,25 +99,117 @@ export interface StudentResultData {
 }
 
 
+// Helper for subject styles
+const getSubjectColor = (id: number): string => {
+  const colors = [
+    'text-[#b20112]',
+    'text-emerald-600',
+    'text-blue-600',
+    'text-amber-600',
+    'text-indigo-600',
+    'text-rose-600',
+    'text-cyan-600'
+  ];
+  return colors[id % colors.length];
+};
+
+// In-memory cache for Student Dashboard
+let cachedDashboard: StudentDashboardData | null = null;
+
+export const clearDashboardCache = () => {
+  cachedDashboard = null;
+  clearProgressCache();
+};
+
 /**
  * GET /student/dashboard
- * Mocked because we don't have a dedicated dashboard endpoint yet.
+ * Dynamically queries real database endpoints and caches the combined result.
  */
-export const getStudentDashboard = async (): Promise<StudentDashboardData> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        subjects: [
-          { id: '1', name: 'Mạng máy tính', questions: 150, color: 'text-[#b20112]', icon: 'language' },
-          { id: '2', name: 'Cấu trúc dữ liệu', questions: 200, color: 'text-emerald-600', icon: 'account_tree' },
-        ],
-        metrics: [
-          { label: 'Hoàn thành', value: '85%', icon: 'task_alt', color: 'text-blue-500', bg: 'bg-blue-50' },
-        ],
-        activities: []
-      });
-    }, 500);
-  });
+export const getStudentDashboard = async (forceRefresh = false): Promise<StudentDashboardData> => {
+  if (cachedDashboard && !forceRefresh) {
+    return cachedDashboard;
+  }
+
+  try {
+    // 1. Fetch real subjects, history, and progress stats in parallel
+    const [rawSubjects, history, progress] = await Promise.all([
+      getMySubjects(),
+      getStudentHistory(),
+      getStudentProgress(forceRefresh)
+    ]);
+
+    // 2. Map subjects with sequential numbers
+    const subjects = rawSubjects.map((r: any, idx: number) => ({
+      id: r.subject_id.toString(),
+      name: r.subject.subject_name,
+      questions: 50, // default placeholder or computed
+      color: getSubjectColor(r.subject_id),
+      indexNum: (idx + 1).toString().padStart(2, '0')
+    }));
+
+    // 3. Map metrics from progress stats
+    const stats = progress.stats;
+    const metrics: Metric[] = [
+      { label: 'Số đề luyện', value: stats.totalAttempts.toString(), icon: 'local_fire_department', color: 'text-red-500', bg: 'bg-red-50' },
+      { label: 'Điểm trung bình', value: stats.avgScore.toFixed(1), icon: 'star', color: 'text-amber-500', bg: 'bg-amber-50' },
+      { label: 'Độ chính xác', value: `${stats.accuracy}%`, icon: 'task_alt', color: 'text-blue-500', bg: 'bg-blue-50' },
+      { label: 'Thời gian học', value: stats.timeStudied || '0h', icon: 'timer', color: 'text-slate-400', bg: 'bg-slate-50' },
+    ];
+
+    // 4. Map recent activities (first 3 items from history)
+    const activities = history.slice(0, 3).map((h: any) => ({
+      id: h.id.toString(),
+      subject: h.subject,
+      time: h.date,
+      score: `${h.score}/${h.total}`
+    }));
+
+    cachedDashboard = {
+      subjects,
+      metrics,
+      activities
+    };
+
+    return cachedDashboard;
+  } catch (error) {
+    console.error('Failed to load student dashboard:', error);
+    // Fallback if APIs fail but we have a cache
+    if (cachedDashboard) {
+      return cachedDashboard;
+    }
+    throw error;
+  }
+};
+
+/**
+ * Tải báo cáo PDF lịch sử ôn tập: GET /practice-attempts/export-pdf
+ */
+export const exportStudentHistoryPdf = async (): Promise<void> => {
+  try {
+    const token = localStorage.getItem('accessToken');
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+
+    const res = await fetch(`${API_BASE_URL}/practice-attempts/export-pdf`, {
+      method: 'GET',
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    });
+
+    if (!res.ok) {
+      throw new Error('Failed to fetch PDF from server');
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'bao_cao_on_luyen.pdf');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error) {
+    console.error('Failed to export PDF report:', error);
+    alert('Không thể xuất báo cáo PDF lúc này!');
+  }
 };
 
 /**
@@ -221,6 +314,7 @@ export const autosaveAnswers = async (practiceId: string, payload: SubmitPractic
 export const submitPractice = async (practiceId: string): Promise<SubmitPracticeResponse> => {
   try {
     await client.api.post(`/practice-attempts/${practiceId}/submit`);
+    clearDashboardCache(); // Clear in-memory progress and dashboard cache
     return { success: true, resultId: practiceId };
   } catch (error) {
     console.error('Submit failed', error);
@@ -287,22 +381,28 @@ export interface StudentProgressData {
   subjectPerformance: SubjectPerformance[];
 }
 
-export const getStudentProgress = async (): Promise<StudentProgressData> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          stats: {
-            avgScore: 8.4,
-            totalAttempts: 32,
-            totalQuestions: 480,
-            timeStudied: '24h 15m',
-            accuracy: 78
-          },
-          subjectPerformance: [
-            { name: 'Mạng máy tính', score: 85, color: 'bg-[#b20112]' },
-            { name: 'Cấu trúc dữ liệu', score: 65, color: 'bg-emerald-500' },
-          ]
-        });
-      }, 500);
-    });
+// In-memory cache for student progress
+let cachedProgress: StudentProgressData | null = null;
+
+export const clearProgressCache = () => {
+  cachedProgress = null;
+};
+
+export const getStudentProgress = async (forceRefresh = false): Promise<StudentProgressData> => {
+  if (cachedProgress && !forceRefresh) {
+    return cachedProgress;
+  }
+
+  try {
+    const res = await client.api.get('/practice-attempts/progress');
+    // Map backend success response
+    cachedProgress = res.data;
+    return cachedProgress!;
+  } catch (error) {
+    console.error('Failed to load student progress:', error);
+    if (cachedProgress) {
+      return cachedProgress; // Return cache as fallback if API fails
+    }
+    throw error;
+  }
 };

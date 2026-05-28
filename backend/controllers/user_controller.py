@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Query
 
 from core.responses import error_response, success_response
-from middlewares.auth_middleware import CurrentUser, require_roles
-from schemas.user_schema import UserCreateRequest, UserStatusUpdateRequest, UserUpdateRequest
+from middlewares.auth_middleware import CurrentUser, require_roles, require_authenticated_user
+from schemas.user_schema import UserCreateRequest, UserUpdateRequest, ChangePasswordRequest, UserStatusUpdateRequest
 from services.user_service import (
     create_user,
     delete_user,
@@ -10,6 +10,7 @@ from services.user_service import (
     get_users,
     update_user_status,
     update_user,
+    change_password_for_user,
 )
 
 router = APIRouter(prefix="/user", tags=["User"])
@@ -192,4 +193,30 @@ async def delete_user_route(
             message="Unable to delete user",
             status_code=500,
             error_code="USER_DELETE_FAILED",
+        )
+
+
+@router.post("/change-password", summary="Change current user password")
+async def post_change_password(
+    payload: ChangePasswordRequest,
+    current_user: CurrentUser = Depends(require_authenticated_user),
+):
+    try:
+        result = await change_password_for_user(current_user, payload)
+        return success_response(
+            data=result,
+            message="Đổi mật khẩu thành công",
+            status_code=200,
+        )
+    except ValueError as exc:
+        return error_response(
+            message=str(exc),
+            status_code=400,
+            error_code="USER_CHANGE_PASSWORD_INVALID",
+        )
+    except Exception:
+        return error_response(
+            message="Unable to change password",
+            status_code=500,
+            error_code="USER_CHANGE_PASSWORD_FAILED",
         )

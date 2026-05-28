@@ -24,15 +24,11 @@ async def get_class_subject_by_id(record_id: int) -> dict:
 
 async def get_my_subjects(student_id: int) -> list[dict]:
     data = await list_my_subjects(student_id)
-    seen = set()
     subjects = []
     for item in data:
-        subj = item.get("subjects")
+        subj = item.get("subject")
         if subj and subj.get("status") == "active":
-            subj_id = subj["subject_id"]
-            if subj_id not in seen:
-                seen.add(subj_id)
-                subjects.append(subj)
+            subjects.append(item)
     return subjects
 
 

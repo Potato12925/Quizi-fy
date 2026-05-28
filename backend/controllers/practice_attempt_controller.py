@@ -1,5 +1,4 @@
-# pyrefly: ignore [missing-import]
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from core.responses import error_response, success_response
 from middlewares.auth_middleware import CurrentUser, require_roles
@@ -17,6 +16,8 @@ from services.practice_attempt_service import (
     get_attempt_result,
     get_my_history,
     get_attempt_questions,
+    get_student_progress_stats,
+    export_student_history_pdf,
 )
 
 router = APIRouter(prefix="/practice-attempts", tags=["PracticeAttempts"])
@@ -49,6 +50,28 @@ async def get_my_history_route(current_user: CurrentUser = Depends(require_roles
         return success_response(data=result, message="History loaded successfully", status_code=200)
     except Exception:
         return error_response(message="Unable to load history", status_code=500, error_code="HISTORY_LOAD_FAILED")
+
+
+@router.get("/export-pdf", summary="Export practice history as PDF")
+async def export_my_history_pdf(current_user: CurrentUser = Depends(require_roles("student"))):
+    try:
+        pdf_bytes = await export_student_history_pdf(current_user.user_id)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=bao_cao_on_luyen.pdf"}
+        )
+    except Exception as exc:
+        return error_response(message=f"Unable to export PDF: {str(exc)}", status_code=500, error_code="PDF_EXPORT_FAILED")
+
+
+@router.get("/progress", summary="Get progress stats for current student")
+async def get_progress_route(current_user: CurrentUser = Depends(require_roles("student"))):
+    try:
+        result = await get_student_progress_stats(current_user.user_id)
+        return success_response(data=result, message="Progress loaded successfully", status_code=200)
+    except Exception as exc:
+        return error_response(message=f"Unable to load progress: {str(exc)}", status_code=500, error_code="PROGRESS_LOAD_FAILED")
 
 
 @router.post("/start", summary="Start practice attempt")

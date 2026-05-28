@@ -13,11 +13,15 @@ async def list_teacher_document_topic_options(teacher_id: int, subject_id: int |
         supabase.table("document_topics")
         .select(
             "document_topic_id,document_id,topic_id,"
-            "documents!inner(document_id,title,teacher_id,deleted_at),"
-            "topics!inner(topic_id,topic_name,subject_id,subjects(subject_id,subject_name))"
+            "documents!inner(document_id,title,file_type,file_size,status,created_at,teacher_id,deleted_at),"
+            "topics!inner(topic_id,topic_name,subject_id,deleted_at,subjects(subject_id,subject_name,status,deleted_at))"
         )
         .eq("documents.teacher_id", teacher_id)
+        .eq("documents.status", "active")
         .is_("documents.deleted_at", None)
+        .is_("topics.deleted_at", None)
+        .eq("topics.subjects.status", "active")
+        .is_("topics.subjects.deleted_at", None)
     )
     if subject_id is not None:
         query = query.eq("topics.subject_id", subject_id)

@@ -179,8 +179,8 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="space-y-10 pb-20">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6 pt-2">
+    <div className="pb-20 space-y-10">
+      <div className="flex flex-col items-start justify-between gap-6 pt-2 lg:flex-row lg:items-end">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-4">Quản lý người dùng</p>
           <h1 className="text-5xl lg:text-6xl font-black text-slate-900 tracking-tighter uppercase italic leading-[0.9]">
@@ -189,20 +189,20 @@ export default function AdminUsersPage() {
           </h1>
         </div>
         <button onClick={openCreateModal} className="bg-[#b20112] text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
-          <span className="material-symbols-outlined text-xl">person_add</span>
+          <span className="text-xl material-symbols-outlined">person_add</span>
           Thêm người dùng
         </button>
       </div>
 
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <section className="grid grid-cols-1 gap-5 md:grid-cols-3">
         <div className="rounded-[2.5rem] p-7 border bg-white border-slate-100"><p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Học sinh</p><h3 className="mt-4 text-4xl font-black tracking-tighter">{studentsCount}</h3></div>
         <div className="rounded-[2.5rem] p-7 border bg-[#b20112] text-white border-transparent"><p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/60">Giáo viên</p><h3 className="mt-4 text-4xl font-black tracking-tighter">{teachersCount}</h3></div>
         <div className="rounded-[2.5rem] p-7 border bg-slate-900 text-white border-transparent"><p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/60">Tài khoản khóa</p><h3 className="mt-4 text-4xl font-black tracking-tighter">{lockedCount}</h3></div>
       </section>
 
-      <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden w-full">
-        <div className="p-8 border-b border-slate-50 bg-slate-50/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex p-2 bg-slate-100 rounded-3xl w-fit gap-2">
+      <section className="bg-white rounded-[3rem] shadow-sm overflow-hidden w-full">
+        <div className="flex flex-col justify-between gap-4 p-8 border-b border-slate-50 bg-slate-50/30 md:flex-row md:items-center">
+          <div className="flex gap-2 p-2 bg-slate-100 rounded-3xl w-fit">
             <button onClick={() => setActiveTab('students')} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest ${activeTab === 'students' ? 'bg-white text-[#b20112]' : 'text-slate-400'}`}>Học sinh</button>
             <button onClick={() => setActiveTab('teachers')} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest ${activeTab === 'teachers' ? 'bg-white text-[#b20112]' : 'text-slate-400'}`}>Giáo viên</button>
           </div>
@@ -211,14 +211,14 @@ export default function AdminUsersPage() {
             placeholder="Tìm tên đăng nhập hoặc họ tên..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full md:w-72 px-4 py-3 rounded-xl border border-slate-100 bg-white text-xs font-bold outline-none"
+            className="w-full px-4 py-3 text-xs font-bold bg-white border outline-none md:w-72 rounded-xl border-slate-100"
           />
         </div>
 
         {users.length === 0 ? (
           <div className="p-8"><EmptyState title="Không có tài khoản" message="Chưa có dữ liệu phù hợp bộ lọc hiện tại." actionLabel="Thêm người dùng" onAction={openCreateModal} /></div>
         ) : (
-          <div className="overflow-x-auto w-full">
+          <div className="w-full overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-50">
@@ -247,14 +247,14 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-8 py-6 text-right">
                       <div className="flex justify-end gap-2">
-                        <button onClick={() => openEditModal(row)} className="p-3 rounded-xl bg-slate-50 hover:bg-slate-900 hover:text-white transition-all" title="Chỉnh sửa">
-                          <span className="material-symbols-outlined text-lg">edit</span>
+                        <button onClick={() => openEditModal(row)} className="p-3 transition-all rounded-xl bg-slate-50 hover:bg-slate-900 hover:text-white" title="Chỉnh sửa">
+                          <span className="text-lg material-symbols-outlined">edit</span>
                         </button>
                         <button onClick={() => handleToggleStatus(row)} className="p-3 rounded-xl bg-slate-50 hover:bg-[#b20112] hover:text-white transition-all" title={row.is_active ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}>
-                          <span className="material-symbols-outlined text-lg">{row.is_active ? 'block' : 'lock_open'}</span>
+                          <span className="text-lg material-symbols-outlined">{row.is_active ? 'block' : 'lock_open'}</span>
                         </button>
-                        <button onClick={() => setDeleteTarget(row)} className="p-3 rounded-xl bg-slate-50 text-red-600 hover:bg-red-500 hover:text-white transition-all" title="Xóa tài khoản">
-                          <span className="material-symbols-outlined text-lg">delete</span>
+                        <button onClick={() => setDeleteTarget(row)} className="p-3 text-red-600 transition-all rounded-xl bg-slate-50 hover:bg-red-500 hover:text-white" title="Xóa tài khoản">
+                          <span className="text-lg material-symbols-outlined">delete</span>
                         </button>
                       </div>
                     </td>
@@ -267,23 +267,23 @@ export default function AdminUsersPage() {
       </section>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-slate-950/40 backdrop-blur-sm">
           <div className="w-full max-w-2xl rounded-[2.5rem] bg-white shadow-2xl overflow-hidden">
-            <div className="p-8 border-b border-slate-100 flex items-start justify-between gap-4 bg-slate-50/50">
-              <h3 className="mt-2 text-3xl font-black text-slate-900 tracking-tight">{modalMode === 'create' ? 'Tạo tài khoản mới' : 'Chỉnh sửa tài khoản'}</h3>
+            <div className="flex items-start justify-between gap-4 p-8 border-b border-slate-100 bg-slate-50/50">
+              <h3 className="mt-2 text-3xl font-black tracking-tight text-slate-900">{modalMode === 'create' ? 'Tạo tài khoản mới' : 'Chỉnh sửa tài khoản'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-500">X</button>
             </div>
 
             <form onSubmit={handleFormSubmit}>
               <div className="p-8 space-y-4">
                 {formError && <div className="p-4 bg-red-50 text-[#b20112] border border-red-100 rounded-xl text-xs font-bold">{formError}</div>}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <input
                     type="text"
                     required
                     value={formData.fullName}
                     onChange={(e) => setFormData((prev) => ({ ...prev, fullName: e.target.value }))}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200"
+                    className="w-full px-4 py-3 border rounded-xl border-slate-200"
                     placeholder="Họ và tên"
                   />
                   <input
@@ -291,16 +291,16 @@ export default function AdminUsersPage() {
                     required
                     value={formData.username}
                     onChange={(e) => setFormData((prev) => ({ ...prev, username: e.target.value }))}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200"
+                    className="w-full px-4 py-3 border rounded-xl border-slate-200"
                     placeholder="Username"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <select
                     value={formData.roleCode}
                     onChange={(e) => setFormData((prev) => ({ ...prev, roleCode: e.target.value as 'student' | 'teacher' }))}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white"
+                    className="w-full px-4 py-3 bg-white border rounded-xl border-slate-200"
                     disabled={modalMode === 'edit'}
                   >
                     <option value="student">Học sinh</option>
@@ -310,7 +310,7 @@ export default function AdminUsersPage() {
                     <select
                       value={formData.isActive ? 'active' : 'inactive'}
                       onChange={(e) => setFormData((prev) => ({ ...prev, isActive: e.target.value === 'active' }))}
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white"
+                      className="w-full px-4 py-3 bg-white border rounded-xl border-slate-200"
                     >
                       <option value="active">Hoạt động</option>
                       <option value="inactive">Đã khóa</option>
@@ -322,7 +322,7 @@ export default function AdminUsersPage() {
                   <select
                     value={formData.classId}
                     onChange={(e) => setFormData((prev) => ({ ...prev, classId: e.target.value }))}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white"
+                    className="w-full px-4 py-3 bg-white border rounded-xl border-slate-200"
                   >
                     <option value="">-- Chọn lớp học (tùy chọn) --</option>
                     {classes.map((c) => (
@@ -332,8 +332,8 @@ export default function AdminUsersPage() {
                 )}
               </div>
 
-              <div className="px-8 py-6 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/40">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600">Hủy</button>
+              <div className="flex items-center justify-end gap-3 px-8 py-6 border-t border-slate-100 bg-slate-50/40">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-3 text-sm font-bold border rounded-xl border-slate-200 text-slate-600">Hủy</button>
                 <button type="submit" disabled={isSubmitting} className="px-6 py-3 rounded-xl bg-[#b20112] text-white text-sm font-black uppercase tracking-widest disabled:bg-slate-400">
                   {isSubmitting ? 'Đang xử lý...' : 'Lưu tài khoản'}
                 </button>
@@ -344,12 +344,12 @@ export default function AdminUsersPage() {
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-slate-950/40 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-[2rem] bg-white shadow-2xl p-6 text-center">
-            <h3 className="text-xl font-black text-slate-900 mb-2">Xác nhận xóa tài khoản</h3>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">Bạn có chắc chắn muốn xóa tài khoản của <strong>{deleteTarget.full_name}</strong> ({deleteTarget.username})?</p>
-            <div className="flex gap-3 justify-center">
-              <button onClick={() => setDeleteTarget(null)} className="px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600">Hủy bỏ</button>
+            <h3 className="mb-2 text-xl font-black text-slate-900">Xác nhận xóa tài khoản</h3>
+            <p className="mb-6 text-sm leading-relaxed text-slate-500">Bạn có chắc chắn muốn xóa tài khoản của <strong>{deleteTarget.full_name}</strong> ({deleteTarget.username})?</p>
+            <div className="flex justify-center gap-3">
+              <button onClick={() => setDeleteTarget(null)} className="px-5 py-3 text-sm font-bold border rounded-xl border-slate-200 text-slate-600">Hủy bỏ</button>
               <button onClick={handleDeleteUser} className="px-5 py-3 rounded-xl bg-[#b20112] text-white text-sm font-black">Đồng ý xóa</button>
             </div>
           </div>

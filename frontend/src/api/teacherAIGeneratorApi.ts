@@ -11,39 +11,30 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
 export type AiRequestStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 export type QuestionStatus = 'draft' | 'approved' | 'inactive' | 'rejected';
 
-export interface AiGeneratorOptionSubject {
+export interface TeacherAssignedSubject {
   subject_id: number;
+  subject_code: string;
   subject_name: string;
 }
 
-export interface AiGeneratorOptionTopic {
+export interface TeacherTopicItem {
   topic_id: number;
+  subject_id: number;
   topic_name: string;
-  subject_id: number;
-  subject_name: string;
 }
 
-export interface AiGeneratorOptionDocument {
-  document_id: number;
-  document_title: string;
-  subject_id: number;
-}
-
-export interface AiGeneratorOptionDocumentTopic {
+export interface TeacherDocumentTopicOption {
   document_topic_id: number;
   document_id: number;
   document_title: string;
+  file_type?: string | null;
+  file_size?: number | null;
+  created_at?: string | null;
+  status?: string | null;
   topic_id: number;
   topic_name: string;
   subject_id: number;
   subject_name: string;
-}
-
-export interface AiGeneratorOptionsResponse {
-  subjects: AiGeneratorOptionSubject[];
-  topics: AiGeneratorOptionTopic[];
-  documents: AiGeneratorOptionDocument[];
-  document_topics: AiGeneratorOptionDocumentTopic[];
 }
 
 export interface TeacherAiRequestItem {
@@ -58,7 +49,7 @@ export interface TeacherAiRequestItem {
   error_message?: string | null;
   created_at: string;
   updated_at: string;
-  document_topic: AiGeneratorOptionDocumentTopic;
+  document_topic: TeacherDocumentTopicOption;
 }
 
 export interface TeacherAiQuestionOption {
@@ -97,30 +88,34 @@ export interface CreateTeacherAiRequestPayload {
   content_scope?: string;
 }
 
-export interface UpdateTeacherQuestionPayload {
-  content: string;
-  difficulty: Difficulty;
-  explanation?: string;
-  options: string[];
-  correct_option_index: number;
-}
-
 export interface BulkQuestionStatusPayload {
   question_ids: number[];
 }
 
-export interface CreateManualQuestionPayload {
-  document_topic_id: number;
-  content: string;
-  difficulty: Difficulty;
-  explanation?: string;
-  options: string[];
-  correct_option_index: number;
-}
+export const getTeacherAssignedSubjects = async (): Promise<TeacherAssignedSubject[]> => {
+  const res = await api.get<ApiEnvelope<TeacherAssignedSubject[]>>('/subjects', {
+    params: { page: '1', limit: '100' },
+  });
+  return res.data || [];
+};
 
-export const getTeacherAiGeneratorOptions = async (): Promise<AiGeneratorOptionsResponse> => {
-  const res = await api.get<ApiEnvelope<AiGeneratorOptionsResponse>>('/teacher/ai-generator/options');
-  return res.data;
+export const getTeacherTopicsBySubjectId = async (subjectId: number): Promise<TeacherTopicItem[]> => {
+  const res = await api.get<ApiEnvelope<TeacherTopicItem[]>>('/topics', {
+    params: { page: '1', limit: '200', subject_id: String(subjectId) },
+  });
+  return res.data || [];
+};
+
+export const getTeacherDocumentsBySubjectTopic = async (
+  subjectId: number,
+  topicId?: number,
+): Promise<TeacherDocumentTopicOption[]> => {
+  const params: Record<string, string> = { subject_id: String(subjectId) };
+  if (topicId) params.topic_id = String(topicId);
+  const res = await api.get<ApiEnvelope<TeacherDocumentTopicOption[]>>('/teacher/question-bank/document-topic-options', {
+    params,
+  });
+  return res.data || [];
 };
 
 export const createTeacherAiRequest = async (payload: CreateTeacherAiRequestPayload): Promise<TeacherAiRequestItem> => {
@@ -138,11 +133,6 @@ export const getTeacherAiRequests = async (
   return { items: res.data || [], meta: res.meta || null };
 };
 
-export const getTeacherAiRequestDetail = async (requestId: number): Promise<TeacherAiRequestItem> => {
-  const res = await api.get<ApiEnvelope<TeacherAiRequestItem>>(`/teacher/ai-requests/${requestId}`);
-  return res.data;
-};
-
 export const getTeacherAiRequestQuestions = async (requestId: number): Promise<TeacherAiQuestionItem[]> => {
   const res = await api.get<ApiEnvelope<TeacherAiQuestionItem[]>>(`/teacher/ai-requests/${requestId}/questions`);
   return res.data || [];
@@ -150,14 +140,6 @@ export const getTeacherAiRequestQuestions = async (requestId: number): Promise<T
 
 export const retryTeacherAiRequest = async (requestId: number): Promise<TeacherAiRequestItem> => {
   const res = await api.post<ApiEnvelope<TeacherAiRequestItem>>(`/teacher/ai-requests/${requestId}/retry`);
-  return res.data;
-};
-
-export const patchTeacherQuestion = async (
-  questionId: number,
-  payload: UpdateTeacherQuestionPayload,
-): Promise<TeacherAiQuestionItem> => {
-  const res = await api.patch<ApiEnvelope<TeacherAiQuestionItem>>(`/teacher/questions/${questionId}`, payload);
   return res.data;
 };
 
@@ -171,9 +153,10 @@ export const bulkRejectTeacherQuestions = async (payload: BulkQuestionStatusPayl
   return res.data;
 };
 
-export const createTeacherManualQuestionFromAiGenerator = async (
-  payload: CreateManualQuestionPayload,
-): Promise<TeacherAiQuestionItem> => {
-  const res = await api.post<ApiEnvelope<TeacherAiQuestionItem>>('/teacher/questions/manual', payload);
-  return res.data;
+export const setTeacherGeneratedQuestionStatus = async (questionId: number, status: QuestionStatus): Promise<void> => {
+  await api.patch<ApiEnvelope<{ question_id: number; status: QuestionStatus }>>(`/teacher/question-bank/${questionId}/status`, { status });
+};
+
+export const softDeleteTeacherGeneratedQuestion = async (questionId: number): Promise<void> => {
+  await api.delete<ApiEnvelope<{ question_id: number; deleted: boolean }>>(`/teacher/question-bank/${questionId}`);
 };

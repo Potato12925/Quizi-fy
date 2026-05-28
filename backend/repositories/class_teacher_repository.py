@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from core.supabase import SupabaseManager
 
 
-SELECT_FIELDS = "class_teacher_id,class_id,teacher_id,added_by"
-HAS_DELETED = False
+SELECT_FIELDS = "class_teacher_id,class_id,teacher_id,joined_at,deleted_at"
+HAS_DELETED = True
 
 
 async def find_class_teacher_by_id(record_id: int) -> dict | None:
@@ -50,7 +50,11 @@ async def update_class_teacher_by_id(record_id: int, payload: dict) -> dict | No
 
 async def soft_delete_class_teacher_by_id(record_id: int) -> bool:
     supabase = SupabaseManager.get_client()
-    query = supabase.table("class_teachers").delete().eq("class_teacher_id", record_id)
+    query = (
+        supabase.table("class_teachers")
+        .update({"deleted_at": datetime.now(timezone.utc).isoformat()})
+        .eq("class_teacher_id", record_id)
+    )
     if HAS_DELETED:
         query = query.is_("deleted_at", None)
     response = await asyncio.to_thread(lambda: query.execute())

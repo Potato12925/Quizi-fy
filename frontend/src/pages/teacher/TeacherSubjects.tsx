@@ -45,7 +45,7 @@ export default function TeacherSubjectsPage() {
         return data[0].subject_id;
       });
     } catch {
-      setError('Không thể tải danh sách môn học và topic. Vui lòng thử lại.');
+      setError('Không thể tải danh sách môn học và chủ đề. Vui lòng thử lại.');
     } finally {
       setIsLoading(false);
     }
@@ -70,11 +70,11 @@ export default function TeacherSubjectsPage() {
     const trimmedName = topicName.trim();
 
     if (!trimmedName) {
-      setFormError('Vui lòng nhập tên topic.');
+      setFormError('Vui lòng nhập tên chủ đề.');
       return;
     }
     if (!activeSubject) {
-      setFormError('Vui lòng chọn môn học trước khi tạo topic.');
+      setFormError('Vui lòng chọn môn học trước khi tạo chủ đề.');
       return;
     }
 
@@ -89,7 +89,7 @@ export default function TeacherSubjectsPage() {
       setTopicDescription('');
       await fetchData();
     } catch {
-      setFormError('Không thể tạo topic. Tên topic có thể bị trùng hoặc bạn không có quyền.');
+      setFormError('Không thể tạo chủ đề. Tên chủ đề có thể bị trùng hoặc bạn không có quyền.');
     } finally {
       setIsSubmitting(false);
     }
@@ -110,7 +110,7 @@ export default function TeacherSubjectsPage() {
     }
     const trimmedName = editTopicName.trim();
     if (!trimmedName) {
-      setEditError('Vui lòng nhập tên topic.');
+      setEditError('Vui lòng nhập tên chủ đề.');
       return;
     }
 
@@ -125,7 +125,7 @@ export default function TeacherSubjectsPage() {
       setEditingTopic(null);
       await fetchData();
     } catch {
-      setEditError('Không thể cập nhật topic. Tên topic có thể bị trùng hoặc bạn không có quyền.');
+      setEditError('Không thể cập nhật chủ đề. Tên chủ đề có thể bị trùng hoặc bạn không có quyền.');
     } finally {
       setIsSubmitting(false);
     }
@@ -142,14 +142,14 @@ export default function TeacherSubjectsPage() {
       setDeleteTarget(null);
       await fetchData();
     } catch {
-      setFormError('Không thể xóa topic. Vui lòng thử lại.');
+      setFormError('Không thể xóa chủ đề. Vui lòng thử lại.');
     } finally {
       setIsDeleting(false);
     }
   };
 
   if (isLoading) {
-    return <LoadingState message="Đang tải dữ liệu môn học và topic..." />;
+    return <LoadingState message="Đang tải dữ liệu môn học và chủ đề..." />;
   }
 
   if (error) {
@@ -161,7 +161,7 @@ export default function TeacherSubjectsPage() {
       <div className="pb-20 space-y-8">
         <h1 className="text-5xl italic font-black leading-none tracking-tighter uppercase text-slate-900">
           Quản lý <br />
-          <span className="text-[#b20112]">topic theo môn học</span>
+          <span className="text-[#b20112]">chủ đề theo môn học</span>
         </h1>
         <div className="border-4 border-dashed border-slate-100 rounded-[3rem] p-16 flex flex-col items-center text-center">
           <span className="mb-6 text-6xl material-symbols-outlined text-slate-100">menu_book</span>
@@ -177,12 +177,12 @@ export default function TeacherSubjectsPage() {
         <div>
           <h1 className="text-5xl italic font-black leading-none tracking-tighter uppercase text-slate-900">
             Quản lý <br />
-            <span className="text-[#b20112]">topic theo môn học</span>
+            <span className="text-[#b20112]">chủ đề theo môn học</span>
           </h1>
-          <p className="mt-4 font-medium text-slate-500">Tạo topic cho từng môn học bạn đang phụ trách. Topic có thể được dùng ở các luồng khác.</p>
+          <p className="mt-4 font-medium text-slate-500">Tạo chủ đề cho từng môn học bạn đang phụ trách. Chủ đề có thể được dùng ở các luồng khác.</p>
         </div>
         <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
-          {totalTopics} topic
+          {totalTopics} chủ đề
         </span>
       </div>
 
@@ -204,7 +204,7 @@ export default function TeacherSubjectsPage() {
                   <p className={`text-sm font-black transition-colors ${activeSubjectId === subject.subject_id ? 'text-[#b20112]' : 'text-slate-600'}`}>
                     {subject.subject_name}
                   </p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{subject.topics.length} topic</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{subject.topics.length} chủ đề</p>
                 </div>
                 <span
                   className={`material-symbols-outlined text-xl transition-all ${
@@ -220,12 +220,12 @@ export default function TeacherSubjectsPage() {
 
         <div className="space-y-6 lg:col-span-8">
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-            Topic của {activeSubject?.subject_name || 'môn học'}
+            Chủ đề của {activeSubject?.subject_name || 'môn học'}
           </h3>
 
           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
             <form onSubmit={handleCreateTopic} className="space-y-4">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Tạo topic mới</label>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Tạo chủ đề mới</label>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <input
                   type="text"
@@ -236,7 +236,7 @@ export default function TeacherSubjectsPage() {
                   disabled={isSubmitting || !activeSubject}
                 />
                 <textarea
-                  placeholder="Mô tả topic (tùy chọn)"
+                  placeholder="Mô tả chủ đề (tùy chọn)"
                   value={topicDescription}
                   onChange={(event) => setTopicDescription(event.target.value)}
                   className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50 focus:ring-2 focus:ring-red-500/20 min-h-20"
@@ -247,7 +247,7 @@ export default function TeacherSubjectsPage() {
                   disabled={isSubmitting || !activeSubject}
                   className="bg-[#b20112] text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 hover:bg-black transition-all disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Đang tạo...' : 'Thêm topic'}
+                  {isSubmitting ? 'Đang tạo...' : 'Thêm chủ đề'}
                 </button>
               </div>
               {formError && (
@@ -261,22 +261,22 @@ export default function TeacherSubjectsPage() {
           {!activeSubject || !activeSubject.topics.length ? (
             <div className="border-4 border-dashed border-slate-100 rounded-[3rem] p-20 flex flex-col items-center text-center">
               <span className="mb-6 text-6xl material-symbols-outlined text-slate-100">topic</span>
-              <p className="text-sm font-black tracking-widest uppercase text-slate-400">Môn học này chưa có topic nào</p>
+              <p className="text-sm font-black tracking-widest uppercase text-slate-400">Môn học này chưa có chủ đề nào</p>
             </div>
           ) : (
             <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
               <div className="flex flex-wrap gap-3">
                 {activeSubject.topics.map((topic) => (
-                  <div key={`${activeSubject.subject_id}-${topic.topic_id}`} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-100">
+                  <div key={`${activeSubject.subject_id}-${topic.topic_id}`} className="flex items-center gap-2 px-3 py-2 border rounded-xl bg-slate-50 border-slate-100">
                     <div>
                       <p className="text-xs font-bold text-slate-700">{topic.topic_name}</p>
                       {topic.description && <p className="text-[10px] font-medium text-slate-400 mt-1">{topic.description}</p>}
                     </div>
-                    <button onClick={() => openEditModal(topic)} className="text-slate-400 hover:text-[#b20112] transition-colors" title="Cập nhật topic">
-                      <span className="material-symbols-outlined text-base">edit</span>
+                    <button onClick={() => openEditModal(topic)} className="text-slate-400 hover:text-[#b20112] transition-colors" title="Cập nhật chủ đề">
+                      <span className="text-base material-symbols-outlined">edit</span>
                     </button>
-                    <button onClick={() => setDeleteTarget(topic)} className="text-slate-400 hover:text-red-600 transition-colors" title="Xóa mềm topic">
-                      <span className="material-symbols-outlined text-base">delete</span>
+                    <button onClick={() => setDeleteTarget(topic)} className="transition-colors text-slate-400 hover:text-red-600" title="Xóa mềm chủ đề">
+                      <span className="text-base material-symbols-outlined">delete</span>
                     </button>
                   </div>
                 ))}
@@ -293,7 +293,7 @@ export default function TeacherSubjectsPage() {
               <div className="flex items-center justify-between mb-8">
                 <div>
                   <h2 className="text-2xl italic font-black tracking-tighter uppercase text-slate-900">
-                    Cập nhật <span className="text-[#b20112]">topic</span>
+                    Cập nhật <span className="text-[#b20112]">chủ đề</span>
                   </h2>
                 </div>
                 <button
@@ -307,7 +307,7 @@ export default function TeacherSubjectsPage() {
 
               <form onSubmit={handleUpdateTopic} className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Tên topic</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Tên chủ đề</label>
                   <input
                     type="text"
                     value={editTopicName}
@@ -317,7 +317,7 @@ export default function TeacherSubjectsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Mô tả topic</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Mô tả chủ đề</label>
                   <textarea
                     value={editTopicDescription}
                     onChange={(event) => setEditTopicDescription(event.target.value)}
@@ -361,9 +361,9 @@ export default function TeacherSubjectsPage() {
             <div className="w-16 h-16 bg-red-50 text-[#b20112] rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-3xl material-symbols-outlined">warning</span>
             </div>
-            <h3 className="mb-2 text-xl font-black text-slate-900">Xác nhận xóa mềm topic</h3>
+            <h3 className="mb-2 text-xl font-black text-slate-900">Xác nhận xóa mềm chủ đề</h3>
             <p className="mb-6 text-xs leading-relaxed text-slate-500">
-              Bạn chắc chắn muốn xóa topic <strong>{deleteTarget.topic_name}</strong>?
+              Bạn chắc chắn muốn xóa chủ đề <strong>{deleteTarget.topic_name}</strong>?
             </p>
             <div className="flex justify-center gap-3">
               <button

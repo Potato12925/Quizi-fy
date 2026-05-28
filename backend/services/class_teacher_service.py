@@ -11,7 +11,9 @@ from schemas.class_teacher_schema import ClassTeacherCreateRequest, ClassTeacher
 
 
 async def create_class_teacher(payload: ClassTeacherCreateRequest) -> dict:
-    return await create_class_teacher_record({ "class_id": payload.class_id, "teacher_id": payload.teacher_id, "added_by": payload.added_by })
+    return await create_class_teacher_record(
+        {"class_id": payload.class_id, "teacher_id": payload.teacher_id}
+    )
 
 
 async def get_class_teacher_by_id(record_id: int) -> dict:

@@ -1,217 +1,633 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAdminDashboardStats, type DashboardStats } from '@/api/adminApi';
-import LoadingState from '@/components/common/LoadingState';
+import {
+  downloadReportExport,
+  getAiSummaryReport,
+  getDashboardReport,
+  getDataQualityReport,
+  getDocumentSummaryReport,
+  getQuestionSummaryReport,
+  getTeacherActivityReport,
+  getTopicCoverageReport,
+  type DashboardReportData,
+  type ReportFilterOptions,
+  type ReportKey,
+  type ReportListMeta,
+  type ReportQueryParams,
+  type ReportTableResult,
+} from '@/api/reportsApi';
+import EmptyState from '@/components/common/EmptyState';
 import ErrorState from '@/components/common/ErrorState';
+import LoadingState from '@/components/common/LoadingState';
+
+type ReportTabKey = 'overview' | ReportKey;
+type ExportFormat = 'csv' | 'xlsx' | 'pdf';
+
+const REPORT_TABS: Array<{ key: ReportTabKey; label: string }> = [
+  { key: 'overview', label: 'Tổng quan' },
+  { key: 'question-summary', label: 'Ngân hàng câu hỏi' },
+  { key: 'ai-summary', label: 'Sinh câu hỏi AI' },
+  { key: 'document-summary', label: 'Tài liệu' },
+  { key: 'teacher-activity', label: 'Hoạt động giáo viên' },
+  { key: 'topic-coverage', label: 'Độ phủ chủ đề' },
+  { key: 'data-quality', label: 'Chất lượng dữ liệu' },
+];
+
+const DEFAULT_REPORT_FILTERS: ReportQueryParams = {
+  page: 1,
+  limit: 10,
+  sort_by: 'created_at',
+  sort_order: 'desc',
+  search: '',
+};
+
+const DEFAULT_FILTER_OPTIONS: ReportFilterOptions = {
+  teachers: [],
+  subjects: [],
+  topics: [],
+};
+
+const STATUS_LABEL_MAP: Record<string, string> = {
+  active: 'Hoạt động',
+  inactive: 'Ngưng hoạt động',
+  draft: 'Nháp',
+  approved: 'Đã duyệt',
+  rejected: 'Từ chối',
+  pending: 'Đang chờ',
+  processing: 'Đang xử lý',
+  completed: 'Hoàn tất',
+  failed: 'Thất bại',
+  cancelled: 'Đã hủy',
+  'hoat dong': 'Hoạt động',
+  'tam khoa': 'Tạm khóa',
+};
+
+const ROLE_LABEL_MAP: Record<string, string> = {
+  admin: 'Quản trị viên',
+  teacher: 'Giáo viên',
+  student: 'Học sinh',
+};
+
+const DIFFICULTY_LABEL_MAP: Record<string, string> = {
+  easy: 'Dễ',
+  medium: 'Trung bình',
+  hard: 'Khó',
+};
+
+const SOURCE_LABEL_MAP: Record<string, string> = {
+  ai: 'AI',
+  manual: 'Thủ công',
+};
+
+const COLUMN_LABEL_MAP: Record<string, string> = {
+  question_id: 'Mã câu hỏi',
+  teacher_id: 'Mã giáo viên',
+  teacher_name: 'Giáo viên',
+  subject_id: 'Mã môn',
+  subject_name: 'Môn học',
+  topic_id: 'Mã chủ đề',
+  topic_name: 'Chủ đề',
+  document_id: 'Mã tài liệu',
+  document_title: 'Tiêu đề tài liệu',
+  request_id: 'Mã yêu cầu',
+  num_questions: 'Số câu hỏi',
+  generated_question_count: 'Số câu đã sinh',
+  status: 'Trạng thái',
+  difficulty: 'Độ khó',
+  source: 'Nguồn',
+  created_at: 'Ngày tạo',
+  updated_at: 'Ngày cập nhật',
+  content: 'Nội dung',
+  title: 'Tiêu đề',
+  role: 'Vai trò',
+  approval_rate_pct: 'Tỉ lệ duyệt (%)',
+  question_count: 'Số câu hỏi',
+  document_count: 'Số tài liệu',
+  ai_request_count: 'Số yêu cầu AI',
+  issue_type: 'Loại lỗi',
+  entity_type: 'Loại dữ liệu',
+  entity_id: 'Mã dữ liệu',
+  details: 'Chi tiết',
+};
+
+const toDisplayStatus = (value: string | null | undefined): string => {
+  if (!value) return '-';
+  const normalized = value.toLowerCase().trim();
+  return STATUS_LABEL_MAP[normalized] || value;
+};
+
+const toDisplayRole = (value: string | null | undefined): string => {
+  if (!value) return '-';
+  const normalized = value.toLowerCase().trim();
+  return ROLE_LABEL_MAP[normalized] || value;
+};
+
+const toDisplayDifficulty = (value: string | null | undefined): string => {
+  if (!value) return '-';
+  const normalized = value.toLowerCase().trim();
+  return DIFFICULTY_LABEL_MAP[normalized] || value;
+};
+
+const toDisplaySource = (value: string | null | undefined): string => {
+  if (!value) return '-';
+  const normalized = value.toLowerCase().trim();
+  return SOURCE_LABEL_MAP[normalized] || value;
+};
+
+const toDisplayColumnLabel = (column: string): string => {
+  return COLUMN_LABEL_MAP[column] || column.replaceAll('_', ' ');
+};
 
 export default function AdminDashboardPage() {
   const navigate = useNavigate();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const [dashboard, setDashboard] = useState<DashboardReportData | null>(null);
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchStats = async () => {
-    setIsLoading(true);
-    setError(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [activeReportTab, setActiveReportTab] = useState<ReportTabKey>('overview');
+  const [reportFilters, setReportFilters] = useState<ReportQueryParams>(DEFAULT_REPORT_FILTERS);
+  const [draftFilters, setDraftFilters] = useState<ReportQueryParams>(DEFAULT_REPORT_FILTERS);
+  const [reportDataByTab, setReportDataByTab] = useState<Partial<Record<ReportKey, ReportTableResult>>>({});
+  const [reportLoadingByTab, setReportLoadingByTab] = useState<Partial<Record<ReportKey, boolean>>>({});
+  const [reportErrorByTab, setReportErrorByTab] = useState<Partial<Record<ReportKey, string>>>({});
+  const [isExporting, setIsExporting] = useState(false);
+
+  const fetchDashboard = async () => {
+    setIsLoadingDashboard(true);
+    setDashboardError(null);
     try {
-      const data = await getAdminDashboardStats();
-      setStats(data);
-    } catch (err: any) {
-      setError(err.message || 'Không thể kết nối API thống kê.');
+      const data = await getDashboardReport();
+      setDashboard(data);
+      const options = data.filter_options || DEFAULT_FILTER_OPTIONS;
+      const nextDraft: ReportQueryParams = {
+        ...DEFAULT_REPORT_FILTERS,
+      };
+      if (options.subjects.length > 0) {
+        nextDraft.subject_id = options.subjects[0].id;
+      }
+      setDraftFilters(nextDraft);
+      setReportFilters(nextDraft);
+    } catch (error: any) {
+      setDashboardError(error?.message || 'Không thể tải bảng điều khiển');
     } finally {
-      setIsLoading(false);
+      setIsLoadingDashboard(false);
     }
   };
 
   useEffect(() => {
-    fetchStats();
+    fetchDashboard();
   }, []);
 
-  if (isLoading) {
+  const currentFilterOptions = useMemo(() => {
+    if (activeReportTab !== 'overview' && reportDataByTab[activeReportTab as ReportKey]?.filter_options) {
+      return reportDataByTab[activeReportTab as ReportKey]?.filter_options || DEFAULT_FILTER_OPTIONS;
+    }
+    return dashboard?.filter_options || DEFAULT_FILTER_OPTIONS;
+  }, [activeReportTab, dashboard?.filter_options, reportDataByTab]);
+
+  const currentReportMeta: ReportListMeta | null =
+    activeReportTab !== 'overview' ? reportDataByTab[activeReportTab as ReportKey]?.meta || null : null;
+
+  const fetchReportTab = async (tab: ReportKey, filters: ReportQueryParams) => {
+    setReportLoadingByTab((prev) => ({ ...prev, [tab]: true }));
+    setReportErrorByTab((prev) => ({ ...prev, [tab]: '' }));
+    try {
+      let result: ReportTableResult;
+      if (tab === 'question-summary') {
+        result = await getQuestionSummaryReport(filters);
+      } else if (tab === 'ai-summary') {
+        result = await getAiSummaryReport(filters);
+      } else if (tab === 'document-summary') {
+        result = await getDocumentSummaryReport(filters);
+      } else if (tab === 'teacher-activity') {
+        result = await getTeacherActivityReport(filters);
+      } else if (tab === 'topic-coverage') {
+        result = await getTopicCoverageReport(filters);
+      } else {
+        result = await getDataQualityReport(filters);
+      }
+      setReportDataByTab((prev) => ({ ...prev, [tab]: result }));
+    } catch (error: any) {
+      setReportErrorByTab((prev) => ({ ...prev, [tab]: error?.message || 'Không thể tải báo cáo' }));
+    } finally {
+      setReportLoadingByTab((prev) => ({ ...prev, [tab]: false }));
+    }
+  };
+
+  useEffect(() => {
+    if (!isReportModalOpen) return;
+    if (activeReportTab === 'overview') return;
+    fetchReportTab(activeReportTab, reportFilters);
+  }, [activeReportTab, isReportModalOpen, reportFilters]);
+
+  const handleOpenReports = () => {
+    setIsReportModalOpen(true);
+    setActiveReportTab('overview');
+  };
+
+  const handleApplyFilters = () => {
+    setReportFilters((prev) => ({
+      ...prev,
+      ...draftFilters,
+      page: 1,
+    }));
+  };
+
+  const handleResetFilters = () => {
+    setDraftFilters(DEFAULT_REPORT_FILTERS);
+    setReportFilters(DEFAULT_REPORT_FILTERS);
+  };
+
+  const handleExport = async (format: ExportFormat) => {
+    if (activeReportTab === 'overview') return;
+    setIsExporting(true);
+    try {
+      await downloadReportExport(activeReportTab as ReportKey, format, reportFilters);
+    } catch (error: any) {
+      alert(error?.message || 'Không thể xuất báo cáo');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleChangePage = (nextPage: number) => {
+    if (nextPage < 1) return;
+    setReportFilters((prev) => ({ ...prev, page: nextPage }));
+  };
+
+  const filteredUsers = useMemo(() => {
+    const users = dashboard?.recent_users || [];
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter(
+      (user) =>
+        user.name.toLowerCase().includes(q) ||
+        user.email.toLowerCase().includes(q) ||
+        user.role.toLowerCase().includes(q),
+    );
+  }, [dashboard?.recent_users, searchQuery]);
+
+  const metricCards = useMemo(() => {
+    const summary = dashboard?.summary;
+    if (!summary) return [];
+    return [
+      {
+        label: 'Giáo viên',
+        value: summary.total_teachers.toLocaleString(),
+        note: 'Theo quyền hiện tại',
+        icon: 'school',
+      },
+      {
+        label: 'Môn học',
+        value: summary.total_subjects.toLocaleString(),
+        note: 'Danh mục',
+        icon: 'menu_book',
+      },
+      {
+        label: 'Chủ đề',
+        value: summary.total_topics.toLocaleString(),
+        note: 'Độ phủ',
+        icon: 'topic',
+      },
+      {
+        label: 'Tài liệu',
+        value: summary.total_documents.toLocaleString(),
+        note: 'Đã tải lên',
+        icon: 'description',
+      },
+      {
+        label: 'Câu hỏi',
+        value: summary.total_questions.toLocaleString(),
+        note: 'Kho câu hỏi',
+        icon: 'quiz',
+      },
+      {
+        label: 'Yêu cầu AI',
+        value: summary.total_ai_requests.toLocaleString(),
+        note: 'Lượt sinh tự động',
+        icon: 'smart_toy',
+      },
+      {
+        label: 'Chờ duyệt',
+        value: summary.pending_approvals.toLocaleString(),
+        note: 'Cần xem xét',
+        icon: 'pending_actions',
+      },
+    ];
+  }, [dashboard?.summary]);
+
+  if (isLoadingDashboard) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <LoadingState message="Đang tải dữ liệu bảng điều khiển..." />
+        <LoadingState message="Đang tải bảng điều khiển..." />
       </div>
     );
   }
 
-  if (error || !stats) {
+  if (dashboardError || !dashboard) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <ErrorState 
-          title="Lỗi tải Dashboard" 
-          message={error || 'Không có dữ liệu.'} 
-          onRetry={fetchStats} 
+        <ErrorState
+          title="Lỗi tải bảng điều khiển"
+          message={dashboardError || 'Không có dữ liệu để hiển thị'}
+          onRetry={fetchDashboard}
         />
       </div>
     );
   }
 
-  // Filter users based on search
-  const filteredUsers = stats.users.filter(user => 
-    user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (user.dept && user.dept.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const renderOverviewContent = () => {
+    const summary = dashboard.summary;
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: 'Giáo viên', value: summary.total_teachers },
+            { label: 'Môn học', value: summary.total_subjects },
+            { label: 'Chủ đề', value: summary.total_topics },
+            { label: 'Tài liệu', value: summary.total_documents },
+            { label: 'Câu hỏi', value: summary.total_questions },
+            { label: 'Yêu cầu AI', value: summary.total_ai_requests },
+            { label: 'Chờ duyệt', value: summary.pending_approvals },
+          ].map((item) => (
+            <div key={item.label} className="p-4 border rounded-2xl border-slate-100 bg-slate-50">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+              <p className="mt-2 text-2xl font-black text-slate-900">{item.value.toLocaleString()}</p>
+            </div>
+          ))}
+        </div>
 
-  const metricCards = [
-    { label: 'Tổng số người dùng', value: stats.totalUsers.toLocaleString(), note: `${stats.activityGrowth} tháng này` },
-    { label: 'Giáo viên', value: stats.teachersCount.toLocaleString(), note: 'Đang hoạt động' },
-    { label: 'Học sinh', value: stats.studentsCount.toLocaleString(), note: 'Đã phân vào lớp' },
-    { label: 'Câu hỏi duyệt', value: stats.approvedQuestions, note: 'Kho câu hỏi AI' },
-  ];
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="p-4 border rounded-2xl border-slate-100">
+            <h4 className="mb-3 text-sm font-black tracking-widest uppercase text-slate-500">Trạng thái câu hỏi</h4>
+            <div className="space-y-2">
+              {dashboard.questions.by_status.map((item) => (
+                <div key={item.key} className="flex justify-between text-sm">
+                  <span className="font-bold text-slate-600">{toDisplayStatus(item.label)}</span>
+                  <span className="font-black text-slate-900">{item.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="p-4 border rounded-2xl border-slate-100">
+            <h4 className="mb-3 text-sm font-black tracking-widest uppercase text-slate-500">Độ khó câu hỏi</h4>
+            <div className="space-y-2">
+              {dashboard.questions.by_difficulty.map((item) => (
+                <div key={item.key} className="flex justify-between text-sm">
+                  <span className="font-bold text-slate-600">{toDisplayDifficulty(item.label)}</span>
+                  <span className="font-black text-slate-900">{item.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="p-4 border rounded-2xl border-slate-100">
+            <h4 className="mb-3 text-sm font-black tracking-widest uppercase text-slate-500">Trạng thái yêu cầu AI</h4>
+            <div className="space-y-2">
+              {dashboard.ai_requests.by_status.map((item) => (
+                <div key={item.key} className="flex justify-between text-sm">
+                  <span className="font-bold text-slate-600">{toDisplayStatus(item.label)}</span>
+                  <span className="font-black text-slate-900">{item.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 border rounded-2xl border-slate-100">
+          <h4 className="mb-3 text-sm font-black tracking-widest uppercase text-slate-500">Hoạt động gần đây</h4>
+          {dashboard.recent_activity.length === 0 ? (
+            <p className="text-sm text-slate-400">Chưa có hoạt động gần đây.</p>
+          ) : (
+            <div className="space-y-2 overflow-y-auto max-h-64">
+              {dashboard.recent_activity.map((item: any, index: number) => (
+                <div key={`${item.activity_type}-${item.activity_id}-${index}`} className="px-3 py-2 text-sm rounded-xl bg-slate-50">
+                  <span className="font-black text-slate-700">
+                    {item.activity_type === 'ai_request' ? 'Yêu cầu AI' : item.activity_type === 'question' ? 'Câu hỏi' : item.activity_type === 'document' ? 'Tài liệu' : item.activity_type}
+                  </span>
+                  <span className="text-slate-500"> - {item.title}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderReportTable = () => {
+    if (activeReportTab === 'overview') return renderOverviewContent();
+
+    const report = reportDataByTab[activeReportTab as ReportKey];
+    const isLoading = !!reportLoadingByTab[activeReportTab as ReportKey];
+    const error = reportErrorByTab[activeReportTab as ReportKey];
+
+    if (isLoading) {
+      return <LoadingState message="Đang tải dữ liệu báo cáo..." />;
+    }
+
+    if (error) {
+      return (
+        <ErrorState
+          title="Lỗi tải báo cáo"
+          message={error}
+          onRetry={() => fetchReportTab(activeReportTab, reportFilters)}
+        />
+      );
+    }
+
+    const rows = report?.table || [];
+    if (rows.length === 0) {
+      return <EmptyState title="Không có dữ liệu" message="Không có bản ghi phù hợp với bộ lọc hiện tại." />;
+    }
+
+    const columns = Object.keys(rows[0]).slice(0, 8);
+    return (
+      <div className="space-y-4">
+        <div className="overflow-auto border rounded-xl border-slate-100">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-50">
+              <tr>
+                {columns.map((column) => (
+                  <th key={column} className="px-4 py-3 font-black tracking-widest uppercase text-slate-500">
+                    {toDisplayColumnLabel(column)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row: any, index: number) => (
+                <tr key={`row-${index}`} className="border-t border-slate-100">
+                  {columns.map((column) => {
+                    const value = row[column];
+                    return (
+                      <td key={`${index}-${column}`} className="px-4 py-3 text-slate-700">
+                        {Array.isArray(value)
+                          ? value.join(', ')
+                          : column === 'status'
+                            ? toDisplayStatus(value)
+                            : column === 'role'
+                              ? toDisplayRole(value)
+                              : column === 'difficulty'
+                                ? toDisplayDifficulty(value)
+                                : column === 'source'
+                                  ? toDisplaySource(value)
+                                  : value === null || value === undefined
+                                    ? '-'
+                                    : String(value)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-slate-500">
+            Trang {currentReportMeta?.page || 1} / {currentReportMeta?.total_pages || 1} - Tổng {currentReportMeta?.total || rows.length}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleChangePage((reportFilters.page || 1) - 1)}
+              disabled={(reportFilters.page || 1) <= 1}
+              className="px-3 py-2 text-xs font-black border rounded-lg border-slate-200 disabled:opacity-50"
+            >
+              Trước
+            </button>
+            <button
+              onClick={() => handleChangePage((reportFilters.page || 1) + 1)}
+              disabled={(currentReportMeta?.page || 1) >= (currentReportMeta?.total_pages || 1)}
+              className="px-3 py-2 text-xs font-black border rounded-lg border-slate-200 disabled:opacity-50"
+            >
+              Sau
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="space-y-10 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6 pt-2">
+    <div className="pb-20 space-y-10 duration-700 animate-in fade-in slide-in-from-bottom-4">
+      <div className="flex flex-col items-start justify-between gap-6 pt-2 lg:flex-row lg:items-end">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-4">Administration Console</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-4">Bảng điều khiển quản trị</p>
           <h1 className="text-5xl lg:text-6xl font-black text-slate-900 tracking-tighter uppercase italic leading-[0.9]">
             Quản trị <br />
-            <span className="text-[#b20112]">Admin</span>
+            <span className="text-[#b20112]">Tổng quan</span>
           </h1>
-          <p className="text-slate-500 mt-4 max-w-2xl font-medium italic">
-            Giao diện quản lý lớp học, học sinh, giáo viên và môn học kết nối API động của hệ thống.
+          <p className="max-w-2xl mt-4 italic font-medium text-slate-500">
+            Dữ liệu hiển thị theo thời gian thực từ API báo cáo, có phân quyền và hỗ trợ xuất tệp.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <button 
-            onClick={() => alert('Chức năng xuất báo cáo tổng kết sẽ được tích hợp với Backend.')}
+          <button
+            onClick={handleOpenReports}
             className="px-7 py-4 rounded-2xl bg-white border border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-500 shadow-sm hover:text-[#b20112] hover:border-[#b20112] transition-all cursor-pointer"
           >
-            Báo cáo tổng kết
+            Mở báo cáo
           </button>
-          <button 
+          <button
             onClick={() => navigate('/admin/users')}
             className="px-7 py-4 rounded-2xl bg-[#b20112] text-white text-[10px] font-black uppercase tracking-widest shadow-2xl shadow-red-900/20 hover:bg-[#d62828] transition-all flex items-center gap-2 cursor-pointer"
           >
-            <span className="material-symbols-outlined text-xl">person_add</span>
-            Thêm người dùng
+            <span className="text-xl material-symbols-outlined">person_add</span>
+            Thêm tài khoản
           </button>
         </div>
       </div>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-        {metricCards.map((card, index) => (
-          <div
-            key={card.label}
-            className={`rounded-[2.5rem] p-7 border shadow-sm overflow-hidden relative ${
-              index === 0 ? 'bg-white border-slate-100' : 
-              index === 1 ? 'bg-[#b20112] text-white border-transparent shadow-red-900/20' : 
-              index === 2 ? 'bg-slate-900 text-white border-transparent' : 
-              'bg-white border-slate-100'
-            }`}
-          >
-            <div className="flex items-start justify-between gap-4 relative z-10">
+      <section className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+        {metricCards.slice(0, 4).map((card) => (
+          <div key={card.label} className="rounded-[2.5rem] p-7 border shadow-sm overflow-hidden relative bg-white border-slate-100">
+            <div className="relative z-10 flex items-start justify-between gap-4">
               <div>
-                <p className={`text-[10px] font-black uppercase tracking-[0.25em] ${index === 1 || index === 2 ? 'text-white/60' : 'text-slate-400'}`}>
-                  {card.label}
-                </p>
-                <h3 className={`mt-4 text-4xl font-black tracking-tighter ${index === 1 || index === 2 ? 'text-white' : 'text-slate-900'}`}>
-                  {card.value}
-                </h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">{card.label}</p>
+                <h3 className="mt-4 text-4xl font-black tracking-tighter text-slate-900">{card.value}</h3>
               </div>
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${index === 1 ? 'bg-white/15' : index === 2 ? 'bg-white/10' : 'bg-slate-50'}`}>
-                <span className={`material-symbols-outlined text-3xl ${index === 1 || index === 2 ? 'text-white' : 'text-[#b20112]'}`}>
-                  {index === 0 ? 'group' : index === 1 ? 'school' : index === 2 ? 'library_books' : 'verified'}
-                </span>
+              <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-50">
+                <span className="material-symbols-outlined text-3xl text-[#b20112]">{card.icon}</span>
               </div>
             </div>
-            <p className={`mt-6 text-xs font-bold uppercase tracking-[0.2em] ${index === 1 || index === 2 ? 'text-white/55' : 'text-slate-400'}`}>
-              {card.note}
-            </p>
-            {index === 0 && <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-[#b20112]/5 blur-3xl" />}
+            <p className="mt-6 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">{card.note}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 md:grid-cols-3">
+        {metricCards.slice(4).map((card) => (
+          <div key={card.label} className="rounded-[2rem] p-5 border bg-slate-50 border-slate-100">
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">{card.label}</p>
+            <h3 className="mt-3 text-3xl font-black tracking-tight text-slate-900">{card.value}</h3>
+            <p className="mt-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">{card.note}</p>
           </div>
         ))}
       </section>
 
       <section className="grid grid-cols-1 xl:grid-cols-[1.35fr_0.85fr] gap-6">
         <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
-          <div className="p-8 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/30">
+          <div className="flex flex-col justify-between gap-4 p-8 border-b border-slate-50 md:flex-row md:items-center bg-slate-50/30">
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">Danh sách người dùng mới</h2>
-              <p className="text-sm text-slate-500 mt-1">Quản lý và phê duyệt thông tin tài khoản giáo viên & sinh viên.</p>
+              <h2 className="text-xl font-black tracking-tight uppercase text-slate-900">Người dùng gần đây</h2>
+              <p className="mt-1 text-sm text-slate-500">Danh sách người dùng gần đây từ hệ thống báo cáo.</p>
             </div>
             <div className="flex items-center gap-3">
               <div className="relative w-full md:w-72">
-                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+                <span className="absolute text-sm -translate-y-1/2 material-symbols-outlined left-4 top-1/2 text-slate-400">search</span>
                 <input
                   type="text"
-                  placeholder="Tìm tên, email..."
+                  placeholder="Tìm theo tên hoặc vai trò..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-100 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-red-100 transition-all"
+                  className="w-full py-3 pl-10 pr-4 text-xs font-bold transition-all bg-white border outline-none rounded-xl border-slate-100 focus:ring-2 focus:ring-red-100"
                 />
               </div>
-              <button 
+              <button
                 onClick={() => navigate('/admin/users')}
                 className="px-4 py-3 rounded-xl bg-[#b20112] text-white text-[10px] font-black uppercase tracking-widest cursor-pointer"
               >
-                Xem tất cả
+                Quản lý
               </button>
             </div>
           </div>
 
           <div className="overflow-x-auto">
             {filteredUsers.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 font-medium italic">Không tìm thấy người dùng phù hợp.</div>
+              <div className="p-8 italic font-medium text-center text-slate-400">Không tìm thấy người dùng phù hợp.</div>
             ) : (
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-50 bg-slate-50/50">
                     <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Người dùng</th>
                     <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Vai trò</th>
-                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Lớp / Khoa</th>
                     <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Trạng thái</th>
                     <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {filteredUsers.map((user) => (
-                    <tr key={user.email} className="hover:bg-slate-50/40 transition-colors">
+                    <tr key={`${user.id}-${user.email}`} className="transition-colors hover:bg-slate-50/40">
                       <td className="px-8 py-6">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-2xl bg-slate-100 text-[#b20112] flex items-center justify-center font-black text-sm ring-2 ring-white shadow-sm overflow-hidden">
-                            {user.img ? (
-                              <img src={user.img} alt={user.name} className="w-full h-full object-cover" />
-                            ) : (
-                              user.initial || user.name.substring(0, 2).toUpperCase()
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-sm font-black text-slate-900">{user.name}</p>
-                            <p className="text-[11px] text-slate-400 font-semibold">{user.email}</p>
-                          </div>
-                        </div>
+                        <p className="text-sm font-black text-slate-900">{user.name}</p>
+                        <p className="text-[11px] text-slate-400 font-semibold">{user.email}</p>
                       </td>
+                      <td className="px-6 py-6 text-xs font-black uppercase text-slate-700">{toDisplayRole(user.role)}</td>
                       <td className="px-6 py-6">
-                        <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${
-                          user.role.toUpperCase() === 'GIẢNG VIÊN' || user.role === 'teacher'
-                            ? 'bg-red-50 text-[#b20112]' 
-                            : 'bg-slate-50 text-slate-600'
-                        }`}>
-                          {user.role.toUpperCase() === 'GIẢNG VIÊN' || user.role === 'teacher' ? 'Giáo viên' : 'Học sinh'}
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${user.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                          {toDisplayStatus(user.status)}
                         </span>
                       </td>
-                      <td className="px-6 py-6 text-xs font-bold text-slate-500">{user.dept || 'N/A'}</td>
-                      <td className="px-6 py-6">
-                        <div className="flex items-center gap-2.5">
-                          <span className={`w-2.5 h-2.5 rounded-full ${user.status === 'Hoạt động' || user.status === 'active' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                          <span className="text-[11px] font-black uppercase tracking-tight text-slate-700">
-                            {user.status === 'Hoạt động' || user.status === 'active' ? 'Hoạt động' : 'Ngoại tuyến'}
-                          </span>
-                        </div>
-                      </td>
                       <td className="px-8 py-6 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button 
-                            onClick={() => navigate(`/admin/users?edit=${user.id}`)}
-                            className="p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white transition-all cursor-pointer"
-                          >
-                            <span className="material-symbols-outlined text-lg">edit</span>
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => navigate('/admin/users')}
+                          className="p-3 transition-all cursor-pointer rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white"
+                        >
+                          <span className="text-lg material-symbols-outlined">edit</span>
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -223,84 +639,78 @@ export default function AdminDashboardPage() {
 
         <div className="space-y-6">
           <div className="bg-[#b20112] text-white rounded-[3rem] p-8 shadow-2xl shadow-red-900/20 relative overflow-hidden">
-            <div className="absolute -right-14 -bottom-8 opacity-15">
-              <span className="material-symbols-outlined text-[180px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                notifications_active
-              </span>
-            </div>
-            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/60">Thông báo hệ thống</p>
-            <h3 className="mt-4 text-3xl font-black tracking-tighter leading-tight">Chủ nhiệm lớp mới đã được gán</h3>
-            <p className="mt-4 text-sm text-white/75 leading-relaxed">
-              Hệ thống hiện tại hiển thị dữ liệu trực quan dựa trên API của PTIT Quizify. Bạn có thể quản lý phân quyền và tạo mới thực thể tại đây.
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/60">Gợi ý hệ thống</p>
+            <h3 className="mt-4 text-3xl font-black leading-tight tracking-tighter">Mô-đun báo cáo đã sẵn sàng</h3>
+            <p className="mt-4 text-sm leading-relaxed text-white/75">
+              Bạn có thể mở popup báo cáo để lọc, sắp xếp và xuất dữ liệu thống kê thực tế từ backend.
             </p>
           </div>
 
           <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm p-8">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Lớp nổi bật</p>
-                <h3 className="mt-2 text-2xl font-black text-slate-900 tracking-tight">Tổng quan dữ liệu lớp</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Tổng quan lớp học</p>
+                <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900">Danh sách lớp</h3>
               </div>
               <span className="w-12 h-12 rounded-2xl bg-slate-50 text-[#b20112] flex items-center justify-center">
                 <span className="material-symbols-outlined">class</span>
               </span>
             </div>
             <div className="space-y-4">
-              {stats.classes.slice(0, 3).map((item) => (
-                <div key={item.code} className="flex items-center justify-between rounded-2xl bg-slate-50 px-5 py-4">
+              {dashboard.classes_overview.slice(0, 3).map((item) => (
+                <div key={item.id} className="flex items-center justify-between px-5 py-4 rounded-2xl bg-slate-50">
                   <div>
                     <p className="text-sm font-black text-slate-800">{item.name}</p>
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.code}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-black text-slate-900">{item.students} học sinh</p>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.status}</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{toDisplayStatus(item.status)}</p>
                   </div>
                 </div>
               ))}
+              {dashboard.classes_overview.length === 0 && <p className="text-sm text-slate-400">Không có lớp học nào.</p>}
             </div>
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
-          <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
+          <div className="flex items-center justify-between p-8 border-b border-slate-50 bg-slate-50/30">
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">Lớp học đang quản lý</h2>
-              <p className="text-sm text-slate-500 mt-1">Thông tin lớp học, giáo viên chủ nhiệm và sĩ số.</p>
+              <h2 className="text-xl font-black tracking-tight uppercase text-slate-900">Lớp học đang quản lý</h2>
+              <p className="mt-1 text-sm text-slate-500">Sĩ số và trạng thái lớp theo dữ liệu thời gian thực.</p>
             </div>
-            <button 
+            <button
               onClick={() => navigate('/admin/classes')}
               className="text-[10px] font-black uppercase tracking-widest text-[#b20112] cursor-pointer"
             >
-              Xem chi tiết
+              Xem
             </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-50">
-                  <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Mã lớp</th>
+                  <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Lớp</th>
                   <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Trạng thái</th>
                   <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Sĩ số</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {stats.classes.map((item) => (
-                  <tr key={item.code} className="hover:bg-slate-50/40 transition-colors">
+                {dashboard.classes_overview.map((item) => (
+                  <tr key={item.id} className="transition-colors hover:bg-slate-50/40">
                     <td className="px-8 py-5">
                       <p className="text-sm font-black text-slate-900">{item.name}</p>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.code}</p>
                     </td>
                     <td className="px-6 py-5">
-                      <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                        item.status === 'Hoạt động' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-[#b20112]'
-                      }`}>
-                        {item.status}
+                      <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${item.status.toLowerCase().includes('hoat') ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-[#b20112]'}`}>
+                        {toDisplayStatus(item.status)}
                       </span>
                     </td>
-                    <td className="px-6 py-5 text-center text-sm font-black text-slate-900">{item.students}</td>
+                    <td className="px-6 py-5 text-sm font-black text-center text-slate-900">{item.students}</td>
                   </tr>
                 ))}
               </tbody>
@@ -310,25 +720,25 @@ export default function AdminDashboardPage() {
 
         <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm p-8 flex flex-col justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Hành động nhanh</p>
-            <h2 className="mt-3 text-3xl font-black text-slate-900 tracking-tight">Trung tâm điều khiển Admin</h2>
-            <p className="mt-4 text-sm text-slate-500 leading-relaxed">
-              Bạn có thể dễ dàng quản lý hệ thống dữ liệu QuizifyAI qua các trang chức năng. Nhấp chọn để truy cập nhanh:
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Truy cập nhanh</p>
+            <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-900">Điều hướng quản trị</h2>
+            <p className="mt-4 text-sm leading-relaxed text-slate-500">
+              Chuyển nhanh đến các trang chức năng.
             </p>
           </div>
-          <div className="mt-8 grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4 mt-8">
             {[
-              { label: 'Quản lý Lớp học', path: '/admin/classes' },
-              { label: 'Quản lý Môn học', path: '/admin/subjects' },
-              { label: 'Quản lý Học sinh', path: '/admin/users' },
-              { label: 'Quản lý Giáo viên', path: '/admin/users' }
+              { label: 'Quản lý lớp học', path: '/admin/classes' },
+              { label: 'Quản lý môn học', path: '/admin/subjects' },
+              { label: 'Quản lý học sinh', path: '/admin/users' },
+              { label: 'Quản lý giáo viên', path: '/admin/users' },
             ].map((item) => (
-              <div 
-                key={item.label} 
+              <div
+                key={item.label}
                 onClick={() => navigate(item.path)}
                 className="rounded-3xl bg-slate-50 p-5 border border-slate-100 hover:border-[#b20112] hover:bg-red-50/10 transition-all cursor-pointer group"
               >
-                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 group-hover:text-[#b20112]">Chuyển trang</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 group-hover:text-[#b20112]">Mở trang</p>
                 <p className="mt-3 text-sm font-black text-slate-900 leading-tight group-hover:text-[#b20112]">{item.label}</p>
               </div>
             ))}
@@ -336,7 +746,181 @@ export default function AdminDashboardPage() {
         </div>
       </section>
 
-      <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
+      {isReportModalOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-8">
+          <div
+            className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
+            onClick={() => setIsReportModalOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-[1200px] max-h-[92vh] overflow-hidden rounded-[2rem] bg-white shadow-2xl border border-slate-100">
+            <div className="flex items-start justify-between gap-4 p-6 border-b border-slate-100 bg-slate-50/50">
+              <div>
+                <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Báo cáo</h2>
+              </div>
+              <button
+                onClick={() => setIsReportModalOpen(false)}
+                className="transition-all w-11 h-11 rounded-2xl bg-slate-100 text-slate-500 hover:bg-slate-200"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 bg-white border-b border-slate-100">
+              <div className="flex gap-2 pb-1 overflow-x-auto">
+                {REPORT_TABS.map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveReportTab(tab.key)}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${activeReportTab === tab.key ? 'bg-[#b20112] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+                <input
+                  value={draftFilters.search || ''}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
+                  placeholder="Tìm kiếm..."
+                  className="px-3 py-2 text-xs font-bold border rounded-lg border-slate-200"
+                />
+                <select
+                  value={draftFilters.teacher_id || ''}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, teacher_id: e.target.value ? Number(e.target.value) : undefined }))}
+                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
+                >
+                  <option value="">Tất cả giáo viên</option>
+                  {currentFilterOptions.teachers.map((option) => (
+                    <option key={option.id} value={option.id}>{option.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={draftFilters.subject_id || ''}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, subject_id: e.target.value ? Number(e.target.value) : undefined }))}
+                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
+                >
+                  <option value="">Tất cả môn học</option>
+                  {currentFilterOptions.subjects.map((option) => (
+                    <option key={option.id} value={option.id}>{option.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={draftFilters.topic_id || ''}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, topic_id: e.target.value ? Number(e.target.value) : undefined }))}
+                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
+                >
+                  <option value="">Tất cả chủ đề</option>
+                  {currentFilterOptions.topics.map((option) => (
+                    <option key={option.id} value={option.id}>{option.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={draftFilters.status || ''}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value || undefined }))}
+                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
+                >
+                  <option value="">Tất cả trạng thái</option>
+                  <option value="draft">Nháp</option>
+                  <option value="approved">Đã duyệt</option>
+                  <option value="inactive">Ngưng hoạt động</option>
+                  <option value="rejected">Từ chối</option>
+                  <option value="pending">Đang chờ</option>
+                  <option value="processing">Đang xử lý</option>
+                  <option value="completed">Hoàn tất</option>
+                  <option value="failed">Thất bại</option>
+                  <option value="cancelled">Đã hủy</option>
+                </select>
+                <select
+                  value={draftFilters.difficulty || ''}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, difficulty: e.target.value || undefined }))}
+                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
+                >
+                  <option value="">Tất cả độ khó</option>
+                  <option value="easy">Dễ</option>
+                  <option value="medium">Trung bình</option>
+                  <option value="hard">Khó</option>
+                </select>
+                <select
+                  value={draftFilters.source || ''}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, source: e.target.value || undefined }))}
+                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
+                >
+                  <option value="">Tất cả nguồn</option>
+                  <option value="ai">AI</option>
+                  <option value="manual">Thủ công</option>
+                </select>
+                <select
+                  value={draftFilters.sort_order || 'desc'}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, sort_order: e.target.value as 'asc' | 'desc' }))}
+                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
+                >
+                  <option value="desc">Giảm dần</option>
+                  <option value="asc">Tăng dần</option>
+                </select>
+                <input
+                  type="datetime-local"
+                  value={draftFilters.date_from || ''}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, date_from: e.target.value || undefined }))}
+                  className="px-3 py-2 text-xs font-bold border rounded-lg border-slate-200"
+                />
+                <input
+                  type="datetime-local"
+                  value={draftFilters.date_to || ''}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, date_to: e.target.value || undefined }))}
+                  className="px-3 py-2 text-xs font-bold border rounded-lg border-slate-200"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleApplyFilters}
+                  className="px-4 py-2 rounded-lg bg-[#b20112] text-white text-[10px] font-black uppercase tracking-widest"
+                >
+                  Áp dụng bộ lọc
+                </button>
+                <button
+                  onClick={handleResetFilters}
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest"
+                >
+                  Đặt lại
+                </button>
+                {activeReportTab !== 'overview' && (
+                  <>
+                    <button
+                      onClick={() => handleExport('csv')}
+                      disabled={isExporting}
+                      className="px-4 py-2 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest"
+                    >
+                      CSV
+                    </button>
+                    <button
+                      onClick={() => handleExport('xlsx')}
+                      disabled={isExporting}
+                      className="px-4 py-2 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest"
+                    >
+                      Excel
+                    </button>
+                    <button
+                      onClick={() => handleExport('pdf')}
+                      disabled={isExporting}
+                      className="px-4 py-2 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest"
+                    >
+                      PDF
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 max-h-[52vh] overflow-auto">
+              {renderReportTable()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
         <div className="absolute top-[12%] right-[-10%] w-[520px] h-[520px] bg-[#b20112]/5 rounded-full blur-[140px]" />
         <div className="absolute bottom-[8%] left-[-10%] w-[420px] h-[420px] bg-red-100/30 rounded-full blur-[120px]" />
       </div>

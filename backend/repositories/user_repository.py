@@ -222,6 +222,11 @@ def _build_list_users_query(
         if search_text:
             query = query.or_(f"username.ilike.%{search_text}%,full_name.ilike.%{search_text}%")
 
+    if user_ids is not None:
+        if not user_ids:
+            return query.in_("user_id", [-1])
+        query = query.in_("user_id", user_ids)
+
     return query
 
 
@@ -292,18 +297,14 @@ async def find_active_class_teacher_mapping(class_id: int, teacher_id: int) -> d
     return rows[0] if rows else None
 
 
-async def create_class_teacher_mapping(class_id: int, teacher_id: int, added_by: int) -> dict:
+async def create_class_teacher_mapping(class_id: int, teacher_id: int, added_by: int | None = None) -> dict:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("class_teachers")
-        .insert({"class_id": class_id, "teacher_id": teacher_id, "added_by": added_by})
+        .insert({"class_id": class_id, "teacher_id": teacher_id})
         .execute()
     )
     rows = response.data or []
     if not rows:
         raise ValueError("Unable to assign teacher to class")
     return rows[0]
-    if user_ids is not None:
-        if not user_ids:
-            return query.in_("user_id", [-1])
-        query = query.in_("user_id", user_ids)

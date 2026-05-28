@@ -18,6 +18,68 @@ export interface CreatedAdminUser {
   roles: string[];
 }
 
+interface BackendSuccessEnvelope<T> {
+  success: boolean;
+  message: string;
+  data: T;
+  meta?: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+  } | null;
+}
+
+export interface AdminUserRecord {
+  user_id: number;
+  username: string;
+  full_name: string;
+  roles: string[];
+  is_active: boolean;
+  must_change_password: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  deleted_at: string | null;
+}
+
+export interface AdminUserListParams {
+  page?: number;
+  limit?: number;
+  role_code?: 'student' | 'teacher' | 'all';
+  status?: 'active' | 'inactive' | 'all';
+  search?: string;
+}
+
+export interface AdminUserListResult {
+  items: AdminUserRecord[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+  } | null;
+}
+
+export interface AdminClassOption {
+  class_id: number;
+  class_name: string;
+}
+
+export interface CreateAdminUserRequest {
+  username: string;
+  full_name: string;
+  role_code: 'student' | 'teacher';
+  class_id?: number;
+}
+
+export interface UpdateAdminUserRequest {
+  username?: string;
+  full_name?: string;
+  is_active?: boolean;
+}
+
+const unwrapData = <T>(response: BackendSuccessEnvelope<T>): T => response.data;
+
 // Database Schema Models matching PostgreSQL ERD
 export interface DbClass {
   class_id: number;
@@ -216,7 +278,71 @@ export const getSubjects = async (): Promise<AdminSubject[]> => {
 export const createUserByAdmin = async (
   payload: CreateAdminUserPayload
 ): Promise<CreatedAdminUser> => {
-  return await api.post<CreatedAdminUser>('/user', payload);
+  const response = await api.post<BackendSuccessEnvelope<CreatedAdminUser>>('/user', payload);
+  return unwrapData(response);
+};
+
+export const listAdminUsers = async (
+  params: AdminUserListParams = {}
+): Promise<AdminUserListResult> => {
+  const response = await api.get<BackendSuccessEnvelope<AdminUserRecord[]>>('/user', {
+    params: {
+      page: String(params.page ?? 1),
+      limit: String(params.limit ?? 100),
+      role_code: params.role_code ?? 'all',
+      status: params.status ?? 'all',
+      ...(params.search ? { search: params.search } : {}),
+    },
+  });
+
+  return {
+    items: response.data,
+    meta: response.meta ?? null,
+  };
+};
+
+export const createAdminUser = async (
+  payload: CreateAdminUserRequest
+): Promise<AdminUserRecord> => {
+  const response = await api.post<BackendSuccessEnvelope<AdminUserRecord>>('/user', payload);
+  return unwrapData(response);
+};
+
+export const updateAdminUser = async (
+  userId: number,
+  payload: UpdateAdminUserRequest
+): Promise<AdminUserRecord> => {
+  const response = await api.put<BackendSuccessEnvelope<AdminUserRecord>>(`/user/${userId}`, payload);
+  return unwrapData(response);
+};
+
+export const updateAdminUserStatus = async (
+  userId: number,
+  isActive: boolean
+): Promise<AdminUserRecord> => {
+  const response = await api.patch<BackendSuccessEnvelope<AdminUserRecord>>(`/user/${userId}/status`, {
+    is_active: isActive,
+  });
+  return unwrapData(response);
+};
+
+export const softDeleteAdminUser = async (userId: number): Promise<void> => {
+  await api.delete<BackendSuccessEnvelope<{ user_id: number; deleted: boolean }>>(`/user/${userId}`);
+};
+
+export const listAdminClasses = async (): Promise<AdminClassOption[]> => {
+  try {
+    const response = await api.get<BackendSuccessEnvelope<AdminClassOption[]>>('/classes', {
+      params: {
+        page: '1',
+        limit: '100',
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.warn('Unable to load classes for admin user form. Fallback to empty list.', error);
+    return [];
+  }
 };
 
 /**

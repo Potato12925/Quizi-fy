@@ -1,498 +1,965 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { generateQuestions, saveGeneratedQuestions, getTopicsBySubject, getResources, type GeneratedQuestion, type DbTopic, type TeacherResource } from '@/api/teacherApi';
-import { useAuth } from '@/contexts/AuthContext';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import {
+  confirmTeacherAiRequestReview,
+  createTeacherAiRequest,
+  getTeacherAiRequestQuestions,
+  getTeacherAiRequests,
+  getTeacherAssignedSubjects,
+  getTeacherDocumentsBySubjectTopic,
+  getTeacherTopicsBySubjectId,
+  retryTeacherAiRequest,
+  type Difficulty,
+  type QuestionStatus,
+  type TeacherAiQuestionItem,
+  type TeacherAiRequestItem,
+  type TeacherAssignedSubject,
+  type TeacherDocumentTopicOption,
+  type TeacherTopicItem,
+} from '@/api/teacherAIGeneratorApi';
 
-export default function AiGeneratorPage() {
-  const { user } = useAuth();
+type ReviewableStatus = Extract<QuestionStatus, 'draft' | 'approved' | 'rejected'>;
+
+interface EditableOption {
+  option_id: number;
+  option_text: string;
+  is_correct: boolean;
+  order_num: number;
+  option_label: string;
+}
+
+interface EditableQuestion {
+  question_id: number;
+  content: string;
+  explanation: string;
+  difficulty: Difficulty;
+  status: QuestionStatus;
+  options: EditableOption[];
+}
+
+const pageCardClass = 'rounded-[2.5rem] border border-slate-100 bg-white shadow-sm';
+const inputClass = 'mt-2 w-full rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition-all focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/10 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400';
+const badgeClass = 'inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest';
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('vi-VN');
+};
+
+const formatFileSize = (bytes?: number | null) => {
+  if (!bytes || bytes <= 0) return '-';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+};
+
+const getDifficultyLabel = (difficulty: Difficulty) => {
+  if (difficulty === 'easy') return 'Dễ';
+  if (difficulty === 'hard') return 'Khó';
+  return 'Trung bình';
+};
+
+const getRequestStatusBadge = (status: TeacherAiRequestItem['status']) => {
+  if (status === 'completed') return { label: 'Hoàn tất', cls: 'bg-emerald-50 text-emerald-600' };
+  if (status === 'failed') return { label: 'Thất bại', cls: 'bg-red-50 text-[var(--color-primary)]' };
+  if (status === 'processing') return { label: 'Đang xử lý', cls: 'bg-amber-50 text-amber-600' };
+  if (status === 'pending') return { label: 'Đang chờ', cls: 'bg-slate-100 text-slate-600' };
+  return { label: 'Đã hủy', cls: 'bg-slate-200 text-slate-600' };
+};
+
+const getQuestionStatusBadge = (status: QuestionStatus) => {
+  if (status === 'approved') return { label: 'Đã duyệt', cls: 'bg-emerald-50 text-emerald-600' };
+  if (status === 'rejected') return { label: 'Từ chối', cls: 'bg-red-50 text-[var(--color-primary)]' };
+  if (status === 'inactive') return { label: 'Ẩn', cls: 'bg-slate-200 text-slate-600' };
+  return { label: 'Bản nháp', cls: 'bg-amber-50 text-amber-600' };
+};
+
+const mapQuestionToEditable = (question: TeacherAiQuestionItem, readOnly: boolean): EditableQuestion => {
+  const normalizedStatus = !readOnly && question.status === 'inactive' ? 'draft' : question.status;
+  const sortedOptions = [...question.options]
+    .sort((a, b) => (a.order_num ?? 0) - (b.order_num ?? 0))
+    .map((option, index) => ({
+      option_id: option.option_id,
+      option_text: option.option_text || '',
+      is_correct: !!option.is_correct,
+      order_num: index + 1,
+      option_label: String.fromCharCode(65 + index),
+    }));
+
+  return {
+    question_id: question.question_id,
+    content: question.content || '',
+    explanation: question.explanation || '',
+    difficulty: question.difficulty,
+    status: normalizedStatus,
+    options: sortedOptions,
+  };
+};
+
+export default function TeacherAIGeneratorPage() {
   const location = useLocation();
-  const passedDocId = location.state?.documentId;
+  const preselectedDocumentId = Number(location.state?.documentId || 0) || null;
 
-  const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({
-    subjectId: 1,
-    topicId: 1,
-    documentId: passedDocId ? String(passedDocId) : 'all',
-    rangeType: 'all', // 'all' | 'partial'
-    partialText: '',
-    level: 'Trung bình',
-    quantity: 20,
-    language: 'Tiếng Việt'
-  });
+  const [subjects, setSubjects] = useState<TeacherAssignedSubject[]>([]);
+  const [topics, setTopics] = useState<TeacherTopicItem[]>([]);
+  const [documents, setDocuments] = useState<TeacherDocumentTopicOption[]>([]);
+  const [requests, setRequests] = useState<TeacherAiRequestItem[]>([]);
 
-  const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
-  const [expandedSource, setExpandedSource] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [loadingTopics, setLoadingTopics] = useState(false);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [refreshingRequests, setRefreshingRequests] = useState(false);
+  const [submittingRequest, setSubmittingRequest] = useState(false);
+  const [retryingRequestId, setRetryingRequestId] = useState<number | null>(null);
+
+  const [subjectId, setSubjectId] = useState<number | null>(null);
+  const [topicId, setTopicId] = useState<number | null>(null);
+  const [documentId, setDocumentId] = useState<number | null>(null);
+  const [selectedRequestId, setSelectedRequestId] = useState<number | null>(null);
+  const [numQuestions, setNumQuestions] = useState(10);
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [contentScope, setContentScope] = useState('');
+  const [pendingAutoOpenRequestId, setPendingAutoOpenRequestId] = useState<number | null>(null);
+
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewRequest, setReviewRequest] = useState<TeacherAiRequestItem | null>(null);
+  const [reviewReadOnly, setReviewReadOnly] = useState(false);
+  const [reviewQuestions, setReviewQuestions] = useState<EditableQuestion[]>([]);
+  const [loadingReviewQuestions, setLoadingReviewQuestions] = useState(false);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewError, setReviewError] = useState('');
+
   const [error, setError] = useState('');
-  const navigate = useNavigate();
+  const [success, setSuccess] = useState('');
 
-  const [resources, setResources] = useState<TeacherResource[]>([]);
-  const [availableTopics, setAvailableTopics] = useState<DbTopic[]>([]);
+  const selectedDocumentTopic = useMemo(
+    () => documents.find((item) => item.document_id === documentId) || null,
+    [documentId, documents],
+  );
 
-  // Load resources and pre-select subject
-  useEffect(() => {
-    const loadInitialData = async () => {
-      if (!user?.user_id) return;
-      try {
-        const resList = await getResources(user.user_id);
-        setResources(resList);
-        
-        if (passedDocId) {
-          const doc = resList.find(r => String(r.id) === String(passedDocId));
-          if (doc && doc.subjectId) {
-            setFormData(prev => ({ ...prev, subjectId: doc.subjectId! }));
-          }
-        }
-      } catch (err) {
-        console.error('Lỗi tải tài liệu', err);
-      }
-    };
-    loadInitialData();
-  }, [passedDocId, user?.user_id]);
+  const activeRequests = useMemo(
+    () => requests.filter((item) => item.status === 'pending' || item.status === 'processing'),
+    [requests],
+  );
 
-  // Load topics dynamically based on subjectId
-  useEffect(() => {
-    const loadTopics = async () => {
-      try {
-        const topics = await getTopicsBySubject(formData.subjectId);
-        setAvailableTopics(topics);
-        if (topics.length > 0) {
-          setFormData(prev => ({ ...prev, topicId: topics[0].topic_id }));
-        }
-      } catch (err) {
-        console.error('Lỗi tải chương học', err);
-      }
-    };
-    loadTopics();
-  }, [formData.subjectId]);
+  const contextHasActiveRequest = useMemo(() => {
+    if (!selectedDocumentTopic) return false;
+    return requests.some(
+      (item) =>
+        item.document_topic_id === selectedDocumentTopic.document_topic_id
+        && (item.status === 'pending' || item.status === 'processing'),
+    );
+  }, [requests, selectedDocumentTopic]);
 
-  const nextStep = () => setStep(step + 1);
-  const prevStep = () => setStep(step - 1);
+  const hasInvalidQuestionCount = !Number.isInteger(numQuestions) || numQuestions < 1 || numQuestions > 100;
+  const isCreateRequestDisabled = !selectedDocumentTopic
+    || !subjectId
+    || !topicId
+    || hasInvalidQuestionCount
+    || submittingRequest
+    || contextHasActiveRequest;
 
-  const handleGenerate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.subjectId) {
-      setError('Vui lòng chọn môn học');
-      return;
-    }
-
-    if (!formData.topicId) {
-      setError('Vui lòng chọn chương học để lưu trữ câu hỏi');
-      return;
-    }
-
-    if (formData.rangeType === 'partial' && !formData.partialText.trim()) {
-      setError('Vui lòng nhập phần trích dẫn văn bản giới hạn nội dung');
-      return;
-    }
-
-    if (!formData.level) {
-      setError('Vui lòng chọn mức độ khó');
-      return;
-    }
-
-    if (!formData.quantity || formData.quantity < 1 || formData.quantity > 100) {
-      setError('Số lượng câu hỏi phải từ 1 đến 100');
-      return;
-    }
-
+  const clearMessages = () => {
     setError('');
-    setStep(3); // Show processing UI
-    setIsGenerating(true);
+    setSuccess('');
+  };
 
+  const closeReviewModal = () => {
+    setReviewModalOpen(false);
+    setReviewRequest(null);
+    setReviewQuestions([]);
+    setReviewError('');
+    setLoadingReviewQuestions(false);
+    setSubmittingReview(false);
+  };
+
+  const loadRequests = async (silent = false): Promise<TeacherAiRequestItem[]> => {
+    if (!silent) setRefreshingRequests(true);
     try {
-      const result = await generateQuestions(formData);
-      setQuestions(result);
-      setStep(4); // Move to review step
-    } catch {
-        setError('Lỗi tạo câu hỏi');
-      setStep(2); // Go back if error
+      const response = await getTeacherAiRequests(1, 100);
+      const items = response.items || [];
+      setRequests(items);
+      setSelectedRequestId((prev) => {
+        if (prev && items.some((item) => item.request_id === prev)) return prev;
+        return items[0]?.request_id ?? null;
+      });
+      return items;
     } finally {
-      setIsGenerating(false);
+      if (!silent) setRefreshingRequests(false);
     }
   };
 
-  const handleSave = async () => {
-    const approvedQuestions = questions.filter(q => q.isApproved);
-    if (approvedQuestions.length === 0) {
-      alert('Chưa có câu hỏi nào được duyệt!');
+  const loadTopicsBySubject = async (nextSubjectId: number) => {
+    setLoadingTopics(true);
+    try {
+      const rows = await getTeacherTopicsBySubjectId(nextSubjectId);
+      setTopics(rows);
+    } finally {
+      setLoadingTopics(false);
+    }
+  };
+
+  const loadDocumentsByTopic = async (nextSubjectId: number, nextTopicId: number) => {
+    setLoadingDocuments(true);
+    try {
+      const rows = await getTeacherDocumentsBySubjectTopic(nextSubjectId, nextTopicId);
+      setDocuments(rows);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
+  const openReviewModal = async (request: TeacherAiRequestItem) => {
+    clearMessages();
+    setReviewError('');
+    setReviewRequest(request);
+    setReviewReadOnly(Boolean(request.is_reviewed));
+    setReviewModalOpen(true);
+    setLoadingReviewQuestions(true);
+    try {
+      const rows = await getTeacherAiRequestQuestions(request.request_id);
+      setReviewQuestions(rows.map((item) => mapQuestionToEditable(item, Boolean(request.is_reviewed))));
+      setSelectedRequestId(request.request_id);
+    } catch (caught: unknown) {
+      setReviewError(caught instanceof Error ? caught.message : 'Không thể tải danh sách câu hỏi của job này.');
+    } finally {
+      setLoadingReviewQuestions(false);
+    }
+  };
+
+  const bootstrapPage = async () => {
+    setLoadingInitial(true);
+    clearMessages();
+    try {
+      const assignedSubjects = await getTeacherAssignedSubjects();
+      setSubjects(assignedSubjects);
+
+      await loadRequests(true);
+
+      if (!assignedSubjects.length) {
+        setSubjectId(null);
+        setTopicId(null);
+        setDocumentId(null);
+        return;
+      }
+
+      const initialSubjectId = assignedSubjects[0].subject_id;
+      setSubjectId(initialSubjectId);
+
+      const subjectTopics = await getTeacherTopicsBySubjectId(initialSubjectId);
+      setTopics(subjectTopics);
+
+      if (!subjectTopics.length) {
+        setTopicId(null);
+        setDocumentId(null);
+        return;
+      }
+
+      let resolvedTopicId: number | null = subjectTopics[0].topic_id;
+      let resolvedDocuments = await getTeacherDocumentsBySubjectTopic(initialSubjectId, resolvedTopicId);
+
+      if (preselectedDocumentId) {
+        const matchedRows = await Promise.all(
+          subjectTopics.map(async (topic) => ({
+            topic_id: topic.topic_id,
+            rows: await getTeacherDocumentsBySubjectTopic(initialSubjectId, topic.topic_id),
+          })),
+        );
+        const hit = matchedRows.find((item) => item.rows.some((row) => row.document_id === preselectedDocumentId));
+        if (hit) {
+          resolvedTopicId = hit.topic_id;
+          resolvedDocuments = hit.rows;
+        }
+      }
+
+      setTopicId(resolvedTopicId);
+      setDocuments(resolvedDocuments);
+      if (!resolvedDocuments.length) {
+        setDocumentId(null);
+        return;
+      }
+
+      const preferredDocument = resolvedDocuments.find((item) => item.document_id === preselectedDocumentId);
+      setDocumentId(preferredDocument?.document_id ?? resolvedDocuments[0].document_id);
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : 'Không thể tải dữ liệu AI Generator.');
+    } finally {
+      setLoadingInitial(false);
+      setRefreshingRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    bootstrapPage().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!activeRequests.length && !pendingAutoOpenRequestId) return;
+    const timer = window.setInterval(() => {
+      loadRequests(true)
+        .then((items) => {
+          if (!pendingAutoOpenRequestId) return;
+          const target = items.find((item) => item.request_id === pendingAutoOpenRequestId);
+          if (!target) return;
+          if (target.status === 'completed') {
+            setPendingAutoOpenRequestId(null);
+            if (!target.is_reviewed) {
+              openReviewModal(target).catch(() => undefined);
+            }
+          }
+          if (target.status === 'failed' || target.status === 'cancelled') {
+            setPendingAutoOpenRequestId(null);
+          }
+        })
+        .catch(() => undefined);
+    }, 7000);
+
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRequests.length, pendingAutoOpenRequestId]);
+
+  const handleSubjectChange = async (nextSubjectId: number) => {
+    clearMessages();
+    setSubjectId(nextSubjectId);
+    setTopicId(null);
+    setDocumentId(null);
+    setTopics([]);
+    setDocuments([]);
+    await loadTopicsBySubject(nextSubjectId);
+  };
+
+  const handleTopicChange = async (nextTopicId: number) => {
+    clearMessages();
+    setTopicId(nextTopicId);
+    setDocumentId(null);
+    setDocuments([]);
+    if (!subjectId) return;
+    await loadDocumentsByTopic(subjectId, nextTopicId);
+  };
+
+  const handleCreateRequest = async (event: React.FormEvent) => {
+    event.preventDefault();
+    clearMessages();
+
+    if (!selectedDocumentTopic || !subjectId || !topicId) {
+      setError('Vui lòng chọn đủ môn học, chủ đề và tài liệu trước khi tạo yêu cầu.');
       return;
     }
 
-    setIsSaving(true);
+    if (contextHasActiveRequest) {
+      setError('Ngữ cảnh này đang có job pending/processing. Vui lòng đợi xử lý xong.');
+      return;
+    }
+
+    setSubmittingRequest(true);
     try {
-      const questionsToSave = approvedQuestions.map(q => ({
-        ...q,
-        topicId: String(formData.topicId)
-      }));
-      await saveGeneratedQuestions({ questions: questionsToSave });
-      alert('Đã lưu câu hỏi thành công!');
-      navigate('/teacher/question-bank');
-    } catch {
-      alert('Lỗi lưu câu hỏi');
+      const created = await createTeacherAiRequest({
+        document_topic_id: selectedDocumentTopic.document_topic_id,
+        num_questions: numQuestions,
+        difficulty,
+        content_scope: contentScope.trim() || undefined,
+      });
+      await loadRequests(true);
+      setSelectedRequestId(created.request_id);
+      setPendingAutoOpenRequestId(created.request_id);
+      setSuccess('Đã tạo job AI thành công. Khi hoàn tất hệ thống sẽ mở popup rà soát câu hỏi.');
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : 'Không thể tạo yêu cầu AI.');
     } finally {
-      setIsSaving(false);
+      setSubmittingRequest(false);
     }
   };
 
-  const toggleApprove = (id: string) => {
-    setQuestions(questions.map(q => q.id === id ? { ...q, isApproved: !q.isApproved } : q));
-  };
-
-  const handleEdit = (idx: number, field: string, value: any, optIdx?: number) => {
-    const newQuestions = [...questions];
-    if (optIdx !== undefined) {
-      newQuestions[idx].options[optIdx] = value;
-    } else {
-      newQuestions[idx] = { ...newQuestions[idx], [field]: value };
+  const handleRetryRequest = async (requestId: number) => {
+    clearMessages();
+    setRetryingRequestId(requestId);
+    try {
+      await retryTeacherAiRequest(requestId);
+      await loadRequests(true);
+      setSelectedRequestId(requestId);
+      setPendingAutoOpenRequestId(requestId);
+      setSuccess(`Đã gửi retry cho job #${requestId}.`);
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : 'Không thể retry job AI.');
+    } finally {
+      setRetryingRequestId(null);
     }
-    newQuestions[idx].isApproved = false;
-    setQuestions(newQuestions);
   };
 
-  const approvedCount = questions.filter(q => q.isApproved).length;
-  const isAllApproved = approvedCount === questions.length && questions.length > 0;
+  const updateQuestionField = (questionId: number, patch: Partial<EditableQuestion>) => {
+    setReviewQuestions((prev) =>
+      prev.map((item) => (item.question_id === questionId ? { ...item, ...patch } : item)),
+    );
+  };
+
+  const updateOptionText = (questionId: number, optionIndex: number, nextText: string) => {
+    setReviewQuestions((prev) =>
+      prev.map((question) => {
+        if (question.question_id !== questionId) return question;
+        const nextOptions = question.options.map((option, index) =>
+          index === optionIndex ? { ...option, option_text: nextText } : option,
+        );
+        return { ...question, options: nextOptions };
+      }),
+    );
+  };
+
+  const setCorrectOption = (questionId: number, optionIndex: number) => {
+    setReviewQuestions((prev) =>
+      prev.map((question) => {
+        if (question.question_id !== questionId) return question;
+        const nextOptions = question.options.map((option, index) => ({ ...option, is_correct: index === optionIndex }));
+        return { ...question, options: nextOptions };
+      }),
+    );
+  };
+
+  const moveOption = (questionId: number, optionIndex: number, direction: -1 | 1) => {
+    setReviewQuestions((prev) =>
+      prev.map((question) => {
+        if (question.question_id !== questionId) return question;
+        const nextIndex = optionIndex + direction;
+        if (nextIndex < 0 || nextIndex >= question.options.length) return question;
+
+        const nextOptions = [...question.options];
+        const temp = nextOptions[optionIndex];
+        nextOptions[optionIndex] = nextOptions[nextIndex];
+        nextOptions[nextIndex] = temp;
+
+        const normalized = nextOptions.map((item, index) => ({
+          ...item,
+          order_num: index + 1,
+          option_label: String.fromCharCode(65 + index),
+        }));
+        return { ...question, options: normalized };
+      }),
+    );
+  };
+
+  const handleConfirmReview = async () => {
+    if (!reviewRequest || reviewReadOnly || submittingReview) return;
+    setReviewError('');
+
+    for (const question of reviewQuestions) {
+      if (!question.content.trim()) {
+        setReviewError(`Nội dung câu hỏi #${question.question_id} không được để trống.`);
+        return;
+      }
+      if (question.status === 'inactive') {
+        setReviewError(`Câu hỏi #${question.question_id} đang ở trạng thái không hợp lệ. Hãy chuyển sang nháp/duyệt/từ chối.`);
+        return;
+      }
+      if (question.options.length !== 4) {
+        setReviewError(`Câu hỏi #${question.question_id} phải có đúng 4 đáp án.`);
+        return;
+      }
+      const hasEmptyOption = question.options.some((option) => !option.option_text.trim());
+      if (hasEmptyOption) {
+        setReviewError(`Câu hỏi #${question.question_id} có đáp án trống.`);
+        return;
+      }
+      const correctCount = question.options.filter((option) => option.is_correct).length;
+      if (correctCount !== 1) {
+        setReviewError(`Câu hỏi #${question.question_id} phải có đúng 1 đáp án đúng.`);
+        return;
+      }
+    }
+
+    setSubmittingReview(true);
+    try {
+      const payload = {
+        questions: reviewQuestions.map((question) => ({
+          question_id: question.question_id,
+          content: question.content.trim(),
+          difficulty: question.difficulty,
+          status: question.status as ReviewableStatus,
+          explanation: question.explanation.trim() || null,
+          options: question.options.map((option, index) => ({
+            option_text: option.option_text.trim(),
+            order_num: index + 1,
+            is_correct: option.is_correct,
+          })),
+        })),
+      };
+
+      const result = await confirmTeacherAiRequestReview(reviewRequest.request_id, payload);
+      setSuccess('Đã xác nhận rà soát câu hỏi AI thành công.');
+      setRequests((prev) =>
+        prev.map((item) =>
+          item.request_id === reviewRequest.request_id
+            ? {
+              ...item,
+              ...result.request,
+            }
+            : item,
+        ),
+      );
+      closeReviewModal();
+    } catch (caught: unknown) {
+      const message = caught instanceof Error ? caught.message : 'Không thể xác nhận rà soát câu hỏi.';
+      setReviewError(message);
+      if (message.toLowerCase().includes('already reviewed')) {
+        setReviewReadOnly(true);
+        await loadRequests(true);
+      }
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  if (loadingInitial) {
+    return (
+      <div className="min-h-[55vh] flex items-center justify-center">
+        <div className="w-full max-w-2xl p-12 text-center bg-white border border-slate-100 shadow-sm rounded-[2.5rem]">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mb-5">
+            <span className="material-symbols-outlined animate-spin">sync</span>
+          </div>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Teacher AI Generator</p>
+          <p className="mt-3 text-sm font-bold text-slate-600">Đang tải dữ liệu, vui lòng chờ trong giây lát...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#f9f9f9] text-[#1a1c1c] font-sans pb-24">
-      {/* Import Material Symbols */}
-      <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-slate-50/80 backdrop-blur-xl shadow-[0px_12px_32px_rgba(147,0,10,0.06)] flex items-center justify-between px-6 py-4 w-full">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-full bg-[#d62828] flex items-center justify-center text-white font-bold text-sm overflow-hidden border-2 border-[#ffdad6]">
-            <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAvM0S4MsBPNPJhU-zrBiqAM7h3sCY7Fa-y70x1pukUjhC5aSrNhNC-YR8NsLqClRS55fpCPM5L3TudsHQanfoWWGiX4Y2cHBF0aLcGrstlkNxOBg-r2drMNS5YLDnUGGzvkkoeqYJQ6gfrLEtYsgttuK-zknztDK0FFGPmJ-vvR65tQLKWoDu9LUVJsvV7YuTryC_tvhngvA9WOpVZabdcnlrYM6TNb2k_NQHSUW34kNbzU7Mys2ZT17DKJnCK4-VVQSi7Uv80SVg" alt="Avatar" className="w-full h-full object-cover" />
-          </div>
-          <h1 className="text-xl font-bold tracking-tighter text-[#b20112]">Quizify AI</h1>
+    <div className="pb-20 space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
+      <section className="flex flex-col items-start justify-between gap-6 pt-2 xl:flex-row xl:items-end">
+        <div>
+          <p className="mb-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Teacher AI Generator</p>
+          <h1 className="text-5xl italic font-black leading-none tracking-tighter uppercase text-slate-900 lg:text-6xl">
+            Tạo bộ <br />
+            <span className="text-[var(--color-primary)]">câu hỏi bằng AI</span>
+          </h1>
+          <p className="mt-4 font-medium text-slate-500">Quản lý job AI và rà soát câu hỏi sinh tự động theo quy trình một lần xác nhận.</p>
         </div>
-        <div className="flex items-center gap-4">
-          <button className="material-symbols-outlined text-slate-600 p-2 hover:bg-red-50 rounded-full transition-all">notifications</button>
-          <Link to="/teacher/dashboard" className="material-symbols-outlined text-slate-500 p-2 hover:bg-red-50 rounded-full transition-all">close</Link>
-        </div>
-      </header>
+      </section>
 
-      <main className="max-w-5xl mx-auto px-6 py-12">
-        {/* Stepper */}
-        <nav className="flex justify-between items-center mb-16 relative">
-          <div className="absolute top-5 left-0 w-full h-[2px] bg-[#e2e2e2] -z-10"></div>
-          
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex flex-col items-center gap-2 bg-[#f9f9f9] px-4">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-                step === i ? 'bg-[#b20112] text-white shadow-lg ring-4 ring-white' : 
-                step > i ? 'bg-green-100 text-green-700 border-2 border-green-200' : 
-                'bg-[#e2e2e2] text-[#5c403d]'
-              }`}>
-                {step > i ? <span className="material-symbols-outlined text-sm">check</span> : <span className="text-sm font-bold">{i}</span>}
-              </div>
-              <span className={`text-[10px] font-bold uppercase tracking-wider ${step >= i ? 'text-[#b20112]' : 'text-slate-400'}`}>
-                {i === 1 ? '1. Tải tài liệu' : i === 2 ? '2. Cấu hình' : i === 3 ? '3. Xử lý' : '4. Duyệt & Lưu'}
-              </span>
+      {error && (
+        <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm font-bold text-[var(--color-primary)]">
+          {error}
+        </div>
+      )}
+      {success && (
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-700">
+          {success}
+        </div>
+      )}
+
+      <section className="grid grid-cols-1 gap-8 xl:grid-cols-12">
+        <div className="space-y-6 xl:col-span-7">
+          <div className={`${pageCardClass} p-8`}>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+              <h3 className="text-xl font-black tracking-tight uppercase text-slate-900">Danh sách job tạo câu hỏi AI</h3>
+              <button
+                type="button"
+                onClick={() => loadRequests(false).catch(() => undefined)}
+                disabled={refreshingRequests}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:border-slate-300 hover:text-slate-800 disabled:opacity-50"
+              >
+                {refreshingRequests ? 'Đang làm mới...' : 'Làm mới'}
+              </button>
             </div>
-          ))}
-        </nav>
 
-        {/* STEP 1: UPLOAD (RESTORED) */}
-        {step === 1 && (
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="md:col-span-12 space-y-8 bg-white p-10 md:p-12 rounded-[2.5rem] border border-slate-100 shadow-sm">
-              <div className="space-y-2">
-                <h2 className="text-4xl font-extrabold tracking-tight leading-tight">Chọn nguồn tài nguyên tài liệu</h2>
-                <p className="text-lg text-[#5c403d] leading-relaxed font-medium">Chọn phạm vi tài liệu giảng dạy để AI phân tích và thiết lập bộ câu hỏi.</p>
+            {!requests.length ? (
+              <div className="border-4 border-dashed border-slate-100 rounded-[2rem] p-10 text-center">
+                <p className="text-sm font-black uppercase tracking-widest text-slate-400">Chưa có job AI nào</p>
+                <p className="mt-2 text-xs font-bold text-slate-400">Tạo yêu cầu ở cột bên phải để bắt đầu.</p>
               </div>
+            ) : (
+              <div className="max-h-[820px] space-y-3 overflow-auto pr-1">
+                {requests.map((item) => {
+                  const badge = getRequestStatusBadge(item.status);
+                  const isSelected = selectedRequestId === item.request_id;
+                  return (
+                    <article
+                      key={item.request_id}
+                      className={`rounded-[1.75rem] border p-5 transition-all ${
+                        isSelected
+                          ? 'border-[var(--color-primary)] bg-red-50/20 shadow-md shadow-red-900/5'
+                          : 'border-slate-100 bg-slate-50/60 hover:border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <p className="text-sm font-black text-slate-900">Job #{item.request_id}</p>
+                        <span className={`${badgeClass} ${badge.cls}`}>{badge.label}</span>
+                      </div>
 
-              {error && <div className="p-4 bg-red-50 text-red-500 rounded-xl font-bold text-xs">{error}</div>}
+                      <p className="text-xs font-black text-slate-700">
+                        {item.document_topic.subject_name} → {item.document_topic.topic_name}
+                      </p>
+                      <p className="mt-1 text-xs font-bold text-slate-600">{item.document_topic.document_title}</p>
+                      <p className="mt-2 text-[11px] font-bold text-slate-500">
+                        {item.num_questions} câu | {getDifficultyLabel(item.difficulty)} | Sinh được: {item.generated_question_count}
+                      </p>
+                      <p className="mt-1 text-[11px] font-bold text-slate-400">Tạo lúc: {formatDateTime(item.created_at)}</p>
+                      {item.is_reviewed && <p className="mt-1 text-[11px] font-bold text-emerald-600">Đã rà soát</p>}
+                      {item.error_message && <p className="mt-2 text-xs font-black text-[var(--color-primary)]">Lỗi: {item.error_message}</p>}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
-                <div className="space-y-4">
-                  <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Chọn môn học</label>
-                  <select 
-                    value={formData.subjectId}
-                    onChange={e => setFormData({ ...formData, subjectId: parseInt(e.target.value) })}
-                    className="w-full bg-[#f3f3f3] border-none rounded-xl px-6 py-4 text-on-surface focus:ring-2 focus:ring-[#d62828] outline-none font-bold"
+                      <div className="flex flex-wrap gap-2 mt-4">
+                        {item.status === 'completed' ? (
+                          <button
+                            type="button"
+                            onClick={() => openReviewModal(item).catch(() => undefined)}
+                            className="rounded-xl bg-slate-900 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-black"
+                          >
+                            {item.is_reviewed ? 'Xem câu hỏi' : 'Rà soát câu hỏi'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedRequestId(item.request_id)}
+                            className="rounded-xl bg-slate-900 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-black"
+                          >
+                            Theo dõi
+                          </button>
+                        )}
+                        {item.status === 'failed' && (
+                          <button
+                            type="button"
+                            disabled={retryingRequestId === item.request_id}
+                            onClick={() => handleRetryRequest(item.request_id)}
+                            className="rounded-xl bg-[var(--color-primary)] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-[var(--color-primary-dark)] disabled:opacity-50"
+                          >
+                            {retryingRequestId === item.request_id ? 'Đang gửi retry...' : 'Retry job'}
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-6 xl:col-span-5">
+          <section className={`${pageCardClass} p-8 lg:p-10`}>
+            <h2 className="text-3xl italic font-black tracking-tight uppercase text-slate-900">Tạo yêu cầu AI</h2>
+
+            <form className="mt-8 space-y-6" onSubmit={handleCreateRequest}>
+              <div className="grid gap-5">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Môn học</label>
+                  <select
+                    className={inputClass}
+                    value={subjectId ?? ''}
+                    onChange={(event) => handleSubjectChange(Number(event.target.value))}
+                    disabled={!subjects.length}
                   >
-                    <option value={1}>Mạng máy tính</option>
-                    <option value={2}>Cấu trúc dữ liệu và Giải thuật</option>
-                    <option value={3}>Hệ điều hành</option>
+                    {!subjects.length && <option value="">Không có môn học được phân công</option>}
+                    {subjects.map((item) => (
+                      <option key={item.subject_id} value={item.subject_id}>
+                        {item.subject_name} ({item.subject_code})
+                      </option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="space-y-4">
-                  <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Phạm vi tài liệu nguồn</label>
-                  <div className="flex gap-4 p-1 bg-[#e8e8e8] rounded-xl">
-                    <button 
-                      type="button" 
-                      onClick={() => setFormData({ ...formData, documentId: 'all' })}
-                      className={`flex-1 py-3.5 text-xs font-bold rounded-lg transition-all ${formData.documentId === 'all' ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}
-                    >
-                      Tất cả tài liệu môn học
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        const firstDoc = resources.find(r => r.subjectId === formData.subjectId);
-                        setFormData({ ...formData, documentId: firstDoc ? String(firstDoc.id) : '' });
-                      }}
-                      className={`flex-1 py-3.5 text-xs font-bold rounded-lg transition-all ${formData.documentId !== 'all' ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}
-                    >
-                      Chọn tài liệu cụ thể
-                    </button>
-                  </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Chủ đề</label>
+                  <select
+                    className={inputClass}
+                    value={topicId ?? ''}
+                    onChange={(event) => handleTopicChange(Number(event.target.value))}
+                    disabled={!subjectId || loadingTopics || !topics.length}
+                  >
+                    {!subjectId && <option value="">Vui lòng chọn môn học trước</option>}
+                    {subjectId && !topics.length && <option value="">Không có chủ đề cho môn học này</option>}
+                    {topics.map((item) => (
+                      <option key={item.topic_id} value={item.topic_id}>
+                        {item.topic_name}
+                      </option>
+                    ))}
+                  </select>
+                  {loadingTopics && <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Đang tải chủ đề...</p>}
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Tài liệu</label>
+                  <select
+                    className={inputClass}
+                    value={documentId ?? ''}
+                    onChange={(event) => setDocumentId(Number(event.target.value))}
+                    disabled={!topicId || loadingDocuments || !documents.length}
+                  >
+                    {!topicId && <option value="">Vui lòng chọn chủ đề trước</option>}
+                    {topicId && !documents.length && <option value="">Không có tài liệu phù hợp</option>}
+                    {documents.map((item) => (
+                      <option key={item.document_topic_id} value={item.document_id}>
+                        {item.document_title}
+                      </option>
+                    ))}
+                  </select>
+                  {loadingDocuments && <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Đang tải tài liệu...</p>}
                 </div>
               </div>
 
-              {formData.documentId !== 'all' && (
-                <div className="space-y-6 pt-4 border-t border-slate-100 animate-in fade-in duration-300">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-4">
-                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Chọn tệp tài liệu cụ thể</label>
-                      <select 
-                        value={formData.documentId}
-                        onChange={e => setFormData({ ...formData, documentId: e.target.value })}
-                        className="w-full bg-[#f3f3f3] border-none rounded-xl px-6 py-4 text-on-surface focus:ring-2 focus:ring-[#d62828] outline-none font-bold"
-                      >
-                        <option value="">-- Chọn tệp tài liệu --</option>
-                        {resources.filter(r => r.subjectId === formData.subjectId).map(doc => (
-                          <option key={doc.id} value={doc.id}>{doc.name} ({doc.size})</option>
-                        ))}
-                      </select>
-                    </div>
+              <div className="grid gap-5 md:grid-cols-2">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Số lượng câu hỏi</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={numQuestions}
+                    onChange={(event) => setNumQuestions(Number(event.target.value))}
+                    className={inputClass}
+                  />
+                </div>
 
-                    <div className="space-y-4">
-                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Độ dài nội dung đọc</label>
-                      <div className="flex gap-4 p-1 bg-[#e8e8e8] rounded-xl">
-                        <button 
-                          type="button" 
-                          onClick={() => setFormData({ ...formData, rangeType: 'all' })}
-                          className={`flex-1 py-3.5 text-xs font-bold rounded-lg transition-all ${formData.rangeType === 'all' ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}
-                        >
-                          Toàn bộ tài liệu
-                        </button>
-                        <button 
-                          type="button" 
-                          onClick={() => setFormData({ ...formData, rangeType: 'partial' })}
-                          className={`flex-1 py-3.5 text-xs font-bold rounded-lg transition-all ${formData.rangeType === 'partial' ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}
-                        >
-                          Một phần tài liệu
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Độ khó</label>
+                  <select
+                    className={inputClass}
+                    value={difficulty}
+                    onChange={(event) => setDifficulty(event.target.value as Difficulty)}
+                  >
+                    <option value="easy">Dễ</option>
+                    <option value="medium">Trung bình</option>
+                    <option value="hard">Khó</option>
+                  </select>
+                </div>
+              </div>
 
-                  {formData.rangeType === 'partial' && (
-                    <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
-                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Nhập đoạn văn bản trích dẫn giới hạn nội dung tạo câu hỏi</label>
-                      <textarea 
-                        rows={6}
-                        placeholder="Hãy copy và dán một phần bài viết hoặc nội dung chính xác trong giáo trình tại đây để AI phân tích..."
-                        value={formData.partialText}
-                        onChange={e => setFormData({ ...formData, partialText: e.target.value })}
-                        className="w-full p-6 rounded-3xl bg-[#f3f3f3] border-none text-xs font-bold focus:ring-2 focus:ring-[#d62828] resize-none"
-                      />
-                    </div>
-                  )}
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Phạm vi nội dung (tùy chọn)</label>
+                <textarea
+                  rows={3}
+                  className={inputClass}
+                  value={contentScope}
+                  onChange={(event) => setContentScope(event.target.value)}
+                  placeholder="Ví dụ: Chỉ chương 2 và chương 3, tập trung phần định nghĩa và công thức quan trọng"
+                />
+              </div>
+
+              {selectedDocumentTopic && (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-5 py-4 text-xs font-bold text-slate-600">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Tài liệu đã chọn</p>
+                  <p className="mt-3 text-sm font-black text-slate-800">{selectedDocumentTopic.document_title}</p>
+                  <p className="mt-2">{selectedDocumentTopic.topic_name} | {selectedDocumentTopic.subject_name}</p>
+                  <p className="mt-1">
+                    Định dạng: {selectedDocumentTopic.file_type || '-'} | Dung lượng: {formatFileSize(selectedDocumentTopic.file_size)} | Trạng thái: {selectedDocumentTopic.status || '-'}
+                  </p>
+                  <p className="mt-1">Tạo lúc: {formatDateTime(selectedDocumentTopic.created_at)}</p>
                 </div>
               )}
 
-              <div className="flex justify-end pt-6 border-t border-slate-50">
-                <button 
-                  onClick={() => {
-                    if (formData.documentId !== 'all' && !formData.documentId) {
-                      setError('Vui lòng chọn tài liệu cụ thể');
-                      return;
-                    }
-                    setError('');
-                    nextStep();
-                  }}
-                  className="bg-[#b20112] text-white px-10 py-4 rounded-xl font-bold shadow-md hover:bg-black transition-all uppercase tracking-widest text-xs flex items-center gap-2"
+              {contextHasActiveRequest && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-amber-700">
+                  Ngữ cảnh này đang có job pending/processing. Vui lòng đợi xử lý xong.
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-slate-100">
+                <button
+                  type="submit"
+                  disabled={isCreateRequestDisabled}
+                  className="bg-[var(--color-primary)] text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 hover:bg-[var(--color-primary-dark)] transition-all disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Tiếp tục cấu hình <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                  {submittingRequest ? 'Đang gửi yêu cầu...' : 'Tạo job AI'}
                 </button>
               </div>
-            </div>
-          </div>
-        )}
+            </form>
+          </section>
+        </div>
+      </section>
 
-        {/* STEP 2: CONFIG (RESTORED) */}
-        {step === 2 && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 animate-in fade-in slide-in-from-right-4 duration-500">
-            <aside className="lg:col-span-3 space-y-8">
-               <div className="rounded-xl overflow-hidden shadow-sm border border-slate-100">
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUVZ5nWRiO3ygovmn4sN0uEJ_yAc1t3kCFcUBlTd2XL0JnvivaOlk6L5nMQSernACk-_KBu2bl28AEJ2niiRIC9yQHPgW1CAE9j6_0LpduRXoD4bEszGiiOR65AHJG5QEQqLKizNdbfFGYP7vk0sha7xhasdpI9qe5c-RqD-4HYuWxFnGxSAlueobJ7rBpZjkGJJEZ0bBXhZ1v-6v-S88d2JdYb-Mmo0daTdzDpdtCG2tVQG25LzBho5UmpczDLRybhlRA-xFJyXs" alt="Decoration" className="w-full h-40 object-cover" />
-                <div className="p-4 bg-[#f3f3f3]">
-                  <p className="text-[10px] text-[#5c403d] italic">"Giáo dục là vũ khí mạnh nhất để thay đổi thế giới."</p>
-                </div>
+      {reviewModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-8">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => !submittingReview && closeReviewModal()} />
+          <div className="relative z-10 w-full max-w-6xl max-h-[92vh] overflow-hidden rounded-[2.5rem] border border-slate-100 bg-white shadow-2xl">
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-8 py-6 bg-slate-50/70">
+              <div>
+                <h3 className="text-2xl font-black uppercase tracking-tight text-slate-900">Rà soát câu hỏi AI đã sinh</h3>
+                {reviewRequest && (
+                  <p className="mt-2 text-[11px] font-black uppercase tracking-widest text-slate-400">
+                    Job #{reviewRequest.request_id} {reviewReadOnly ? '| Chế độ chỉ xem' : '| Chế độ chỉnh sửa'}
+                  </p>
+                )}
               </div>
-            </aside>
-            <section className="lg:col-span-9">
-              <div className="bg-white rounded-[2rem] p-8 md:p-12 shadow-[0px_12px_32px_rgba(147,0,10,0.06)]">
-                {error && <div className="mb-6 p-4 bg-red-50 text-red-500 rounded-xl font-bold">{error}</div>}
-                <form className="space-y-10" onSubmit={handleGenerate}>
-                  <div className="space-y-4">
-                    <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Lưu bộ câu hỏi vào chương (Topic)</label>
-                    <select 
-                      value={formData.topicId}
-                      onChange={e => setFormData({ ...formData, topicId: parseInt(e.target.value) })}
-                      className="w-full bg-[#f3f3f3] border-none rounded-xl px-6 py-4 text-on-surface focus:ring-2 focus:ring-[#d62828] outline-none font-bold cursor-pointer"
-                    >
-                      {availableTopics.map(topic => (
-                        <option key={topic.topic_id} value={topic.topic_id}>{topic.topic_name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-6">
-                    <div className="flex justify-between items-center">
-                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Số lượng câu hỏi</label>
-                      <span className="bg-[#d62828] text-white px-3 py-1 rounded-lg text-xs font-bold">{formData.quantity} CÂU</span>
-                    </div>
-                    <input type="range" min="10" max="100" step="10" value={formData.quantity} onChange={(e) => setFormData({...formData, quantity: parseInt(e.target.value)})} className="w-full h-2 bg-[#e8e8e8] rounded-full appearance-none cursor-pointer accent-[#d62828]" />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                    <div className="space-y-4">
-                      <label className="block text-sm font-bold uppercase tracking-wider text-[#5c403d]">Mức độ khó</label>
-                      <div className="flex p-1 bg-[#e8e8e8] rounded-xl gap-1">
-                        {['Dễ', 'Trung bình', 'Khó'].map(l => (
-                          <button key={l} type="button" onClick={() => setFormData({...formData, level: l})} className={`flex-1 py-3 text-xs font-bold rounded-lg transition-all ${formData.level === l ? 'bg-white text-[#b20112] shadow-sm' : 'text-[#5c403d]'}`}>{l}</button>
+              <button
+                type="button"
+                onClick={closeReviewModal}
+                disabled={submittingReview}
+                className="h-11 w-11 rounded-2xl bg-slate-100 text-slate-500 transition-all hover:bg-slate-200 disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-[calc(92vh-150px)] overflow-auto px-8 py-6 space-y-4">
+              {reviewError && (
+                <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-[var(--color-primary)]">
+                  {reviewError}
+                </div>
+              )}
+
+              {loadingReviewQuestions ? (
+                <div className="border-4 border-dashed border-slate-100 rounded-[2rem] p-12 text-center">
+                  <p className="text-sm font-black uppercase tracking-widest text-slate-400">Đang tải câu hỏi...</p>
+                </div>
+              ) : reviewQuestions.length === 0 ? (
+                <div className="border-4 border-dashed border-slate-100 rounded-[2rem] p-12 text-center">
+                  <p className="text-sm font-black uppercase tracking-widest text-slate-400">Job này chưa có câu hỏi khả dụng.</p>
+                </div>
+              ) : (
+                reviewQuestions.map((question, questionIndex) => {
+                  const statusBadge = getQuestionStatusBadge(question.status);
+                  return (
+                    <article key={question.question_id} className="rounded-[1.75rem] border border-slate-100 bg-slate-50/60 p-5 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-black text-slate-700">#{question.question_id}</span>
+                          <span className={`${badgeClass} ${statusBadge.cls}`}>{statusBadge.label}</span>
+                        </div>
+                        <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                          Câu {questionIndex + 1}
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Nội dung câu hỏi</label>
+                        <textarea
+                          rows={3}
+                          disabled={reviewReadOnly}
+                          value={question.content}
+                          onChange={(event) => updateQuestionField(question.question_id, { content: event.target.value })}
+                          className={inputClass}
+                        />
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Độ khó</label>
+                          <select
+                            disabled={reviewReadOnly}
+                            value={question.difficulty}
+                            onChange={(event) =>
+                              updateQuestionField(question.question_id, {
+                                difficulty: event.target.value as Difficulty,
+                              })
+                            }
+                            className={inputClass}
+                          >
+                            <option value="easy">Dễ</option>
+                            <option value="medium">Trung bình</option>
+                            <option value="hard">Khó</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Trạng thái</label>
+                          <select
+                            disabled={reviewReadOnly}
+                            value={question.status === 'inactive' ? 'draft' : question.status}
+                            onChange={(event) =>
+                              updateQuestionField(question.question_id, {
+                                status: event.target.value as QuestionStatus,
+                              })
+                            }
+                            className={inputClass}
+                          >
+                            <option value="draft">Nháp (ẩn khỏi ngân hàng)</option>
+                            <option value="approved">Duyệt</option>
+                            <option value="rejected">Từ chối</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Đáp án đúng</label>
+                          <p className="mt-4 text-sm font-black text-slate-700">
+                            {question.options.find((option) => option.is_correct)?.option_label || '-'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Giải thích (tùy chọn)</label>
+                        <textarea
+                          rows={2}
+                          disabled={reviewReadOnly}
+                          value={question.explanation}
+                          onChange={(event) => updateQuestionField(question.question_id, { explanation: event.target.value })}
+                          className={inputClass}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Đáp án</label>
+                        {question.options.map((option, optionIndex) => (
+                          <div key={`${question.question_id}-${option.order_num}`} className="rounded-xl border border-slate-200 bg-white p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={reviewReadOnly}
+                                onClick={() => setCorrectOption(question.question_id, optionIndex)}
+                                className={`h-7 w-7 rounded-full border text-[11px] font-black ${
+                                  option.is_correct
+                                    ? 'border-emerald-500 bg-emerald-500 text-white'
+                                    : 'border-slate-300 bg-white text-slate-400'
+                                } disabled:opacity-50`}
+                              >
+                                {option.option_label}
+                              </button>
+                              <input
+                                disabled={reviewReadOnly}
+                                value={option.option_text}
+                                onChange={(event) => updateOptionText(question.question_id, optionIndex, event.target.value)}
+                                className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-[var(--color-primary)]"
+                              />
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={reviewReadOnly || optionIndex === 0}
+                                  onClick={() => moveOption(question.question_id, optionIndex, -1)}
+                                  className="h-8 w-8 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40"
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={reviewReadOnly || optionIndex === question.options.length - 1}
+                                  onClick={() => moveOption(question.question_id, optionIndex, 1)}
+                                  className="h-8 w-8 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40"
+                                >
+                                  ↓
+                                </button>
+                              </div>
+                            </div>
+                          </div>
                         ))}
                       </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col md:flex-row gap-4 pt-8">
-                    <button type="button" onClick={prevStep} className="flex-1 py-4 text-sm font-bold border-2 border-[#e5bdb9] text-[#b20112] rounded-xl hover:bg-red-50 transition-all flex items-center justify-center gap-2">
-                      Quay lại
-                    </button>
-                    <button type="submit" disabled={isGenerating} className="flex-[2] py-4 text-sm font-bold bg-gradient-to-r from-[#d62828] to-[#ffb3b3] text-white rounded-xl shadow-lg uppercase tracking-widest flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed">
-                      {isGenerating ? 'Đang tạo...' : <>Bắt đầu tạo <span className="material-symbols-outlined text-base" style={{fontVariationSettings: "'FILL' 1"}}>bolt</span></>}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </section>
-          </div>
-        )}
-
-        {/* STEP 3: PROCESSING (RESTORED) */}
-        {step === 3 && (
-          <div className="flex-1 flex flex-col items-center justify-center py-12 animate-in zoom-in-95 duration-700">
-            <div className="relative w-80 h-80 flex items-center justify-center mb-12" onClick={nextStep}>
-              <div className="absolute inset-0 border-4 border-[#d62828]/20 rounded-full"></div>
-              <div className="absolute inset-0 border-4 border-[#b20112] border-t-transparent rounded-full animate-spin duration-[3s]"></div>
-              <div className="w-64 h-64 rounded-full bg-white shadow-xl flex flex-col items-center justify-center relative overflow-hidden backdrop-blur-md">
-                <div className="absolute inset-0 bg-[#b20112]/5 animate-pulse"></div>
-                <span className="material-symbols-outlined text-[#b20112] text-6xl mb-4" style={{fontVariationSettings: "'FILL' 1"}}>psychology</span>
-                <div className="text-4xl font-extrabold tracking-tighter">94%</div>
-                <div className="text-xs font-medium text-[#5c403d] uppercase tracking-widest mt-1">Đang xử lý</div>
-              </div>
-            </div>
-            <h2 className="text-2xl font-bold tracking-tight mb-2">Đang phân tích tài liệu...</h2>
-          </div>
-        )}
-
-        {/* STEP 4: ENHANCED REVIEW & APPROVAL (ONLY THIS STEP UPDATED) */}
-        {step === 4 && (
-          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700 pb-32">
-            <div className="mb-8 flex justify-between items-end">
-              <div>
-                <h2 className="text-3xl font-extrabold tracking-tight mb-2">Kết quả tạo câu hỏi</h2>
-                <p className="text-[#5c403d] max-w-2xl font-medium">Bạn cần kiểm tra và xác nhận từng câu hỏi trước khi lưu vào ngân hàng.</p>
-              </div>
-              <div className="bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100 text-right">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tiến độ duyệt</p>
-                 <p className="text-xl font-black text-[#b20112] leading-none">{approvedCount}/{questions.length}</p>
-              </div>
+                    </article>
+                  );
+                })
+              )}
             </div>
 
-            <div className="space-y-6">
-              {questions.map((q, idx) => (
-                <article key={q.id} className={`bg-white rounded-[2rem] p-8 shadow-[0px_4px_20px_rgba(0,0,0,0.03)] border-l-[6px] transition-all duration-500 ${q.isApproved ? 'border-emerald-500 bg-emerald-50/10' : 'border-[#b20112]'}`}>
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="flex items-center gap-3">
-                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black transition-colors ${q.isApproved ? 'bg-emerald-500 text-white' : 'bg-[#b20112] text-white'}`}>
-                         {q.isApproved ? '✓' : idx + 1}
-                      </span>
-                      <span className="px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-bold rounded-full uppercase tracking-widest">Trắc nghiệm</span>
-                    </div>
-                    <div className="flex gap-2">
-                       <button onClick={() => setExpandedSource(expandedSource === q.id ? null : q.id)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 border transition-all ${expandedSource === q.id ? 'bg-[#b20112] text-white border-[#b20112]' : 'bg-white text-slate-400 border-slate-100 hover:text-slate-600'}`}>
-                          <span className="material-symbols-outlined text-sm">menu_book</span> {expandedSource === q.id ? 'Đóng nguồn' : 'Xem nguồn'}
-                       </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <textarea 
-                      className="w-full bg-transparent border-none p-0 font-bold text-slate-800 text-lg outline-none focus:ring-0 resize-none leading-relaxed"
-                      rows={2}
-                      value={q.text}
-                      onChange={(e) => handleEdit(idx, 'text', e.target.value)}
-                    />
-                    
-                    <div className="grid md:grid-cols-2 gap-4">
-                      {q.options.map((opt, optIdx) => (
-                        <div key={optIdx} className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 cursor-pointer ${q.correctAnswer === optIdx ? 'border-[#b20112] bg-red-50/30' : 'border-slate-50 bg-slate-50'}`} onClick={() => handleEdit(idx, 'correctAnswer', optIdx)}>
-                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${q.correctAnswer === optIdx ? 'border-[#b20112] bg-[#b20112]' : 'border-slate-300'}`}>
-                              {q.correctAnswer === optIdx && <span className="text-white text-[10px]">✓</span>}
-                           </div>
-                           <input 
-                             type="text" 
-                             className="flex-1 bg-transparent border-none font-medium text-sm text-slate-700 outline-none"
-                             value={opt}
-                             onChange={(e) => handleEdit(idx, 'options', e.target.value, optIdx)}
-                             onClick={(e) => e.stopPropagation()}
-                           />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {expandedSource === q.id && (
-                     <div className="mt-6 p-6 bg-slate-900 rounded-2xl animate-in slide-in-from-top-2 duration-300">
-                        <p className="text-[10px] font-black text-[#b20112] uppercase tracking-widest mb-2">Trích dẫn tài liệu</p>
-                        <p className="text-white/80 text-xs italic font-medium leading-relaxed">"{q.sourceSnippet}"</p>
-                     </div>
-                  )}
-
-                  <div className="mt-8 pt-6 border-t border-slate-50 flex justify-end items-center">
-                    <button 
-                      onClick={() => toggleApprove(q.id)}
-                      className={`px-10 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${q.isApproved ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-900 text-white hover:bg-[#b20112]'}`}
-                    >
-                      {q.isApproved ? 'Đã duyệt ✓' : 'Xác nhận duyệt'}
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            {/* Fixed Bottom Action Bar */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-md px-6 py-8 border-t border-slate-100 z-50 shadow-2xl">
-              <div className="max-w-5xl mx-auto flex items-center justify-between gap-6">
-                <div className="hidden md:block">
-                  <p className="font-bold text-slate-900 uppercase text-xs tracking-tight">Trạng thái: {approvedCount}/{questions.length} câu đã duyệt</p>
-                  <div className="w-48 h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
-                     <div className="h-full bg-[#b20112] transition-all duration-1000" style={{ width: `${(approvedCount/questions.length)*100}%` }}></div>
-                  </div>
-                </div>
-                <button 
-                  disabled={!isAllApproved || isSaving}
-                  onClick={handleSave} 
-                  className={`flex-1 md:flex-none md:min-w-[400px] h-14 rounded-xl font-bold text-lg shadow-lg transition-all flex items-center justify-center gap-3 active:scale-95 ${
-                    isAllApproved && !isSaving
-                    ? 'bg-gradient-to-r from-[#d62828] to-[#ffb3b3] text-white hover:brightness-110' 
-                    : 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none border border-slate-200'
-                  }`}
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 px-8 py-5 bg-white">
+              <button
+                type="button"
+                onClick={closeReviewModal}
+                disabled={submittingReview}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600"
+              >
+                Đóng
+              </button>
+              {!reviewReadOnly && (
+                <button
+                  type="button"
+                  onClick={handleConfirmReview}
+                  disabled={submittingReview || loadingReviewQuestions || reviewQuestions.length === 0}
+                  className="rounded-xl bg-[var(--color-primary)] px-5 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-[var(--color-primary-dark)] disabled:opacity-50"
                 >
-                  <span className="material-symbols-outlined">database</span> 
-                  {isSaving ? 'Đang lưu...' : isAllApproved ? 'Lưu vào ngân hàng câu hỏi' : 'Vui lòng duyệt hết các câu'}
+                  {submittingReview ? 'Đang xác nhận...' : 'Xác nhận'}
                 </button>
-              </div>
+              )}
             </div>
           </div>
-        )}
-      </main>
+        </div>
+      )}
     </div>
   );
 }

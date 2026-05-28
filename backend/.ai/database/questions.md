@@ -6,20 +6,20 @@ Documentation for `questions` table.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `question_id` | `bigint [pk, increment]` |
-| `teacher_id` | `bigint [not null]` |
-| `document_topic_id` | `bigint [not null]` |
-| `ai_request_id` | `bigint` |
-| `content` | `text [not null]` |
-| `difficulty` | `difficulty_level [not null]` |
-| `source` | `question_source [not null]` |
-| `status` | `question_status [default: 'draft']` |
-| `explanation` | `text` |
-| `created_at` | `timestamp` |
-| `updated_at` | `timestamp` |
-| `deleted_at` | `timestamp` |
+| Column              | Definition                           |
+| ------------------- | ------------------------------------ |
+| `question_id`       | `bigint [pk, increment]`             |
+| `teacher_id`        | `bigint [not null]`                  |
+| `document_topic_id` | `bigint`                             |
+| `ai_request_id`     | `bigint`                             |
+| `content`           | `text [not null]`                    |
+| `difficulty`        | `difficulty_level [not null]`        |
+| `source`            | `question_source [not null]`         |
+| `status`            | `question_status [default: 'draft']` |
+| `explanation`       | `text`                               |
+| `created_at`        | `timestamp`                          |
+| `updated_at`        | `timestamp`                          |
+| `deleted_at`        | `timestamp`                          |
 
 ## Indexes
 
@@ -49,4 +49,3 @@ select * from questions limit 20;
 - Always select only required columns.
 - Avoid `select *` in production flows.
 - Use pagination for large datasets.
-

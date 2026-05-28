@@ -1,18 +1,24 @@
-import { api } from './client';
+﻿import { api } from './client';
 
 // Database Schema Models
 export interface DbDocument {
   document_id: number;
   teacher_id: number;
-  subject_id: number;
+  subject_id: number | null;
   topic_id?: number;
   title: string;
   description?: string;
   file_url: string;
+  file_hash?: string;
   file_type: string;
   file_size: number;
   status: string;
   created_at: string;
+  updated_at?: string;
+  subject?: { subject_id: number | null; subject_name: string };
+  topics?: { topic_id: number; topic_name: string }[];
+  ai_request_count?: number;
+  question_count?: number;
 }
 
 export interface DbSubject {
@@ -128,12 +134,13 @@ export const mapDbDocumentToTeacherResource = (db: DbDocument, usage: number = 0
   name: db.title,
   size: `${(db.file_size / (1024 * 1024)).toFixed(1)} MB`,
   date: new Date(db.created_at || Date.now()).toLocaleDateString('vi-VN'),
-  usage: usage,
-  subject: subjectName,
-  topic: topicName || 'Tổng quan',
-  subjectId: db.subject_id,
-  topicId: db.topic_id,
-  topicIds: db.topic_id ? [db.topic_id] : [],
+  usage: db.question_count ?? usage,
+  subject: db.subject?.subject_name || subjectName,
+  topic: db.topics?.[0]?.topic_name || topicName || 'Tong quan',
+  description: db.description,
+  status: db.status,
+  subjectId: db.subject_id ?? undefined,
+  topicIds: db.topics?.map((topic) => topic.topic_id) || [],
 });
 
 export interface BankSubject {
@@ -162,15 +169,32 @@ export interface TeacherResource {
   topicIds?: number[];
 }
 
-export interface WeakTopic {
-  name: string;
-  errorRate: number;
-  count: number;
+export interface TeacherStatsSummary {
+  average_score: number;
+  completion_rate_pct: number;
+  total_study_hours: number;
+  total_answered_questions: number;
+}
+
+export interface TeacherStatsWeakTopic {
+  topic_id: number;
+  topic_name: string;
+  error_rate_pct: number;
+  total_answers: number;
+  wrong_answers: number;
+}
+
+export interface TeacherStatsStudentDistribution {
+  active_rate_pct: number;
+  top_student_count: number;
+  needs_attention_count: number;
+  total_students: number;
 }
 
 export interface TeacherStatsData {
-  classStats: TeacherStatItem[];
-  weakTopics: WeakTopic[];
+  summary: TeacherStatsSummary;
+  weak_topics: TeacherStatsWeakTopic[];
+  student_distribution: TeacherStatsStudentDistribution;
 }
 
 export interface TeacherProfile {
@@ -204,21 +228,21 @@ export const getTeacherDashboardStats = async (): Promise<TeacherDashboardStats>
       setTimeout(() => {
         resolve({
           stats: [
-            { label: 'Tổng số câu hỏi', value: '1,248', growth: '+12% tháng này', icon: 'quiz', color: 'text-[#b20112]', bg: 'bg-red-50' },
-            { label: 'Tài liệu đã tải', value: '56', sub: 'Dung lượng: 245MB', icon: 'description', color: 'text-amber-600', bg: 'bg-amber-50' },
-            { label: 'Lớp đang dạy', value: '04', sub: '320 Sinh viên', icon: 'groups', color: 'text-blue-600', bg: 'bg-blue-50' },
-            { label: 'Lượt làm bài của SV', value: '8,902', growth: '+8% tuần này', icon: 'task_alt', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+            { label: 'Tá»•ng sá»‘ cÃ¢u há»i', value: '1,248', growth: '+12% thÃ¡ng nÃ y', icon: 'quiz', color: 'text-[#b20112]', bg: 'bg-red-50' },
+            { label: 'TÃ i liá»‡u Ä‘Ã£ táº£i', value: '56', sub: 'Dung lÆ°á»£ng: 245MB', icon: 'description', color: 'text-amber-600', bg: 'bg-amber-50' },
+            { label: 'Lá»›p Ä‘ang dáº¡y', value: '04', sub: '320 Sinh viÃªn', icon: 'groups', color: 'text-blue-600', bg: 'bg-blue-50' },
+            { label: 'LÆ°á»£t lÃ m bÃ i cá»§a SV', value: '8,902', growth: '+8% tuáº§n nÃ y', icon: 'task_alt', color: 'text-emerald-600', bg: 'bg-emerald-50' },
           ],
           recentQuizzes: [
-            { title: 'Cơ sở dữ liệu - Chương 3', info: '20 câu hỏi • 2 phút trước', icon: 'auto_awesome', bg: 'bg-[#b20112]' },
-            { title: 'Mạng máy tính - Lab 02', info: '15 câu hỏi • 1 giờ trước', icon: 'lan', bg: 'bg-slate-400' },
-            { title: 'An toàn thông tin - Final', info: '50 câu hỏi • 3 giờ trước', icon: 'security', bg: 'bg-[#d62828]' },
+            { title: 'CÆ¡ sá»Ÿ dá»¯ liá»‡u - ChÆ°Æ¡ng 3', info: '20 cÃ¢u há»i â€¢ 2 phÃºt trÆ°á»›c', icon: 'auto_awesome', bg: 'bg-[#b20112]' },
+            { title: 'Máº¡ng mÃ¡y tÃ­nh - Lab 02', info: '15 cÃ¢u há»i â€¢ 1 giá» trÆ°á»›c', icon: 'lan', bg: 'bg-slate-400' },
+            { title: 'An toÃ n thÃ´ng tin - Final', info: '50 cÃ¢u há»i â€¢ 3 giá» trÆ°á»›c', icon: 'security', bg: 'bg-[#d62828]' },
           ],
           materials: [
-            { name: 'Giao-trinh-CSDL.pdf', date: '12/10/2023', status: 'Đã xử lý AI', statusColor: 'text-emerald-600 bg-emerald-50' },
-            { name: 'De-cuong-MMT.docx', date: '14/10/2023', status: 'Đang chờ', statusColor: 'text-amber-600 bg-amber-50' },
-            { name: 'Bai-tap-lon-ATTT.pdf', date: '15/10/2023', status: 'Đã xử lý AI', statusColor: 'text-emerald-600 bg-emerald-50' },
-            { name: 'Tai-lieu-Java-Nang-cao.pdf', date: '15/10/2023', status: 'Đang chờ', statusColor: 'text-amber-600 bg-amber-50' },
+            { name: 'Giao-trinh-CSDL.pdf', date: '12/10/2023', status: 'ÄÃ£ xá»­ lÃ½ AI', statusColor: 'text-emerald-600 bg-emerald-50' },
+            { name: 'De-cuong-MMT.docx', date: '14/10/2023', status: 'Äang chá»', statusColor: 'text-amber-600 bg-amber-50' },
+            { name: 'Bai-tap-lon-ATTT.pdf', date: '15/10/2023', status: 'ÄÃ£ xá»­ lÃ½ AI', statusColor: 'text-emerald-600 bg-emerald-50' },
+            { name: 'Tai-lieu-Java-Nang-cao.pdf', date: '15/10/2023', status: 'Äang chá»', statusColor: 'text-amber-600 bg-amber-50' },
           ]
         });
       }, 500);
@@ -244,7 +268,7 @@ export const generateQuestions = async (payload: any): Promise<GeneratedQuestion
             teacher_id: 1,
             subject_id: 1,
             topic_id: 1,
-            content: 'Trong một cây nhị phân đầy đủ, nếu cây có độ cao là h, thì số lượng nút tối đa là bao nhiêu?',
+            content: 'Trong má»™t cÃ¢y nhá»‹ phÃ¢n Ä‘áº§y Ä‘á»§, náº¿u cÃ¢y cÃ³ Ä‘á»™ cao lÃ  h, thÃ¬ sá»‘ lÆ°á»£ng nÃºt tá»‘i Ä‘a lÃ  bao nhiÃªu?',
             difficulty: 'medium',
             source: 'ai',
             status: 'draft',
@@ -261,7 +285,7 @@ export const generateQuestions = async (payload: any): Promise<GeneratedQuestion
             teacher_id: 1,
             subject_id: 1,
             topic_id: 1,
-            content: 'Độ phức tạp thời gian trung bình của thao tác tìm kiếm trên Cây nhị phân tìm kiếm (BST) là bao nhiêu?',
+            content: 'Äá»™ phá»©c táº¡p thá»i gian trung bÃ¬nh cá»§a thao tÃ¡c tÃ¬m kiáº¿m trÃªn CÃ¢y nhá»‹ phÃ¢n tÃ¬m kiáº¿m (BST) lÃ  bao nhiÃªu?',
             difficulty: 'medium',
             source: 'ai',
             status: 'draft',
@@ -285,23 +309,23 @@ export const generateQuestions = async (payload: any): Promise<GeneratedQuestion
  */
 // In-memory mock storage for teacher questions
 let mockQuestionsList: DbQuestion[] = [
-  // Mạng máy tính (subject_id: 1)
+  // Máº¡ng mÃ¡y tÃ­nh (subject_id: 1)
   {
     question_id: 1,
     teacher_id: 1,
     subject_id: 1,
     topic_id: 1,
-    content: 'Giao thức HTTP hoạt động ở tầng nào của mô hình OSI?',
+    content: 'Giao thá»©c HTTP hoáº¡t Ä‘á»™ng á»Ÿ táº§ng nÃ o cá»§a mÃ´ hÃ¬nh OSI?',
     difficulty: 'easy',
     source: 'manual',
     status: 'approved',
-    explanation: 'HTTP là giao thức tầng ứng dụng, cung cấp giao diện cho người dùng.',
+    explanation: 'HTTP lÃ  giao thá»©c táº§ng á»©ng dá»¥ng, cung cáº¥p giao diá»‡n cho ngÆ°á»i dÃ¹ng.',
     created_at: new Date().toISOString(),
     options: [
-      { option_id: 1, question_id: 1, option_label: 'A', option_text: 'Ứng dụng (Application)', is_correct: true, order_num: 0 },
-      { option_id: 2, question_id: 1, option_label: 'B', option_text: 'Giao thức (Transport)', is_correct: false, order_num: 1 },
-      { option_id: 3, question_id: 1, option_label: 'C', option_text: 'Mạng (Network)', is_correct: false, order_num: 2 },
-      { option_id: 4, question_id: 1, option_label: 'D', option_text: 'Vật lý (Physical)', is_correct: false, order_num: 3 }
+      { option_id: 1, question_id: 1, option_label: 'A', option_text: 'á»¨ng dá»¥ng (Application)', is_correct: true, order_num: 0 },
+      { option_id: 2, question_id: 1, option_label: 'B', option_text: 'Giao thá»©c (Transport)', is_correct: false, order_num: 1 },
+      { option_id: 3, question_id: 1, option_label: 'C', option_text: 'Máº¡ng (Network)', is_correct: false, order_num: 2 },
+      { option_id: 4, question_id: 1, option_label: 'D', option_text: 'Váº­t lÃ½ (Physical)', is_correct: false, order_num: 3 }
     ]
   },
   {
@@ -309,11 +333,11 @@ let mockQuestionsList: DbQuestion[] = [
     teacher_id: 1,
     subject_id: 1,
     topic_id: 2,
-    content: 'Cổng mặc định (default port) được sử dụng cho giao thức HTTPS bảo mật là cổng nào?',
+    content: 'Cá»•ng máº·c Ä‘á»‹nh (default port) Ä‘Æ°á»£c sá»­ dá»¥ng cho giao thá»©c HTTPS báº£o máº­t lÃ  cá»•ng nÃ o?',
     difficulty: 'easy',
     source: 'manual',
     status: 'approved',
-    explanation: 'HTTPS sử dụng cổng 443 làm cổng mặc định cho việc mã hóa SSL/TLS.',
+    explanation: 'HTTPS sá»­ dá»¥ng cá»•ng 443 lÃ m cá»•ng máº·c Ä‘á»‹nh cho viá»‡c mÃ£ hÃ³a SSL/TLS.',
     created_at: new Date().toISOString(),
     options: [
       { option_id: 5, question_id: 2, option_label: 'A', option_text: '80', is_correct: false, order_num: 0 },
@@ -327,17 +351,17 @@ let mockQuestionsList: DbQuestion[] = [
     teacher_id: 1,
     subject_id: 1,
     topic_id: 3,
-    content: 'Trong giao thức TCP, cơ chế "Bắt tay 3 bước" (3-way handshake) được dùng để làm gì?',
+    content: 'Trong giao thá»©c TCP, cÆ¡ cháº¿ "Báº¯t tay 3 bÆ°á»›c" (3-way handshake) Ä‘Æ°á»£c dÃ¹ng Ä‘á»ƒ lÃ m gÃ¬?',
     difficulty: 'medium',
     source: 'manual',
     status: 'approved',
-    explanation: 'Bắt tay 3 bước khởi tạo kết nối tin cậy giữa client và server bằng cách đồng bộ số SEQ.',
+    explanation: 'Báº¯t tay 3 bÆ°á»›c khá»Ÿi táº¡o káº¿t ná»‘i tin cáº­y giá»¯a client vÃ  server báº±ng cÃ¡ch Ä‘á»“ng bá»™ sá»‘ SEQ.',
     created_at: new Date().toISOString(),
     options: [
-      { option_id: 9, question_id: 3, option_label: 'A', option_text: 'Thiết lập kết nối trước khi truyền dữ liệu', is_correct: true, order_num: 0 },
-      { option_id: 10, question_id: 3, option_label: 'B', option_text: 'Mã hóa dữ liệu gửi đi', is_correct: false, order_num: 1 },
-      { option_id: 11, question_id: 3, option_label: 'C', option_text: 'Kiểm tra lỗi truyền file', is_correct: false, order_num: 2 },
-      { option_id: 12, question_id: 3, option_label: 'D', option_text: 'Ngắt kết nối sau khi hoàn thành', is_correct: false, order_num: 3 }
+      { option_id: 9, question_id: 3, option_label: 'A', option_text: 'Thiáº¿t láº­p káº¿t ná»‘i trÆ°á»›c khi truyá»n dá»¯ liá»‡u', is_correct: true, order_num: 0 },
+      { option_id: 10, question_id: 3, option_label: 'B', option_text: 'MÃ£ hÃ³a dá»¯ liá»‡u gá»­i Ä‘i', is_correct: false, order_num: 1 },
+      { option_id: 11, question_id: 3, option_label: 'C', option_text: 'Kiá»ƒm tra lá»—i truyá»n file', is_correct: false, order_num: 2 },
+      { option_id: 12, question_id: 3, option_label: 'D', option_text: 'Ngáº¯t káº¿t ná»‘i sau khi hoÃ n thÃ nh', is_correct: false, order_num: 3 }
     ]
   },
   {
@@ -345,11 +369,11 @@ let mockQuestionsList: DbQuestion[] = [
     teacher_id: 1,
     subject_id: 1,
     topic_id: 4,
-    content: 'Địa chỉ IPv4 có độ dài bao nhiêu bit?',
+    content: 'Äá»‹a chá»‰ IPv4 cÃ³ Ä‘á»™ dÃ i bao nhiÃªu bit?',
     difficulty: 'easy',
     source: 'manual',
     status: 'approved',
-    explanation: 'IPv4 dài 32 bit, trong khi IPv6 dài 128 bit.',
+    explanation: 'IPv4 dÃ i 32 bit, trong khi IPv6 dÃ i 128 bit.',
     created_at: new Date().toISOString(),
     options: [
       { option_id: 13, question_id: 4, option_label: 'A', option_text: '32 bit', is_correct: true, order_num: 0 },
@@ -359,17 +383,17 @@ let mockQuestionsList: DbQuestion[] = [
     ]
   },
 
-  // Cấu trúc dữ liệu (subject_id: 2)
+  // Cáº¥u trÃºc dá»¯ liá»‡u (subject_id: 2)
   {
     question_id: 5,
     teacher_id: 1,
     subject_id: 2,
     topic_id: 5,
-    content: 'Độ phức tạp thời gian truy xuất phần tử theo chỉ số trong Mảng một chiều (Array) là bao nhiêu?',
+    content: 'Äá»™ phá»©c táº¡p thá»i gian truy xuáº¥t pháº§n tá»­ theo chá»‰ sá»‘ trong Máº£ng má»™t chiá»u (Array) lÃ  bao nhiÃªu?',
     difficulty: 'easy',
     source: 'manual',
     status: 'approved',
-    explanation: 'Mảng hỗ trợ truy cập ngẫu nhiên trực tiếp thông qua chỉ số với độ phức tạp không đổi O(1).',
+    explanation: 'Máº£ng há»— trá»£ truy cáº­p ngáº«u nhiÃªn trá»±c tiáº¿p thÃ´ng qua chá»‰ sá»‘ vá»›i Ä‘á»™ phá»©c táº¡p khÃ´ng Ä‘á»•i O(1).',
     created_at: new Date().toISOString(),
     options: [
       { option_id: 17, question_id: 5, option_label: 'A', option_text: 'O(1)', is_correct: true, order_num: 0 },
@@ -383,37 +407,37 @@ let mockQuestionsList: DbQuestion[] = [
     teacher_id: 1,
     subject_id: 2,
     topic_id: 6,
-    content: 'Cây nhị phân tìm kiếm (BST) có tính chất nào sau đây?',
+    content: 'CÃ¢y nhá»‹ phÃ¢n tÃ¬m kiáº¿m (BST) cÃ³ tÃ­nh cháº¥t nÃ o sau Ä‘Ã¢y?',
     difficulty: 'medium',
     source: 'manual',
     status: 'approved',
-    explanation: 'BST có khóa của mọi nút ở cây con trái đều nhỏ hơn khóa nút gốc, và khóa cây con phải lớn hơn khóa nút gốc.',
+    explanation: 'BST cÃ³ khÃ³a cá»§a má»i nÃºt á»Ÿ cÃ¢y con trÃ¡i Ä‘á»u nhá» hÆ¡n khÃ³a nÃºt gá»‘c, vÃ  khÃ³a cÃ¢y con pháº£i lá»›n hÆ¡n khÃ³a nÃºt gá»‘c.',
     created_at: new Date().toISOString(),
     options: [
-      { option_id: 21, question_id: 6, option_label: 'A', option_text: 'Nút con bên trái luôn có giá trị lớn hơn nút cha', is_correct: false, order_num: 0 },
-      { option_id: 22, question_id: 6, option_label: 'B', option_text: 'Nút con bên trái nhỏ hơn nút cha, nút con bên phải lớn hơn nút cha', is_correct: true, order_num: 1 },
-      { option_id: 23, question_id: 6, option_label: 'C', option_text: 'Tất cả các nút lá phải nằm ở cùng một độ sâu', is_correct: false, order_num: 2 },
-      { option_id: 24, question_id: 6, option_label: 'D', option_text: 'Mỗi nút có đúng hai nút con', is_correct: false, order_num: 3 }
+      { option_id: 21, question_id: 6, option_label: 'A', option_text: 'NÃºt con bÃªn trÃ¡i luÃ´n cÃ³ giÃ¡ trá»‹ lá»›n hÆ¡n nÃºt cha', is_correct: false, order_num: 0 },
+      { option_id: 22, question_id: 6, option_label: 'B', option_text: 'NÃºt con bÃªn trÃ¡i nhá» hÆ¡n nÃºt cha, nÃºt con bÃªn pháº£i lá»›n hÆ¡n nÃºt cha', is_correct: true, order_num: 1 },
+      { option_id: 23, question_id: 6, option_label: 'C', option_text: 'Táº¥t cáº£ cÃ¡c nÃºt lÃ¡ pháº£i náº±m á»Ÿ cÃ¹ng má»™t Ä‘á»™ sÃ¢u', is_correct: false, order_num: 2 },
+      { option_id: 24, question_id: 6, option_label: 'D', option_text: 'Má»—i nÃºt cÃ³ Ä‘Ãºng hai nÃºt con', is_correct: false, order_num: 3 }
     ]
   },
 
-  // Hệ điều hành (subject_id: 3)
+  // Há»‡ Ä‘iá»u hÃ nh (subject_id: 3)
   {
     question_id: 7,
     teacher_id: 1,
     subject_id: 3,
     topic_id: 7,
-    content: 'Hiện tượng "Deadlock" xảy ra khi nào?',
+    content: 'Hiá»‡n tÆ°á»£ng "Deadlock" xáº£y ra khi nÃ o?',
     difficulty: 'hard',
     source: 'manual',
     status: 'approved',
-    explanation: 'Deadlock xảy ra khi hai hoặc nhiều tiến trình bị khóa vĩnh viễn vì mỗi tiến trình đang giữ tài nguyên và chờ tài nguyên khác.',
+    explanation: 'Deadlock xáº£y ra khi hai hoáº·c nhiá»u tiáº¿n trÃ¬nh bá»‹ khÃ³a vÄ©nh viá»…n vÃ¬ má»—i tiáº¿n trÃ¬nh Ä‘ang giá»¯ tÃ i nguyÃªn vÃ  chá» tÃ i nguyÃªn khÃ¡c.',
     created_at: new Date().toISOString(),
     options: [
-      { option_id: 25, question_id: 7, option_label: 'A', option_text: 'Hệ điều hành hết dung lượng RAM khả dụng', is_correct: false, order_num: 0 },
-      { option_id: 26, question_id: 7, option_label: 'B', option_text: 'Một tiến trình chạy vòng lặp vô hạn', is_correct: false, order_num: 1 },
-      { option_id: 27, question_id: 7, option_label: 'C', option_text: 'Nhiều tiến trình chờ đợi lẫn nhau giải phóng tài nguyên tạo thành chu kỳ', is_correct: true, order_num: 2 },
-      { option_id: 28, question_id: 7, option_label: 'D', option_text: 'CPU bị quá nhiệt và tự tắt', is_correct: false, order_num: 3 }
+      { option_id: 25, question_id: 7, option_label: 'A', option_text: 'Há»‡ Ä‘iá»u hÃ nh háº¿t dung lÆ°á»£ng RAM kháº£ dá»¥ng', is_correct: false, order_num: 0 },
+      { option_id: 26, question_id: 7, option_label: 'B', option_text: 'Má»™t tiáº¿n trÃ¬nh cháº¡y vÃ²ng láº·p vÃ´ háº¡n', is_correct: false, order_num: 1 },
+      { option_id: 27, question_id: 7, option_label: 'C', option_text: 'Nhiá»u tiáº¿n trÃ¬nh chá» Ä‘á»£i láº«n nhau giáº£i phÃ³ng tÃ i nguyÃªn táº¡o thÃ nh chu ká»³', is_correct: true, order_num: 2 },
+      { option_id: 28, question_id: 7, option_label: 'D', option_text: 'CPU bá»‹ quÃ¡ nhiá»‡t vÃ  tá»± táº¯t', is_correct: false, order_num: 3 }
     ]
   }
 ];
@@ -431,9 +455,9 @@ export const getQuestionBank = async (): Promise<QuestionBankData> => {
       setTimeout(() => {
         resolve({
           subjects: [
-            { id: '1', name: 'Mạng máy tính', count: mockQuestionsList.filter(q => q.subject_id === 1).length },
-            { id: '2', name: 'Cấu trúc dữ liệu', count: mockQuestionsList.filter(q => q.subject_id === 2).length },
-            { id: '3', name: 'Hệ điều hành', count: mockQuestionsList.filter(q => q.subject_id === 3).length },
+            { id: '1', name: 'Máº¡ng mÃ¡y tÃ­nh', count: mockQuestionsList.filter(q => q.subject_id === 1).length },
+            { id: '2', name: 'Cáº¥u trÃºc dá»¯ liá»‡u', count: mockQuestionsList.filter(q => q.subject_id === 2).length },
+            { id: '3', name: 'Há»‡ Ä‘iá»u hÃ nh', count: mockQuestionsList.filter(q => q.subject_id === 3).length },
           ],
           questions: mockQuestionsList.map(mapDbQuestionToGeneratedQuestion)
         });
@@ -600,18 +624,50 @@ export const getResources = async (userId: number): Promise<TeacherResource[]> =
     subjects.map((subject) => [subject.subject_id, subject.subject_name]),
   );
 
-  return dbDocs.map((doc) =>
-    mapDbDocumentToTeacherResource(doc, 0, subjectNameById.get(doc.subject_id) || 'N/A'),
-  );
+  return dbDocs.map((doc) => {
+    const sid = doc.subject_id ?? doc.subject?.subject_id ?? null;
+    const resolvedName = sid ? subjectNameById.get(sid) || doc.subject?.subject_name || 'N/A' : doc.subject?.subject_name || 'N/A';
+    return mapDbDocumentToTeacherResource(doc, 0, resolvedName);
+  });
 };
 
 export interface UploadResourcePayload {
   title: string;
-  subject_id: number;
+  subject_id?: number;
   topic_id?: number;
   topic_ids?: number[];
   description?: string;
   file: File;
+}
+
+export interface TeacherDocument {
+  document_id: number;
+  teacher_id: number;
+  subject_id: number | null;
+  title: string;
+  description?: string;
+  file_url: string;
+  file_type: string;
+  file_size: number;
+  status: string;
+  created_at: string;
+  updated_at?: string;
+  subject: { subject_id: number | null; subject_name: string };
+  topics: { topic_id: number; topic_name: string }[];
+  ai_request_count?: number;
+  question_count?: number;
+  warning?: { has_related_history: boolean; message: string };
+}
+
+export interface TeacherDocumentListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  subject_id?: number;
+  topic_id?: number;
+  uploaded_from?: string;
+  uploaded_to?: string;
+  status?: 'active' | 'inactive';
 }
 
 /**
@@ -629,7 +685,11 @@ export const getSubjects = async (userId: number): Promise<DbSubject[]> => {
 
   const subjects = subjectsRes.data || [];
   const docs = (docsRes.data || []).filter((doc) => doc.teacher_id === userId);
-  const subjectIds = new Set(docs.map((doc) => doc.subject_id));
+  const subjectIds = new Set(
+    docs
+      .map((doc) => doc.subject_id ?? doc.subject?.subject_id ?? null)
+      .filter((id): id is number => id !== null),
+  );
   return subjects.filter((subject) => subjectIds.has(subject.subject_id));
 };
 
@@ -637,19 +697,10 @@ export const getSubjects = async (userId: number): Promise<DbSubject[]> => {
  * GET /topics
  */
 export const getTopics = async (userId: number): Promise<DbTopic[]> => {
-  const [topicsRes, docsRes] = await Promise.all([
-    api.get<ApiEnvelope<DbTopic[]>>('/topics', {
-      params: { page: '1', limit: '100' },
-    }),
-    api.get<ApiEnvelope<DbDocument[]>>('/documents', {
-      params: { page: '1', limit: '100', teacher_id: userId.toString() },
-    }),
-  ]);
-
-  const topics = topicsRes.data || [];
-  const docs = (docsRes.data || []).filter((doc) => doc.teacher_id === userId);
-  const subjectIds = new Set(docs.map((doc) => doc.subject_id));
-  return topics.filter((topic) => subjectIds.has(topic.subject_id));
+  const topicsRes = await api.get<ApiEnvelope<DbTopic[]>>('/topics', {
+    params: { page: '1', limit: '200' },
+  });
+  return topicsRes.data || [];
 };
 
 /**
@@ -659,8 +710,10 @@ export const uploadDocument = async (payload: UploadResourcePayload): Promise<Db
   const formData = new FormData();
   formData.append('file', payload.file);
   formData.append('title', payload.title);
-  formData.append('subject_id', payload.subject_id.toString());
-  if (payload.topic_id !== undefined) formData.append('topic_id', payload.topic_id.toString());
+  if (payload.topic_id !== undefined) formData.append('topic_ids', payload.topic_id.toString());
+  for (const topicId of payload.topic_ids || []) {
+    formData.append('topic_ids', topicId.toString());
+  }
   if (payload.description) formData.append('description', payload.description);
 
   const res = await api.post<ApiEnvelope<DbDocument>>('/documents/upload', formData);
@@ -670,7 +723,7 @@ export const uploadDocument = async (payload: UploadResourcePayload): Promise<Db
 export const uploadResource = async (payload: UploadResourcePayload): Promise<TeacherResource> => {
   try {
     const doc = await uploadDocument(payload);
-    return mapDbDocumentToTeacherResource(doc, 0, 'Mới tải lên');
+    return mapDbDocumentToTeacherResource(doc, 0, 'Má»›i táº£i lÃªn');
   } catch (error) {
     console.warn('Backend endpoint /teacher/resources/upload not ready. Using fallback mock data.', error);
     return new Promise((resolve) => {
@@ -681,8 +734,8 @@ export const uploadResource = async (payload: UploadResourcePayload): Promise<Te
           size: `${(payload.file.size / (1024 * 1024)).toFixed(1)} MB`,
           date: new Date().toLocaleDateString('vi-VN'),
           usage: 0,
-          subject: 'Kỹ thuật lập trình',
-          topic: 'Đệ quy'
+          subject: 'Ká»¹ thuáº­t láº­p trÃ¬nh',
+          topic: 'Äá»‡ quy'
         });
       }, 1000);
     });
@@ -711,31 +764,24 @@ export const deleteResource = async (id: number | string): Promise<{ success: bo
 /**
  * GET /teacher/stats
  */
-export const getTeacherStats = async (): Promise<TeacherStatsData> => {
-  try {
-    return await api.get<TeacherStatsData>('/teacher/stats');
-  } catch (error) {
-    console.warn('Backend endpoint /teacher/stats not ready. Using fallback mock data.', error);
-    // TODO: Replace fallback mock when backend endpoint is ready
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          classStats: [
-            { label: 'Điểm trung bình lớp', value: '7.8', icon: 'auto_graph', color: 'text-[#b20112]', bg: 'bg-red-50' },
-            { label: 'Tỉ lệ hoàn thành', value: '92%', icon: 'checklist', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-            { label: 'Số giờ tự học', value: '142h', icon: 'timer', color: 'text-blue-600', bg: 'bg-blue-50' },
-            { label: 'Bài tập đã làm', value: '1,240', icon: 'quiz', color: 'text-amber-600', bg: 'bg-amber-50' },
-          ],
-          weakTopics: [
-            { name: 'Giao thức TCP/UDP', errorRate: 45, count: 120 },
-            { name: 'Định tuyến IP', errorRate: 38, count: 95 },
-            { name: 'Mô hình OSI', errorRate: 25, count: 210 },
-            { name: 'Tầng vật lý', errorRate: 12, count: 180 },
-          ]
-        });
-      }, 500);
-    });
+export interface GetTeacherStatsParams {
+  subjectId?: number;
+  topicId?: number;
+}
+
+export const getTeacherStats = async (params: GetTeacherStatsParams = {}): Promise<TeacherStatsData> => {
+  const query: Record<string, string> = {};
+  if (params.subjectId) {
+    query.subject_id = String(params.subjectId);
   }
+  if (params.topicId) {
+    query.topic_id = String(params.topicId);
+  }
+
+  const response = await api.get<ApiEnvelope<TeacherStatsData>>('/teacher/stats', {
+    params: query,
+  });
+  return response.data;
 };
 
 /**
@@ -751,7 +797,7 @@ export const getTeacherSettings = async (): Promise<TeacherSettings> => {
       setTimeout(() => {
         resolve({
           profile: {
-            name: 'Nguyễn Văn A',
+            name: 'Nguyá»…n VÄƒn A',
             email: 'a.nv@ptit.edu.vn',
             department: 'Khoa CNTT 1',
           },
@@ -781,7 +827,7 @@ export const updateTeacherSettings = async (payload: Partial<TeacherSettings>): 
         // Return dummy merged settings
         resolve({
           profile: {
-            name: payload.profile?.name || 'Nguyễn Văn A',
+            name: payload.profile?.name || 'Nguyá»…n VÄƒn A',
             email: payload.profile?.email || 'a.nv@ptit.edu.vn',
             department: 'Khoa CNTT 1',
           },
@@ -799,26 +845,26 @@ export const updateTeacherSettings = async (payload: Partial<TeacherSettings>): 
 
 export interface DbTopic {
   topic_id: number;
-  subject_id: number;
+  subject_id?: number;
   topic_name: string;
   description?: string;
-  status: string;
+  status?: string;
 }
 
 // Local mock storage for teacher topics
 let mockTopics: DbTopic[] = [
-  // Subject 1: Mạng máy tính
-  { topic_id: 1, subject_id: 1, topic_name: 'Chương 1: Tổng quan mạng máy tính', description: 'Giới thiệu các khái niệm mạng cơ bản, mô hình OSI/TCP-IP', status: 'active' },
-  { topic_id: 2, subject_id: 1, topic_name: 'Chương 2: Tầng ứng dụng', description: 'Tìm hiểu giao thức HTTP, DNS, SMTP, FTP', status: 'active' },
-  { topic_id: 3, subject_id: 1, topic_name: 'Chương 3: Tầng vận chuyển', description: 'Tìm hiểu giao thức TCP và UDP, kiểm soát lưu lượng', status: 'active' },
-  { topic_id: 4, subject_id: 1, topic_name: 'Chương 4: Tầng mạng', description: 'Định tuyến IP, giao thức định tuyến RIP/OSPF', status: 'active' },
+  // Subject 1: Máº¡ng mÃ¡y tÃ­nh
+  { topic_id: 1, subject_id: 1, topic_name: 'ChÆ°Æ¡ng 1: Tá»•ng quan máº¡ng mÃ¡y tÃ­nh', description: 'Giá»›i thiá»‡u cÃ¡c khÃ¡i niá»‡m máº¡ng cÆ¡ báº£n, mÃ´ hÃ¬nh OSI/TCP-IP', status: 'active' },
+  { topic_id: 2, subject_id: 1, topic_name: 'ChÆ°Æ¡ng 2: Táº§ng á»©ng dá»¥ng', description: 'TÃ¬m hiá»ƒu giao thá»©c HTTP, DNS, SMTP, FTP', status: 'active' },
+  { topic_id: 3, subject_id: 1, topic_name: 'ChÆ°Æ¡ng 3: Táº§ng váº­n chuyá»ƒn', description: 'TÃ¬m hiá»ƒu giao thá»©c TCP vÃ  UDP, kiá»ƒm soÃ¡t lÆ°u lÆ°á»£ng', status: 'active' },
+  { topic_id: 4, subject_id: 1, topic_name: 'ChÆ°Æ¡ng 4: Táº§ng máº¡ng', description: 'Äá»‹nh tuyáº¿n IP, giao thá»©c Ä‘á»‹nh tuyáº¿n RIP/OSPF', status: 'active' },
   
-  // Subject 2: Cấu trúc dữ liệu
-  { topic_id: 5, subject_id: 2, topic_name: 'Chương 1: Mảng và Danh sách liên kết', description: 'Cấu trúc dữ liệu tuyến tính cơ bản', status: 'active' },
-  { topic_id: 6, subject_id: 2, topic_name: 'Chương 2: Cây nhị phân và Cây BST', description: 'Cây nhị phân tìm kiếm và các phép toán', status: 'active' },
+  // Subject 2: Cáº¥u trÃºc dá»¯ liá»‡u
+  { topic_id: 5, subject_id: 2, topic_name: 'ChÆ°Æ¡ng 1: Máº£ng vÃ  Danh sÃ¡ch liÃªn káº¿t', description: 'Cáº¥u trÃºc dá»¯ liá»‡u tuyáº¿n tÃ­nh cÆ¡ báº£n', status: 'active' },
+  { topic_id: 6, subject_id: 2, topic_name: 'ChÆ°Æ¡ng 2: CÃ¢y nhá»‹ phÃ¢n vÃ  CÃ¢y BST', description: 'CÃ¢y nhá»‹ phÃ¢n tÃ¬m kiáº¿m vÃ  cÃ¡c phÃ©p toÃ¡n', status: 'active' },
   
-  // Subject 3: Hệ điều hành
-  { topic_id: 7, subject_id: 3, topic_name: 'Chương 1: Quản lý Tiến trình (Process)', description: 'Lập lịch tiến trình, đồng bộ hóa và deadlock', status: 'active' }
+  // Subject 3: Há»‡ Ä‘iá»u hÃ nh
+  { topic_id: 7, subject_id: 3, topic_name: 'ChÆ°Æ¡ng 1: Quáº£n lÃ½ Tiáº¿n trÃ¬nh (Process)', description: 'Láº­p lá»‹ch tiáº¿n trÃ¬nh, Ä‘á»“ng bá»™ hÃ³a vÃ  deadlock', status: 'active' }
 ];
 
 /**
@@ -905,3 +951,6 @@ export const deleteTopic = async (id: string | number): Promise<void> => {
     });
   }
 };
+
+
+

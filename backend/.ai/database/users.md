@@ -29,7 +29,6 @@ Documentation for `users` table.
 - classes.owner_id -> users.user_id
 - class_subjects.assigned_teacher_id -> users.user_id
 - class_students.student_id -> users.user_id
-- class_students.invited_by -> users.user_id
 - class_teachers.teacher_id -> users.user_id
 - class_teachers.added_by -> users.user_id
 - documents.teacher_id -> users.user_id

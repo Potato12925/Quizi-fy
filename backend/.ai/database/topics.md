@@ -1,32 +1,33 @@
-﻿# Table: `topics`
+# Table: `topics`
 
 ## Purpose
 
-Documentation for `topics` table.
+Subject-scoped topic catalog used for document mapping and question generation.
 
 ## Columns
 
 | Column | Definition |
 |---|---|
 | `topic_id` | `bigint [pk, increment]` |
-| `topic_name` | `varchar(255) [unique, not null]` |
+| `subject_id` | `bigint [not null]` |
+| `topic_name` | `varchar(255) [not null]` |
 | `description` | `text` |
 | `created_at` | `timestamp` |
 | `updated_at` | `timestamp` |
+| `deleted_at` | `timestamp` |
+
+## Indexes
+
+- `(subject_id, topic_name) [unique]`
+- `(subject_id)`
 
 ## Relationships
 
+- topics.subject_id -> subjects.subject_id
 - document_topics.topic_id -> topics.topic_id
 
 ## Recommended Supabase Queries
 
 ```sql
-select * from topics limit 20;
+select topic_id, subject_id, topic_name from topics limit 20;
 ```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
-

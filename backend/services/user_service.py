@@ -2,10 +2,15 @@ from math import ceil
 
 from repositories.user_repository import (
     assign_role_to_user,
+    create_class_student_mapping,
+    create_class_teacher_mapping,
     create_user_record,
+    find_active_class_student_mapping,
+    find_active_class_teacher_mapping,
     find_role_codes_by_user_id,
     find_role_codes_by_user_ids,
     find_role_id_by_code,
+    find_user_ids_by_role_code,
     find_user_by_id,
     find_user_by_username,
     list_users,
@@ -24,6 +29,9 @@ except ImportError:  # pragma: no cover
 
 
 ALLOWED_ROLES = {"teacher", "student"}
+ALLOWED_LIST_ROLES = {"teacher", "student", "all"}
+ALLOWED_STATUS = {"active", "inactive", "all"}
+DEFAULT_PASSWORD = "123456"
 
 
 def _hash_password(raw_password: str) -> str:
@@ -46,11 +54,14 @@ async def _compose_user_output(user: dict) -> dict:
         "full_name": user["full_name"],
         "is_active": bool(user.get("is_active", True)),
         "must_change_password": bool(user.get("must_change_password", True)),
+        "created_at": user.get("created_at"),
+        "updated_at": user.get("updated_at"),
+        "deleted_at": user.get("deleted_at"),
         "roles": roles,
     }
 
 
-async def create_user(payload: UserCreateRequest) -> dict:
+async def create_user(payload: UserCreateRequest, current_user: CurrentUser) -> dict:
     if payload.role_code not in ALLOWED_ROLES:
         raise ValueError("Only teacher or student roles are allowed")
 
@@ -65,16 +76,38 @@ async def create_user(payload: UserCreateRequest) -> dict:
     user = await create_user_record(
         {
             "username": payload.username,
-            "password_hash": _hash_password(payload.password),
+            "password_hash": _hash_password(DEFAULT_PASSWORD),
             "full_name": payload.full_name,
             "is_active": True,
             "must_change_password": True,
         }
     )
 
-    await assign_role_to_user(int(user["user_id"]), role_id)
+    created_user_id = int(user["user_id"])
+    await assign_role_to_user(created_user_id, role_id)
 
-    return await _compose_user_output(user)
+    class_mapping = None
+    if payload.class_id is not None:
+        if payload.role_code == "student":
+            exists = await find_active_class_student_mapping(payload.class_id, created_user_id)
+            if exists is None:
+                class_mapping = await create_class_student_mapping(
+                    class_id=payload.class_id,
+                    student_id=created_user_id,
+                )
+        if payload.role_code == "teacher":
+            exists = await find_active_class_teacher_mapping(payload.class_id, created_user_id)
+            if exists is None:
+                class_mapping = await create_class_teacher_mapping(
+                    class_id=payload.class_id,
+                    teacher_id=created_user_id,
+                    added_by=current_user.user_id,
+                )
+
+    created_output = await _compose_user_output(user)
+    if class_mapping is not None:
+        created_output["class_assignment"] = class_mapping
+    return created_output
 
 
 async def get_user_by_id(user_id: int) -> dict:
@@ -84,11 +117,31 @@ async def get_user_by_id(user_id: int) -> dict:
     return await _compose_user_output(user)
 
 
-async def get_users(page: int, limit: int, role_code: str | None) -> dict:
-    if role_code is not None and role_code not in ALLOWED_ROLES:
-        raise ValueError("role_code must be teacher or student")
+async def get_users(
+    page: int,
+    limit: int,
+    role_code: str = "all",
+    status: str = "all",
+    search: str | None = None,
+    include_deleted: bool = False,
+) -> dict:
+    if role_code not in ALLOWED_LIST_ROLES:
+        raise ValueError("role_code must be teacher, student, or all")
+    if status not in ALLOWED_STATUS:
+        raise ValueError("status must be active, inactive, or all")
 
-    users, total = await list_users(page=page, limit=limit)
+    role_user_ids: list[int] | None = None
+    if role_code != "all":
+        role_user_ids = await find_user_ids_by_role_code(role_code)
+
+    users, total = await list_users(
+        page=page,
+        limit=limit,
+        status=status,
+        search=search,
+        include_deleted=include_deleted,
+        user_ids=role_user_ids,
+    )
     user_ids = [int(user["user_id"]) for user in users]
     user_roles_map = await find_role_codes_by_user_ids(user_ids)
 
@@ -105,13 +158,6 @@ async def get_users(page: int, limit: int, role_code: str | None) -> dict:
                 "roles": user_roles_map.get(current_user_id, []),
             }
         )
-
-    if role_code:
-        mapped_users = [
-            user
-            for user in mapped_users
-            if role_code in user["roles"]
-        ]
 
     total_pages = ceil(total / limit) if total > 0 else 1
 
@@ -130,14 +176,20 @@ async def update_user(user_id: int, payload: UserUpdateRequest) -> dict:
     existing_user = await find_user_by_id(user_id)
     if not existing_user:
         raise ValueError("User not found")
+    existing_roles = await find_role_codes_by_user_id(user_id)
+    if "admin" in existing_roles:
+        raise ValueError("Admin user cannot be updated")
 
     update_payload: dict = {}
+    if payload.username is not None and payload.username != existing_user.get("username"):
+        existed_user = await find_user_by_username(payload.username)
+        if existed_user and int(existed_user["user_id"]) != user_id:
+            raise ValueError("Username already exists")
+        update_payload["username"] = payload.username
     if payload.full_name is not None:
         update_payload["full_name"] = payload.full_name
     if payload.is_active is not None:
         update_payload["is_active"] = payload.is_active
-    if payload.must_change_password is not None:
-        update_payload["must_change_password"] = payload.must_change_password
 
     if not update_payload:
         raise ValueError("No fields to update")
@@ -146,6 +198,19 @@ async def update_user(user_id: int, payload: UserUpdateRequest) -> dict:
     if not updated_user:
         raise ValueError("User not found")
 
+    return await _compose_user_output(updated_user)
+
+
+async def update_user_status(user_id: int, is_active: bool) -> dict:
+    existing_user = await find_user_by_id(user_id)
+    if not existing_user:
+        raise ValueError("User not found")
+    roles = await find_role_codes_by_user_id(user_id)
+    if "admin" in roles:
+        raise ValueError("Admin user cannot be updated")
+    updated_user = await update_user_by_id(user_id, {"is_active": is_active})
+    if not updated_user:
+        raise ValueError("User not found")
     return await _compose_user_output(updated_user)
 
 

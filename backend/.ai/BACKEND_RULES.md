@@ -58,7 +58,7 @@ WHEN:
 
 READ:
 
-- .ai/database-rules.md
+- .ai/database/README.md
 - .ai/context/database-schema.md
 
 OPTIONAL:

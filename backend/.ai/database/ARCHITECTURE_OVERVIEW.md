@@ -1,4 +1,3 @@
-
 # Architecture Overview
 
 ## Main Modules
@@ -11,9 +10,9 @@
 - Notifications
 
 ## Core Relationships
-- users ↔ roles through user_roles
-- classes ↔ subjects through class_subjects
-- questions belong to subjects/topics
+- users <-> roles through user_roles
+- classes <-> subjects through class_subjects
+- subjects -> topics -> document_topics -> documents -> ai_requests -> questions
 - practice_sets contain many questions
 - practice_attempts store exam results
 
@@ -21,8 +20,6 @@
 Most business tables use:
 - deleted_at
 - status enum
-
-This prevents hard deletion and preserves history.
 
 ## Supabase Notes
 - Recommended to use Row Level Security (RLS)

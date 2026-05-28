@@ -109,6 +109,20 @@ async def is_teacher_assigned_to_subject(subject_id: int, teacher_id: int) -> bo
     return len(rows) > 0
 
 
+async def list_assigned_subject_ids_by_teacher(teacher_id: int) -> list[int]:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("class_subjects")
+        .select("subject_id")
+        .eq("assigned_teacher_id", teacher_id)
+        .eq("status", "active")
+        .is_("deleted_at", None)
+        .execute()
+    )
+    rows = response.data or []
+    return sorted({int(item["subject_id"]) for item in rows if item.get("subject_id") is not None})
+
+
 async def update_subject_by_id(subject_id: int, payload: dict) -> dict | None:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(

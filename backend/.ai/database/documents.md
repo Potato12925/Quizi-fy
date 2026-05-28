@@ -1,8 +1,8 @@
-﻿# Table: `documents`
+# Table: `documents`
 
 ## Purpose
 
-Documentation for `documents` table.
+Uploaded source files owned by teachers. Subject is inferred via document_topics -> topics.
 
 ## Columns
 
@@ -10,7 +10,6 @@ Documentation for `documents` table.
 |---|---|
 | `document_id` | `bigint [pk, increment]` |
 | `teacher_id` | `bigint [not null]` |
-| `subject_id` | `bigint [not null]` |
 | `title` | `varchar(500) [not null]` |
 | `description` | `text` |
 | `file_url` | `text [not null]` |
@@ -25,24 +24,15 @@ Documentation for `documents` table.
 ## Indexes
 
 - `(teacher_id, created_at)`
-- `(subject_id, status)`
+- `(status)`
 
 ## Relationships
 
 - documents.teacher_id -> users.user_id
-- documents.subject_id -> subjects.subject_id
 - document_topics.document_id -> documents.document_id
-- ai_requests.document_id -> documents.document_id
 
 ## Recommended Supabase Queries
 
 ```sql
-select * from documents limit 20;
+select document_id, teacher_id, title, status from documents limit 20;
 ```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
-

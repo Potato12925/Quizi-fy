@@ -12,6 +12,7 @@ from repositories.practice_attempt_repository import (
     update_practice_attempt_by_id,
     get_attempt_result_details,
     find_submitted_attempts_by_practice_set_ids,
+    find_all_student_history,
 )
 from repositories.practice_set_repository import find_practice_sets_with_subjects_by_student
 from repositories.user_repository import find_user_by_id
@@ -143,23 +144,7 @@ async def get_attempt_result(attempt_id: int) -> dict:
     }
 
 async def get_my_history(student_id: int) -> list[dict]:
-    supabase = SupabaseManager.get_client()
-    
-    ps_resp = await asyncio.to_thread(lambda: supabase.table("practice_sets").select("practice_set_id, subjects(subject_name)").eq("student_id", student_id).execute())
-    ps_data = ps_resp.data or []
-    if not ps_data:
-        return []
-    
-    ps_ids = [ps["practice_set_id"] for ps in ps_data]
-    ps_map = {ps["practice_set_id"]: ps["subjects"]["subject_name"] if ps.get("subjects") else "Unknown" for ps in ps_data}
-    
-    attempts_resp = await asyncio.to_thread(lambda: supabase.table("practice_attempts").select("*").in_("practice_set_id", ps_ids).order("started_at", desc=True).execute())
-    attempts = attempts_resp.data or []
-    
-    for attempt in attempts:
-        attempt["subject_name"] = ps_map.get(attempt["practice_set_id"], "Unknown")
-        
-    return attempts
+    return await find_all_student_history(student_id)
 
 async def get_attempt_questions(attempt_id: int) -> dict:
     attempt = await find_practice_attempt_by_id(attempt_id)

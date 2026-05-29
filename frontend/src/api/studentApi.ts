@@ -34,12 +34,14 @@ export interface StudentDashboardData {
 
 export interface HistoryItem {
   id: number;
+  practice_set_id: number;
   subject: string;
   date: string;
   score: number;
   total: number;
   time: string;
   status: string;
+  started_at: string;
 }
 
 export interface PracticeSessionPayload {
@@ -115,10 +117,16 @@ const getSubjectColor = (id: number): string => {
 
 // In-memory cache for Student Dashboard
 let cachedDashboard: StudentDashboardData | null = null;
+let cachedHistory: HistoryItem[] | null = null;
+
+export const clearHistoryCache = () => {
+  cachedHistory = null;
+};
 
 export const clearDashboardCache = () => {
   cachedDashboard = null;
   clearProgressCache();
+  clearHistoryCache();
 };
 
 /**
@@ -161,7 +169,7 @@ export const getStudentDashboard = async (forceRefresh = false): Promise<Student
       id: h.id.toString(),
       subject: h.subject,
       time: h.date,
-      score: `${h.score}/${h.total}`
+      score: `${h.score}/10`
     }));
 
     cachedDashboard = {
@@ -215,22 +223,28 @@ export const exportStudentHistoryPdf = async (): Promise<void> => {
 /**
  * Lấy lịch sử làm bài: GET /practice-attempts/my-history
  */
-export const getStudentHistory = async (): Promise<HistoryItem[]> => {
+export const getStudentHistory = async (forceRefresh = false): Promise<HistoryItem[]> => {
+  if (cachedHistory && !forceRefresh) {
+    return cachedHistory;
+  }
   try {
     const res = await client.api.get('/practice-attempts/my-history');
     const dbAttempts = res.data || [];
-    return dbAttempts.map((a: any) => ({
+    cachedHistory = dbAttempts.map((a: any) => ({
       id: a.attempt_id,
+      practice_set_id: a.practice_set_id,
       subject: a.subject_name || 'N/A',
       date: new Date(a.started_at).toLocaleDateString('vi-VN'),
       score: a.score || 0,
       total: (a.total_correct || 0) + (a.total_wrong || 0),
       time: a.submitted_at ? 'Hoàn thành' : '--:--',
       status: a.status === 'submitted' ? 'Đã nộp' : 'Đang làm',
+      started_at: a.started_at
     }));
+    return cachedHistory!;
   } catch (error) {
     console.warn('Lỗi tải lịch sử:', error);
-    return [];
+    return cachedHistory || [];
   }
 };
 
@@ -268,6 +282,22 @@ export const createPracticeSession = async (payload: PracticeSessionPayload): Pr
     return { practiceId: attemptRes.data.attempt_id.toString() };
   } catch (error) {
     console.error('Failed to create practice session', error);
+    throw error;
+  }
+};
+
+/**
+ * Retake: POST /practice-attempts/start
+ */
+export const startRetakeSession = async (practiceSetId: number): Promise<{ practiceId: string }> => {
+  try {
+    const attemptRes = await client.api.post('/practice-attempts/start', {
+      practice_set_id: practiceSetId
+    });
+    clearHistoryCache();
+    return { practiceId: attemptRes.data.attempt_id.toString() };
+  } catch (error) {
+    console.error('Failed to start retake session', error);
     throw error;
   }
 };

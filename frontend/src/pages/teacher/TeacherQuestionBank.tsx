@@ -56,6 +56,7 @@ export default function QuestionBankPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalTopics, setModalTopics] = useState<TopicItem[]>([]);
   const [documentTopicOptions, setDocumentTopicOptions] = useState<DocumentTopicOption[]>([]);
+  const [processingQuestionId, setProcessingQuestionId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState<FormState>({
     subjectId: '',
@@ -215,11 +216,32 @@ export default function QuestionBankPage() {
 
   const handleDelete = async (id: number) => {
     if (!window.confirm('Bạn có chắc chắn muốn ẩn câu hỏi này khỏi ngân hàng không?')) return;
+    setProcessingQuestionId(id);
     try {
       await softDeleteTeacherQuestion(id);
       await loadQuestions();
     } catch {
       alert('Không thể xóa câu hỏi lúc này');
+    } finally {
+      setProcessingQuestionId(null);
+    }
+  };
+
+  const handleToggleVisibility = async (q: TeacherQuestionBankItem) => {
+    const nextStatus = q.status === 'inactive' ? 'draft' : 'inactive';
+    const confirmMessage = nextStatus === 'inactive'
+      ? 'Bạn có chắc chắn muốn ẩn câu hỏi này không?'
+      : 'Bạn có muốn hiện lại câu hỏi này không?';
+    if (!window.confirm(confirmMessage)) return;
+
+    setProcessingQuestionId(q.question_id);
+    try {
+      await updateTeacherQuestionStatus(q.question_id, nextStatus);
+      await loadQuestions();
+    } catch {
+      alert('Không thể cập nhật trạng thái hiển thị của câu hỏi lúc này');
+    } finally {
+      setProcessingQuestionId(null);
     }
   };
 
@@ -281,24 +303,24 @@ export default function QuestionBankPage() {
   if (!isLoading && subjects.length === 0) return <EmptyState />;
 
   return (
-    <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 pt-2">
+    <div className="pb-20 space-y-12 duration-700 animate-in fade-in slide-in-from-bottom-8">
+      <div className="flex flex-col items-start justify-between gap-6 pt-2 md:flex-row md:items-end">
         <div>
-          <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Ngân hàng <br/><span className="text-[#b20112]">Câu hỏi</span></h1>
-          <p className="text-slate-500 mt-4 font-medium">Quản lý và tinh chỉnh hệ thống câu hỏi của bạn.</p>
+          <h1 className="text-5xl italic font-black leading-none tracking-tighter uppercase text-slate-900">Ngân hàng <br/><span className="text-[#b20112]">Câu hỏi</span></h1>
+          <p className="mt-4 font-medium text-slate-500">Quản lý và tinh chỉnh hệ thống câu hỏi của bạn.</p>
         </div>
         <div className="flex gap-4">
           <button onClick={handleOpenCreateModal} className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-slate-900/20 hover:bg-black hover:-translate-y-1 transition-all flex items-center gap-3">
-            <span className="material-symbols-outlined text-xl">add_circle</span> Tạo thủ công
+            <span className="text-xl material-symbols-outlined">add_circle</span> Tạo thủ công
           </button>
           <Link to="/teacher/ai-generator" className="bg-[#b20112] text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 hover:bg-[#d62828] hover:-translate-y-1 transition-all flex items-center gap-3">
-            <span className="material-symbols-outlined text-xl">auto_awesome</span> Tạo thêm bằng AI
+            <span className="text-xl material-symbols-outlined">auto_awesome</span> Tạo thêm bằng AI
           </Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        <div className="lg:col-span-3 space-y-6">
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
+        <div className="space-y-6 lg:col-span-3">
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Danh sách môn học</h3>
           <div className="space-y-2">
             {subjects.map((s) => (
@@ -313,12 +335,12 @@ export default function QuestionBankPage() {
           </div>
         </div>
 
-        <div className="lg:col-span-9 space-y-8">
+        <div className="space-y-8 lg:col-span-9">
           <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-wrap gap-4 items-center justify-between">
-            <div className="flex gap-4 flex-wrap">
+            <div className="flex flex-wrap gap-4">
               <div className="relative">
-                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-                <input type="text" placeholder="Tìm kiếm nội dung..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-12 pr-6 py-3 rounded-xl bg-slate-50 border-none text-xs font-bold focus:ring-2 focus:ring-red-500/20 transition-all w-64" />
+                <span className="absolute -translate-y-1/2 material-symbols-outlined left-4 top-1/2 text-slate-400">search</span>
+                <input type="text" placeholder="Tìm kiếm nội dung..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-64 py-3 pl-12 pr-6 text-xs font-bold transition-all border-none rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500/20" />
               </div>
               <select value={difficultyFilter} onChange={(e) => setDifficultyFilter(e.target.value as typeof difficultyFilter)} className="px-4 py-3 rounded-xl bg-slate-50 border-none text-[10px] font-black uppercase tracking-widest text-slate-500">
                 <option value="all">Mức độ: tất cả</option>
@@ -341,7 +363,7 @@ export default function QuestionBankPage() {
             </div>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+          <div className="flex gap-2 pb-2 overflow-x-auto scrollbar-none">
             <button type="button" onClick={() => setActiveTopic('all')} className={`px-5 py-3 rounded-2xl font-black text-[9px] uppercase tracking-wider whitespace-nowrap transition-all border cursor-pointer ${activeTopic === 'all' ? 'bg-slate-900 border-slate-900 text-white shadow-lg shadow-slate-900/10' : 'bg-white border-slate-100 text-slate-400 hover:text-slate-900 hover:border-slate-200'}`}>
               Tất cả chương
             </button>
@@ -363,9 +385,16 @@ export default function QuestionBankPage() {
                 const optionsSorted = [...q.options].sort((a, b) => a.order_num - b.order_num);
                 const correct = optionsSorted.find((opt) => opt.is_correct);
                 return (
-                  <div key={q.question_id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-red-900/5 transition-all group">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                      <div className="space-y-4 flex-1">
+                  <div
+                    key={q.question_id}
+                    className={`p-8 rounded-[2.5rem] border shadow-sm transition-all group ${
+                      q.status === 'inactive'
+                        ? 'bg-slate-50 border-slate-200 opacity-40'
+                        : 'bg-white border-slate-100 hover:shadow-xl hover:shadow-red-900/5'
+                    }`}
+                  >
+                    <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+                      <div className="flex-1 space-y-4">
                         <div className="flex flex-wrap gap-2">
                           <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">Trắc nghiệm</span>
                           <span className="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-blue-50 text-blue-600">{q.difficulty}</span>
@@ -373,20 +402,36 @@ export default function QuestionBankPage() {
                           <span className="bg-slate-50 text-slate-400 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest italic">{q.source}</span>
                           <button type="button" onClick={() => updateTeacherQuestionStatus(q.question_id, q.status === 'approved' ? 'draft' : 'approved').then(() => loadQuestions())} className="bg-slate-50 text-slate-500 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">{q.status}</button>
                         </div>
-                        <h4 className="text-lg font-black text-slate-800 tracking-tight leading-snug">{q.content}</h4>
+                        <h4 className="text-lg font-black leading-snug tracking-tight text-slate-800">{q.content}</h4>
                         {correct && (
                           <div className="mt-4">
-                            <div className="p-4 rounded-2xl border bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm text-xs font-bold inline-flex items-center gap-2">
-                              <span className="material-symbols-outlined text-sm">check_circle</span>
+                            <div className="inline-flex items-center gap-2 p-4 text-xs font-bold border shadow-sm rounded-2xl bg-emerald-50 border-emerald-200 text-emerald-700">
+                              <span className="text-sm material-symbols-outlined">check_circle</span>
                               <span className="opacity-60">Đáp án đúng:</span> {correct.option_label}. {correct.option_text}
                             </div>
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => openModalWithQuestion(q, 'edit')} className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-[#b20112] hover:text-white transition-all flex items-center justify-center cursor-pointer"><span className="material-symbols-outlined text-xl">edit</span></button>
-                        <button onClick={() => openModalWithQuestion(q, 'view')} className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white transition-all flex items-center justify-center cursor-pointer"><span className="material-symbols-outlined text-xl">visibility</span></button>
-                        <button onClick={() => handleDelete(q.question_id)} className="w-10 h-10 rounded-xl bg-slate-50 text-red-300 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center cursor-pointer"><span className="material-symbols-outlined text-xl">delete</span></button>
+                      <div className="flex items-center gap-2 transition-opacity opacity-0 group-hover:opacity-100">
+                        <button type="button" onClick={() => openModalWithQuestion(q, 'edit')} className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-[#b20112] hover:text-white transition-all flex items-center justify-center cursor-pointer"><span className="text-xl material-symbols-outlined">edit</span></button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleVisibility(q)}
+                          disabled={processingQuestionId === q.question_id}
+                          title={q.status === 'inactive' ? 'Hiện câu hỏi' : 'Ẩn câu hỏi'}
+                          className="flex items-center justify-center w-10 h-10 transition-all cursor-pointer rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <span className="text-xl material-symbols-outlined">{q.status === 'inactive' ? 'visibility_off' : 'visibility'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(q.question_id)}
+                          disabled={processingQuestionId === q.question_id}
+                          title="Xóa câu hỏi"
+                          className="flex items-center justify-center w-10 h-10 text-red-300 transition-all cursor-pointer rounded-xl bg-slate-50 hover:bg-red-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <span className="text-xl material-symbols-outlined">delete</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -400,18 +445,18 @@ export default function QuestionBankPage() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 duration-300 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-[3rem] shadow-2xl animate-in zoom-in-95 duration-300">
             <div className="p-10 md:p-14">
-              <div className="flex justify-between items-start mb-10">
+              <div className="flex items-start justify-between mb-10">
                 <div>
-                  <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">{modalMode === 'create' ? 'Tạo câu hỏi ' : modalMode === 'edit' ? 'Chỉnh sửa ' : 'Chi tiết '}<span className="text-[#b20112]">Câu hỏi</span></h2>
+                  <h2 className="text-3xl italic font-black tracking-tighter uppercase text-slate-900">{modalMode === 'create' ? 'Tạo câu hỏi ' : modalMode === 'edit' ? 'Chỉnh sửa ' : 'Chi tiết '}<span className="text-[#b20112]">Câu hỏi</span></h2>
                 </div>
-                <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 hover:bg-slate-900 hover:text-white transition-all flex items-center justify-center"><span className="material-symbols-outlined">close</span></button>
+                <button onClick={() => setIsModalOpen(false)} className="flex items-center justify-center w-12 h-12 transition-all rounded-full bg-slate-100 text-slate-400 hover:bg-slate-900 hover:text-white"><span className="material-symbols-outlined">close</span></button>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Môn học</label>
                     <select disabled={modalMode === 'view'} value={formData.subjectId} onChange={async (e) => {
@@ -421,7 +466,7 @@ export default function QuestionBankPage() {
                       setModalTopics(subTopics);
                       setFormData((prev) => ({ ...prev, subjectId: newSubId, topicId: nextTopicId, documentTopicId: '' }));
                       await loadModalDocumentTopics(newSubId, nextTopicId);
-                    }} className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold">
+                    }} className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50">
                       {subjects.map((s) => <option key={s.subject_id} value={s.subject_id}>{s.subject_name}</option>)}
                     </select>
                   </div>
@@ -431,23 +476,23 @@ export default function QuestionBankPage() {
                       const nextTopicId = e.target.value;
                       setFormData((prev) => ({ ...prev, topicId: nextTopicId, documentTopicId: '' }));
                       await loadModalDocumentTopics(formData.subjectId, nextTopicId);
-                    }} className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold">
+                    }} className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50">
                       {modalTopics.map((t) => <option key={t.topic_id} value={t.topic_id}>{t.topic_name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Tài liệu nguồn</label>
-                    <select disabled={modalMode === 'view'} value={formData.documentTopicId} onChange={(e) => setFormData((prev) => ({ ...prev, documentTopicId: e.target.value }))} className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold">
+                    <select disabled={modalMode === 'view'} value={formData.documentTopicId} onChange={(e) => setFormData((prev) => ({ ...prev, documentTopicId: e.target.value }))} className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50">
                       {documentTopicOptions.map((opt) => <option key={opt.document_topic_id} value={opt.document_topic_id}>{opt.document_title}</option>)}
                       {documentTopicOptions.length === 0 && <option value="">Không có tài liệu phù hợp</option>}
                     </select>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Độ khó</label>
-                    <select disabled={modalMode === 'view'} value={formData.difficulty} onChange={(e) => setFormData((prev) => ({ ...prev, difficulty: e.target.value as FormState['difficulty'] }))} className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold">
+                    <select disabled={modalMode === 'view'} value={formData.difficulty} onChange={(e) => setFormData((prev) => ({ ...prev, difficulty: e.target.value as FormState['difficulty'] }))} className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50">
                       <option value="easy">Dễ</option>
                       <option value="medium">Trung bình</option>
                       <option value="hard">Khó</option>
@@ -455,7 +500,7 @@ export default function QuestionBankPage() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Trạng thái</label>
-                    <select disabled={modalMode === 'view'} value={formData.status} onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value as FormState['status'] }))} className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold">
+                    <select disabled={modalMode === 'view'} value={formData.status} onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value as FormState['status'] }))} className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50">
                       <option value="draft">Nháp</option>
                       <option value="approved">Đã duyệt</option>
                       <option value="inactive">Ẩn</option>
@@ -469,7 +514,7 @@ export default function QuestionBankPage() {
                   <textarea disabled={modalMode === 'view'} rows={4} value={formData.content} onChange={(e) => setFormData((prev) => ({ ...prev, content: e.target.value }))} className="w-full p-6 rounded-[2rem] bg-slate-50 border-none text-sm font-bold resize-none" />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   {formData.options.map((opt, i) => (
                     <div key={i} className="space-y-2">
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Đáp án {['A', 'B', 'C', 'D'][i]}</label>
@@ -477,7 +522,7 @@ export default function QuestionBankPage() {
                         const next = [...formData.options];
                         next[i] = e.target.value;
                         setFormData((prev) => ({ ...prev, options: next }));
-                      }} className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold" />
+                      }} className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50" />
                     </div>
                   ))}
                 </div>
@@ -495,10 +540,10 @@ export default function QuestionBankPage() {
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Giải thích</label>
-                  <input disabled={modalMode === 'view'} value={formData.explanation} onChange={(e) => setFormData((prev) => ({ ...prev, explanation: e.target.value }))} className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold" />
+                  <input disabled={modalMode === 'view'} value={formData.explanation} onChange={(e) => setFormData((prev) => ({ ...prev, explanation: e.target.value }))} className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50" />
                 </div>
 
-                {formError && <div className="p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 text-xs font-black uppercase tracking-widest">{formError}</div>}
+                {formError && <div className="p-4 text-xs font-black tracking-widest text-red-600 uppercase border border-red-100 rounded-2xl bg-red-50">{formError}</div>}
 
                 <div className="flex justify-end gap-4 pt-4 border-t border-slate-100">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="px-10 py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-400">{modalMode === 'view' ? 'Đóng lại' : 'Hủy bỏ'}</button>

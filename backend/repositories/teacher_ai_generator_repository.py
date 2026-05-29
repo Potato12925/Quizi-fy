@@ -211,6 +211,27 @@ async def update_teacher_question_by_id(question_id: int, teacher_id: int, paylo
     return rows[0] if rows else None
 
 
+async def soft_delete_teacher_question_by_id(question_id: int, teacher_id: int, status: str | None = None) -> dict | None:
+    supabase = SupabaseManager.get_client()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "deleted_at": now_iso,
+        "updated_at": now_iso,
+    }
+    if status is not None:
+        payload["status"] = status
+    response = await asyncio.to_thread(
+        lambda: supabase.table("questions")
+        .update(payload)
+        .eq("question_id", question_id)
+        .eq("teacher_id", teacher_id)
+        .is_("deleted_at", None)
+        .execute()
+    )
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
 async def replace_question_options(question_id: int, options: list[str], correct_option_index: int) -> None:
     supabase = SupabaseManager.get_client()
     await asyncio.to_thread(lambda: supabase.table("question_options").delete().eq("question_id", question_id).execute())

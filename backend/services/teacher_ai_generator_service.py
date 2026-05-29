@@ -18,6 +18,7 @@ from repositories.teacher_ai_generator_repository import (
     list_teacher_document_topic_rows,
     list_teacher_questions_by_ids,
     replace_question_options,
+    soft_delete_teacher_question_by_id,
     update_ai_request_by_id,
     update_teacher_question_by_id,
 )
@@ -333,6 +334,27 @@ async def confirm_teacher_ai_request_review(
         }
 
         if old_snapshot == new_snapshot:
+            continue
+
+        if question_payload.status == "rejected":
+            await soft_delete_teacher_question_by_id(
+                question_id=question_payload.question_id,
+                teacher_id=current_user.user_id,
+                status="rejected",
+            )
+            await create_question_history_record(
+                {
+                    "question_id": question_payload.question_id,
+                    "changed_by": current_user.user_id,
+                    "old_data": old_snapshot,
+                    "new_data": {
+                        **new_snapshot,
+                        "deleted": True,
+                    },
+                    "change_type": "teacher_ai_review_reject_delete",
+                }
+            )
+            updated_question_ids.append(question_payload.question_id)
             continue
 
         await update_teacher_question_by_id(

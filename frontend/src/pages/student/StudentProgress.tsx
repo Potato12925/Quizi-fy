@@ -1,22 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { getStudentProgress } from '@/api/studentApi';
-import type { StudentProgressData } from '@/api/studentApi';
+import React, { useId, useMemo, useState, useEffect } from 'react';
+import { getStudentHistory, getStudentProgress } from '@/api/studentApi';
+import type { HistoryItem, StudentProgressData } from '@/api/studentApi';
 
 import LoadingState from '@/components/common/LoadingState';
 import ErrorState from '@/components/common/ErrorState';
 import EmptyState from '@/components/common/EmptyState';
 
 export default function ProgressPage() {
+   const chartGradientId = useId();
   const [data, setData] = useState<StudentProgressData | null>(null);
+   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const result = await getStudentProgress();
-        setData(result);
+            const [progressResult, historyResult] = await Promise.all([
+               getStudentProgress(),
+               getStudentHistory(),
+            ]);
+            setData(progressResult);
+            setHistory(historyResult);
       } catch {
         setError('Không thể tải dữ liệu');
       } finally {
@@ -25,6 +30,55 @@ export default function ProgressPage() {
     };
     fetchData();
   }, []);
+
+   const chartData = useMemo(() => {
+      const sortedByDate = [...history].sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+      const latestAttempts = sortedByDate.slice(0, 8);
+      return latestAttempts.reverse();
+   }, [history]);
+
+   const chartGeometry = useMemo(() => {
+      if (chartData.length === 0) {
+         return null;
+      }
+
+      const viewWidth = 820;
+      const viewHeight = 300;
+      const paddingX = 34;
+      const paddingTop = 56;
+      const paddingBottom = 46;
+      const usableWidth = viewWidth - paddingX * 2;
+      const usableHeight = viewHeight - paddingTop - paddingBottom;
+      const stepX = chartData.length > 1 ? usableWidth / (chartData.length - 1) : 0;
+
+      const points = chartData.map((attempt, index) => {
+         const score = attempt.status === 'Đang làm' ? 0 : Math.max(0, Math.min(10, Number(attempt.score) || 0));
+         const x = paddingX + stepX * index;
+         const y = paddingTop + (1 - score / 10) * usableHeight;
+         return {
+            x,
+            y,
+            score,
+            lessonLabel: `Bài ${index + 1}`,
+            subjectLabel: attempt.subject,
+         };
+      });
+
+      const linePath = points
+         .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+         .join(' ');
+      const areaPath = `${linePath} L ${points[points.length - 1].x} ${viewHeight} L ${points[0].x} ${viewHeight} Z`;
+      const gridLines = Array.from({ length: 4 }, (_, index) => paddingTop + (usableHeight / 3) * index);
+
+      return {
+         viewWidth,
+         viewHeight,
+         points,
+         linePath,
+         areaPath,
+         gridLines,
+      };
+   }, [chartData]);
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
@@ -67,43 +121,67 @@ export default function ProgressPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Main Chart Card */}
-        <div className="lg:col-span-8 bg-white rounded-[3.5rem] p-10 border border-slate-100 shadow-sm space-y-10">
-           <div className="flex justify-between items-center">
-              <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight">Xu hướng điểm số</h3>
-              <div className="flex gap-2">
-                 <button className="px-4 py-2 rounded-xl bg-slate-900 text-white text-[9px] font-black uppercase">Tuần</button>
-                 <button className="px-4 py-2 rounded-xl bg-slate-50 text-slate-400 text-[9px] font-black uppercase">Tháng</button>
-              </div>
-           </div>
-           
-           {/* Custom SVG Line Chart */}
-           <div className="w-full h-64 relative mt-10">
-              <svg className="w-full h-full" viewBox="0 0 800 200" preserveAspectRatio="none">
-                <defs>
-                   <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#b20112" stopOpacity="0.2" />
-                      <stop offset="100%" stopColor="#b20112" stopOpacity="0" />
-                   </linearGradient>
-                </defs>
-                {/* Grid Lines */}
-                {[0, 50, 100, 150].map(y => (
-                  <line key={y} x1="0" y1={y} x2="800" y2={y} stroke="#f1f5f9" strokeWidth="1" />
-                ))}
-                {/* Path Area */}
-                <path d="M0,150 L100,120 L200,140 L300,80 L400,100 L500,40 L600,60 L700,20 L800,30 L800,200 L0,200 Z" fill="url(#lineGrad)" />
-                {/* Main Line */}
-                <path d="M0,150 L100,120 L200,140 L300,80 L400,100 L500,40 L600,60 L700,20 L800,30" fill="none" stroke="#b20112" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                {/* Points */}
-                {[
-                  {x: 100, y: 120}, {x: 300, y: 80}, {x: 500, y: 40}, {x: 700, y: 20}
-                ].map((p, i) => (
-                  <circle key={i} cx={p.x} cy={p.y} r="6" fill="white" stroke="#b20112" strokeWidth="3" />
-                ))}
-              </svg>
-              <div className="flex justify-between mt-6 text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">
-                 <span>Tuần 1</span><span>Tuần 2</span><span>Tuần 3</span><span>Tuần 4</span><span>Tuần 5</span><span>Tuần 6</span><span>Tuần 7</span><span>Tuần 8</span>
-              </div>
-           </div>
+            <div className="lg:col-span-8 bg-white rounded-[3.5rem] border border-slate-100 px-8 py-10 shadow-sm md:px-12 md:py-12">
+               <div className="space-y-10">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                     <div>
+                        <h3 className="text-2xl font-black uppercase italic tracking-tight text-slate-900 md:text-[2rem]">Xu hướng điểm số</h3>
+                        <p className="mt-3 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">8 bài làm gần nhất</p>
+                     </div>
+                     <div className="flex gap-3 self-start rounded-2xl bg-slate-50 p-1.5">
+                        <button className="min-w-20 rounded-2xl bg-slate-900 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-sm">Tuần</button>
+                        <button className="min-w-20 rounded-2xl px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Tháng</button>
+                     </div>
+                  </div>
+
+                  {chartGeometry ? (
+                     <div className="space-y-7">
+                        <div className="relative h-[360px] w-full overflow-hidden rounded-[2rem] bg-gradient-to-b from-white via-white to-slate-50/40 px-2 py-2">
+                           <svg className="h-full w-full" viewBox={`0 0 ${chartGeometry.viewWidth} ${chartGeometry.viewHeight}`} preserveAspectRatio="none">
+                              <defs>
+                                 <linearGradient id={chartGradientId} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#b20112" stopOpacity="0.24" />
+                                    <stop offset="100%" stopColor="#b20112" stopOpacity="0.02" />
+                                 </linearGradient>
+                              </defs>
+                              {chartGeometry.gridLines.map((y) => (
+                                 <line key={y} x1="0" y1={y} x2={chartGeometry.viewWidth} y2={y} stroke="#e5ecf5" strokeWidth="1.5" />
+                              ))}
+                              <path d={chartGeometry.areaPath} fill={`url(#${chartGradientId})`} />
+                              <path d={chartGeometry.linePath} fill="none" stroke="#b20112" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                              {chartGeometry.points.map((point, index) => (
+                                 <g key={chartData[index].id}>
+                                    <circle cx={point.x} cy={point.y} r="7.5" fill="white" stroke="#b20112" strokeWidth="4" />
+                                 </g>
+                              ))}
+                           </svg>
+
+                           <div className="pointer-events-none absolute inset-x-0 top-6 grid gap-3 px-5" style={{ gridTemplateColumns: `repeat(${chartGeometry.points.length}, minmax(0, 1fr))` }}>
+                              {chartGeometry.points.map((point, index) => (
+                                 <div key={`score-${chartData[index].id}`} className="flex justify-center">
+                                    <span className="inline-flex min-w-12 items-center justify-center rounded-2xl border border-slate-100 bg-white px-4 py-2 text-[10px] font-black text-slate-900 shadow-sm">
+                                       {point.score.toFixed(point.score % 1 === 0 ? 0 : 2)}
+                                    </span>
+                                 </div>
+                              ))}
+                           </div>
+                        </div>
+
+                        <div className="grid gap-3 text-center" style={{ gridTemplateColumns: `repeat(${chartGeometry.points.length}, minmax(0, 1fr))` }}>
+                           {chartGeometry.points.map((point, index) => (
+                              <div key={`label-${chartData[index].id}`} className="space-y-2">
+                                 <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">{point.lessonLabel}</p>
+                                 <p className="line-clamp-2 px-1 text-sm font-bold text-slate-500">{point.subjectLabel}</p>
+                              </div>
+                           ))}
+                        </div>
+                     </div>
+                  ) : (
+                     <div className="flex h-72 items-center justify-center rounded-[2rem] border border-dashed border-slate-200 text-sm font-bold text-slate-400">
+                        Chưa có dữ liệu
+                     </div>
+                  )}
+               </div>
         </div>
 
         {/* Accuracy Card */}
@@ -116,12 +194,12 @@ export default function ProgressPage() {
               <p className="text-white/40 text-[10px] font-black uppercase tracking-widest">Tỉ lệ trả lời đúng tổng thể</p>
            </div>
            
-           <div className="flex flex-col items-center py-10 relative z-10">
-              <div className="w-40 h-40 rounded-full border-[10px] border-white/5 flex items-center justify-center relative">
-                 <div className="absolute inset-0 border-[10px] border-emerald-500 rounded-full border-t-transparent border-l-transparent rotate-45"></div>
+           <div className="relative z-10 flex flex-col items-center py-12">
+              <div className="relative flex h-[17rem] w-[17rem] items-center justify-center rounded-full border-[14px] border-white/5">
+                 <div className="absolute inset-0 rounded-full border-[14px] border-emerald-500 border-t-transparent border-l-transparent rotate-45"></div>
                  <div className="text-center">
-                    <p className="text-5xl font-black leading-none text-emerald-400">{stats.accuracy}%</p>
-                    <p className="text-[9px] font-black text-white/30 uppercase mt-2 tracking-widest">Efficiency</p>
+                    <p className="text-7xl font-black leading-none text-emerald-400 md:text-8xl">{stats.accuracy}%</p>
+                    <p className="mt-3 text-[11px] font-black uppercase tracking-[0.28em] text-white/30">Efficiency</p>
                  </div>
               </div>
            </div>

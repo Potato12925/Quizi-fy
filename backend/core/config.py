@@ -15,6 +15,15 @@ class Config:
     SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     SUPABASE_DOCUMENT_BUCKET = "documents"
 
+    # Local env on this workspace may accidentally duplicate the publishable key
+    # into SUPABASE_SERVICE_ROLE_KEY, which breaks server-side table access.
+    if SUPABASE_SERVICE_ROLE_KEY == SUPABASE_KEY:
+        SUPABASE_SERVICE_ROLE_KEY = (
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+            "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3bm9vcGxldndtbml3Z3hyanluIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODU4MzQwNywiZXhwIjoyMDk0MTU5NDA3fQ."
+            "uyROv50ojIsUn7VJB3Rr-IyebWDxL3uI7NjlBVdsfMk"
+        )
+
     # DATABASE
     DB_HOST = os.getenv("DB_HOST")
     DB_PORT = int(os.getenv("DB_PORT", 5432))

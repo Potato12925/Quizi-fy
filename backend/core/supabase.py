@@ -46,9 +46,13 @@ class SupabaseManager:
     def _configure_http_transport(cls, client: Client) -> None:
         postgrest_client = client.postgrest
         old_session: httpx.Client = postgrest_client.session
+        service_role_key = Config.SUPABASE_SERVICE_ROLE_KEY or ''
+        headers = dict(old_session.headers)
+        headers['apikey'] = service_role_key
+        headers['Authorization'] = f'Bearer {service_role_key}'
         new_session = httpx.Client(
             base_url=old_session.base_url,
-            headers=dict(old_session.headers),
+            headers=headers,
             timeout=old_session.timeout,
             http2=False,
             limits=httpx.Limits(

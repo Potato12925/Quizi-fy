@@ -47,7 +47,9 @@ async def post_login(payload: UsernamePasswordLoginRequest):
             error_code="AUTH_SERVICE_MISCONFIGURED",
         )
 
-    except Exception:
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
         return error_response(
             message="Unable to login",
             status_code=500,

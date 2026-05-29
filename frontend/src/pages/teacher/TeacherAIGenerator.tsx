@@ -191,21 +191,26 @@ export default function TeacherAIGeneratorPage() {
     }
   };
 
-  const loadTopicsBySubject = async (nextSubjectId: number) => {
+  const loadTopicsBySubject = async (nextSubjectId: number): Promise<TeacherTopicItem[]> => {
     setLoadingTopics(true);
     try {
       const rows = await getTeacherTopicsBySubjectId(nextSubjectId);
       setTopics(rows);
+      return rows;
     } finally {
       setLoadingTopics(false);
     }
   };
 
-  const loadDocumentsByTopic = async (nextSubjectId: number, nextTopicId: number) => {
+  const loadDocumentsByTopic = async (
+    nextSubjectId: number,
+    nextTopicId: number,
+  ): Promise<TeacherDocumentTopicOption[]> => {
     setLoadingDocuments(true);
     try {
       const rows = await getTeacherDocumentsBySubjectTopic(nextSubjectId, nextTopicId);
       setDocuments(rows);
+      return rows;
     } finally {
       setLoadingDocuments(false);
     }
@@ -329,7 +334,13 @@ export default function TeacherAIGeneratorPage() {
     setDocumentId(null);
     setTopics([]);
     setDocuments([]);
-    await loadTopicsBySubject(nextSubjectId);
+    const nextTopics = await loadTopicsBySubject(nextSubjectId);
+    const defaultTopicId = nextTopics[0]?.topic_id ?? null;
+    setTopicId(defaultTopicId);
+    if (!defaultTopicId) return;
+
+    const nextDocuments = await loadDocumentsByTopic(nextSubjectId, defaultTopicId);
+    setDocumentId(nextDocuments[0]?.document_id ?? null);
   };
 
   const handleTopicChange = async (nextTopicId: number) => {
@@ -338,7 +349,8 @@ export default function TeacherAIGeneratorPage() {
     setDocumentId(null);
     setDocuments([]);
     if (!subjectId) return;
-    await loadDocumentsByTopic(subjectId, nextTopicId);
+    const nextDocuments = await loadDocumentsByTopic(subjectId, nextTopicId);
+    setDocumentId(nextDocuments[0]?.document_id ?? null);
   };
 
   const handleCreateRequest = async (event: React.FormEvent) => {

@@ -9,7 +9,9 @@ from schemas.report_schema import ReportQueryParams, TopicCoverageQueryParams
 from services.report_service import (
     ReportAuthorizationError,
     ReportValidationError,
+    export_class_summary_report,
     export_report_data,
+    get_class_summary_report,
     get_ai_summary_report,
     get_dashboard_report,
     get_data_quality_report,
@@ -407,6 +409,7 @@ async def get_data_quality_report_route(
 async def export_report_route(
     report_key: str,
     format: str = Query(...),
+    class_id: int | None = Query(default=None, ge=1),
     search: str | None = Query(default=None),
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc"),
@@ -421,6 +424,19 @@ async def export_report_route(
     current_user: CurrentUser = Depends(require_roles("admin", "teacher")),
 ):
     try:
+        if report_key == "class-summary":
+            if class_id is None:
+                raise ReportValidationError("class_id is required")
+            file_bytes, media_type, filename = await export_class_summary_report(
+                current_user=current_user,
+                class_id=class_id,
+                export_format=format,
+                date_from=date_from,
+                date_to=date_to,
+            )
+            headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+            return StreamingResponse(io.BytesIO(file_bytes), media_type=media_type, headers=headers)
+
         params = _build_common_params(
             page=1,
             limit=200,
@@ -452,3 +468,54 @@ async def export_report_route(
         return error_response(message=str(exc), status_code=500, error_code="REPORT_EXPORT_DEPENDENCY_MISSING")
     except Exception:
         return error_response(message="Unable to export report", status_code=500, error_code="REPORT_EXPORT_FAILED")
+
+
+@router.get("/class-summary", summary="Get class summary report")
+async def get_class_summary_report_route(
+    class_id: int = Query(..., ge=1),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    current_user: CurrentUser = Depends(require_roles("admin")),
+):
+    try:
+        result = await get_class_summary_report(
+            current_user=current_user,
+            class_id=class_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        return success_response(data=result, message="Class summary report loaded successfully", status_code=200)
+    except ReportAuthorizationError as exc:
+        return error_response(message=str(exc), status_code=403, error_code="REPORT_FORBIDDEN")
+    except ReportValidationError as exc:
+        return error_response(message=str(exc), status_code=400, error_code="REPORT_INVALID")
+    except Exception:
+        return error_response(message="Unable to load class summary report", status_code=500, error_code="REPORT_CLASS_SUMMARY_FAILED")
+
+
+@router.get("/class-summary/export", summary="Export class summary report")
+async def export_class_summary_report_route(
+    class_id: int = Query(..., ge=1),
+    format: str = Query(...),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    current_user: CurrentUser = Depends(require_roles("admin")),
+):
+    try:
+        file_bytes, media_type, filename = await export_class_summary_report(
+            current_user=current_user,
+            class_id=class_id,
+            export_format=format,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        return StreamingResponse(io.BytesIO(file_bytes), media_type=media_type, headers=headers)
+    except ReportAuthorizationError as exc:
+        return error_response(message=str(exc), status_code=403, error_code="REPORT_FORBIDDEN")
+    except ReportValidationError as exc:
+        return error_response(message=str(exc), status_code=400, error_code="REPORT_INVALID")
+    except RuntimeError as exc:
+        return error_response(message=str(exc), status_code=500, error_code="REPORT_EXPORT_DEPENDENCY_MISSING")
+    except Exception:
+        return error_response(message="Unable to export class summary report", status_code=500, error_code="REPORT_CLASS_SUMMARY_EXPORT_FAILED")

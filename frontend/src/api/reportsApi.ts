@@ -107,6 +107,7 @@ export interface ReportQueryParams {
   date_from?: string;
   date_to?: string;
   min_questions?: number;
+  class_id?: number;
 }
 
 export type ReportKey =
@@ -118,6 +119,62 @@ export type ReportKey =
   | 'data-quality';
 
 export type ExportFormat = 'csv' | 'xlsx' | 'pdf';
+export type ClassReportExportFormat = 'docx' | 'pdf';
+
+export interface ClassSummaryInfo {
+  class_id: number;
+  class_code: string;
+  class_name: string;
+  status: string;
+  teacher_name: string;
+  student_count: number;
+  teacher_count: number;
+  subject_count: number;
+}
+
+export interface ClassSummaryStudent {
+  student_id: number;
+  full_name: string;
+  username: string;
+  joined_at: string | null;
+}
+
+export interface ClassSummaryTeacher {
+  teacher_id: number;
+  teacher_name: string;
+  username: string;
+  role: string;
+}
+
+export interface ClassSummarySubject {
+  subject_id: number;
+  subject_code: string;
+  subject_name: string;
+  assigned_teacher_name: string;
+}
+
+export interface ClassSummaryLearningResult {
+  student_id: number;
+  student_name: string;
+  username: string;
+  attempt_count: number;
+  average_score: number | null;
+  total_correct: number;
+  total_wrong: number;
+  latest_submitted_at: string | null;
+}
+
+export interface ClassSummaryReportData {
+  class_info: ClassSummaryInfo;
+  students: ClassSummaryStudent[];
+  teachers: ClassSummaryTeacher[];
+  subjects: ClassSummarySubject[];
+  learning_results: ClassSummaryLearningResult[];
+  summary: {
+    total_attempts: number;
+    students_with_attempts: number;
+  };
+}
 
 const toParamRecord = (params: ReportQueryParams = {}): Record<string, string> => {
   const entries: Array<[string, string]> = [];
@@ -197,6 +254,55 @@ export const downloadReportExport = async (
   const contentDisposition = response.headers.get('content-disposition') || '';
   const matched = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
   const defaultFileName = `${reportKey}.${format}`;
+  const fileName = matched?.[1] || defaultFileName;
+
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+export const getClassSummaryReport = async (params: {
+  class_id: number;
+  date_from?: string;
+  date_to?: string;
+}): Promise<ClassSummaryReportData> => {
+  const response = await api.get<BackendSuccessEnvelope<ClassSummaryReportData>>('/reports/class-summary', {
+    params: toParamRecord(params as any),
+  });
+  return response.data;
+};
+
+export const downloadClassSummaryExport = async (
+  classId: number,
+  format: ClassReportExportFormat,
+  params: { date_from?: string; date_to?: string } = {},
+): Promise<void> => {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+  const token = localStorage.getItem('accessToken');
+  const query = new URLSearchParams({
+    class_id: String(classId),
+    format,
+    ...toParamRecord(params),
+  });
+
+  const response = await fetch(`${API_BASE_URL}/reports/class-summary/export?${query.toString()}`, {
+    method: 'GET',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!response.ok) {
+    throw new Error('Không thể xuất báo cáo lớp');
+  }
+
+  const blob = await response.blob();
+  const contentDisposition = response.headers.get('content-disposition') || '';
+  const matched = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
+  const defaultFileName = `bao-cao-lop-${classId}.${format}`;
   const fileName = matched?.[1] || defaultFileName;
 
   const url = window.URL.createObjectURL(blob);

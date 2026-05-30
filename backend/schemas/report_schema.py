@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 SortOrder = Literal["asc", "desc"]
 ExportFormat = Literal["csv", "xlsx", "pdf"]
+ClassReportExportFormat = Literal["docx", "pdf"]
 QuestionStatus = Literal["draft", "approved", "inactive", "rejected"]
 QuestionDifficulty = Literal["easy", "medium", "hard"]
 QuestionSource = Literal["ai", "manual"]
@@ -63,6 +64,26 @@ class TopicCoverageQueryParams(ReportQueryParams):
 
 class ExportQueryParams(BaseModel):
     format: ExportFormat
+
+
+class ClassReportQueryParams(BaseModel):
+    class_id: int = Field(ge=1)
+    date_from: str | None = None
+    date_to: str | None = None
+
+    @field_validator("date_from", "date_to")
+    @classmethod
+    def validate_report_date(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise ValueError("date_from/date_to must be valid ISO datetime strings") from exc
+        return normalized
 
 
 class FilterOptionItem(BaseModel):

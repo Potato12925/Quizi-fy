@@ -156,6 +156,84 @@ async def list_class_student_counts(class_ids: list[int]) -> dict[int, int]:
     return dict(counts)
 
 
+async def list_class_students_by_class_id(class_id: int) -> list[dict]:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("class_students")
+        .select("class_student_id,class_id,student_id,joined_at,deleted_at")
+        .eq("class_id", class_id)
+        .is_("deleted_at", None)
+        .order("class_student_id")
+        .execute()
+    )
+    return response.data or []
+
+
+async def list_class_teachers_by_class_id(class_id: int) -> list[dict]:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("class_teachers")
+        .select("class_teacher_id,class_id,teacher_id,joined_at,deleted_at")
+        .eq("class_id", class_id)
+        .is_("deleted_at", None)
+        .order("class_teacher_id")
+        .execute()
+    )
+    return response.data or []
+
+
+async def list_class_subjects_by_class_id(class_id: int) -> list[dict]:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("class_subjects")
+        .select("class_subject_id,class_id,subject_id,assigned_teacher_id,status,created_at,updated_at,deleted_at")
+        .eq("class_id", class_id)
+        .eq("status", "active")
+        .is_("deleted_at", None)
+        .order("class_subject_id")
+        .execute()
+    )
+    return response.data or []
+
+
+async def list_practice_sets_by_student_ids(student_ids: list[int]) -> list[dict]:
+    if not student_ids:
+        return []
+
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("practice_sets")
+        .select("practice_set_id,student_id,subject_id,created_at")
+        .in_("student_id", student_ids)
+        .execute()
+    )
+    return response.data or []
+
+
+async def list_submitted_practice_attempts_by_set_ids(
+    practice_set_ids: list[int],
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict]:
+    if not practice_set_ids:
+        return []
+
+    supabase = SupabaseManager.get_client()
+    query = (
+        supabase.table("practice_attempts")
+        .select("attempt_id,practice_set_id,submitted_at,score,total_correct,total_wrong,status")
+        .in_("practice_set_id", practice_set_ids)
+        .eq("status", "submitted")
+    )
+    if date_from:
+        query = query.gte("submitted_at", date_from)
+    if date_to:
+        query = query.lte("submitted_at", date_to)
+
+    response = await asyncio.to_thread(lambda: query.order("submitted_at", desc=True).execute())
+    return response.data or []
+
+
 async def list_documents(
     teacher_id: int | None = None,
     document_ids: list[int] | None = None,

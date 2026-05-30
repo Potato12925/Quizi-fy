@@ -64,6 +64,7 @@ python-multipart==0.0.29
 pypdf==6.12.2
 realtime==2.30.0
 redis==7.4.0
+reportlab==4.4.4
 requests==2.34.0
 rich==14.3.4
 setuptools==82.0.1

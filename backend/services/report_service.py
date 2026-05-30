@@ -1,9 +1,11 @@
 import csv
 import io
 import json
+import os
 from collections import Counter, defaultdict
 from datetime import datetime
 from math import ceil
+from typing import Any
 
 from middlewares.auth_middleware import CurrentUser
 from repositories.report_repository import (
@@ -12,16 +14,26 @@ from repositories.report_repository import (
     list_active_users,
     list_ai_requests,
     list_class_student_counts,
+    list_class_students_by_class_id,
+    list_class_subjects_by_class_id,
+    list_class_teachers_by_class_id,
     list_classes,
     list_document_topics,
     list_documents,
+    list_practice_sets_by_student_ids,
     list_question_options,
     list_questions,
+    list_submitted_practice_attempts_by_set_ids,
     list_teacher_assigned_subject_ids,
     list_user_roles,
     list_users_by_ids,
 )
 from schemas.report_schema import ReportFilterOptions, ReportQueryParams, TopicCoverageQueryParams
+
+try:
+    from docx import Document
+except ImportError:  # pragma: no cover
+    Document = None
 
 try:
     from openpyxl import Workbook
@@ -32,12 +44,16 @@ try:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 except ImportError:  # pragma: no cover
     colors = None
     landscape = None
     A4 = None
     getSampleStyleSheet = None
+    pdfmetrics = None
+    TTFont = None
     Paragraph = None
     SimpleDocTemplate = None
     Spacer = None
@@ -51,6 +67,9 @@ class ReportValidationError(ValueError):
 
 class ReportAuthorizationError(ValueError):
     pass
+
+
+_PDF_FONT_CACHE: tuple[str, str] | None = None
 
 
 ALLOWED_SORT_FIELDS = {
@@ -1610,6 +1629,9 @@ def _rows_to_pdf_bytes(title: str, rows: list[dict]) -> bytes:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4))
     styles = getSampleStyleSheet()
+    normal_font, bold_font = _resolve_pdf_fonts()
+    styles["Normal"].fontName = normal_font
+    styles["Title"].fontName = bold_font
 
     story = [Paragraph(title, styles["Title"]), Spacer(1, 12)]
 
@@ -1632,6 +1654,8 @@ def _rows_to_pdf_bytes(title: str, rows: list[dict]) -> bytes:
                 [
                     ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#9B0F06")),
                     ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), bold_font),
+                    ("FONTNAME", (0, 1), (-1, -1), normal_font),
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
                     ("FONTSIZE", (0, 0), (-1, -1), 8),
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -1642,6 +1666,421 @@ def _rows_to_pdf_bytes(title: str, rows: list[dict]) -> bytes:
 
     doc.build(story)
     return buffer.getvalue()
+
+
+def _resolve_pdf_fonts() -> tuple[str, str]:
+    global _PDF_FONT_CACHE
+    if _PDF_FONT_CACHE is not None:
+        return _PDF_FONT_CACHE
+
+    if pdfmetrics is None or TTFont is None:
+        _PDF_FONT_CACHE = ("Helvetica", "Helvetica-Bold")
+        return _PDF_FONT_CACHE
+
+    candidates = [
+        ("ArialUnicode", "ArialUnicodeBold", "C:\\Windows\\Fonts\\arial.ttf", "C:\\Windows\\Fonts\\arialbd.ttf"),
+        ("DejaVuSans", "DejaVuSansBold", "C:\\Windows\\Fonts\\DejaVuSans.ttf", "C:\\Windows\\Fonts\\DejaVuSans-Bold.ttf"),
+    ]
+    for normal_name, bold_name, normal_path, bold_path in candidates:
+        if os.path.exists(normal_path) and os.path.exists(bold_path):
+            if normal_name not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(TTFont(normal_name, normal_path))
+            if bold_name not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(TTFont(bold_name, bold_path))
+            _PDF_FONT_CACHE = (normal_name, bold_name)
+            return _PDF_FONT_CACHE
+
+    _PDF_FONT_CACHE = ("Helvetica", "Helvetica-Bold")
+    return _PDF_FONT_CACHE
+
+
+def _vn_fallback(value: Any) -> str:
+    if value is None:
+        return "Chưa có dữ liệu"
+    text = str(value).strip()
+    return text if text else "Chưa có dữ liệu"
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+async def _build_class_report_payload(current_user: CurrentUser, class_id: int, date_from: str | None, date_to: str | None) -> dict:
+    if not _is_admin(current_user):
+        raise ReportAuthorizationError("Only admin can access class reports")
+
+    class_rows = await list_classes()
+    class_row = next((item for item in class_rows if _to_int(item.get("class_id")) == class_id), None)
+    if not class_row or class_row.get("deleted_at") is not None:
+        raise ReportValidationError("Class not found")
+
+    user_map, _ = await _load_users_and_roles()
+    subject_rows = await list_active_subjects()
+    subject_map = {_to_int(item.get("subject_id")): item for item in subject_rows}
+
+    students = await list_class_students_by_class_id(class_id)
+    student_ids = sorted({_to_int(item.get("student_id")) for item in students if item.get("student_id") is not None})
+
+    class_subjects = await list_class_subjects_by_class_id(class_id)
+    class_teachers = await list_class_teachers_by_class_id(class_id)
+
+    teacher_ids = {_to_int(class_row.get("teacher_id"))}
+    teacher_ids.update({_to_int(item.get("teacher_id")) for item in class_teachers if item.get("teacher_id") is not None})
+    teacher_ids.update(
+        {
+            _to_int(item.get("assigned_teacher_id"))
+            for item in class_subjects
+            if item.get("assigned_teacher_id") is not None
+        }
+    )
+    teacher_ids = {item for item in teacher_ids if item > 0}
+
+    teachers = []
+    for teacher_id in sorted(teacher_ids):
+        teacher = user_map.get(teacher_id) or {}
+        teacher_role = "Giáo viên"
+        if teacher_id == _to_int(class_row.get("teacher_id")):
+            teacher_role = "Giáo viên chủ nhiệm"
+        teachers.append(
+            {
+                "teacher_id": teacher_id,
+                "teacher_name": _vn_fallback(teacher.get("full_name") or teacher.get("username")),
+                "username": _vn_fallback(teacher.get("username")),
+                "role": teacher_role,
+            }
+        )
+
+    subjects = []
+    for item in class_subjects:
+        subject = subject_map.get(_to_int(item.get("subject_id"))) or {}
+        assigned_teacher = user_map.get(_to_int(item.get("assigned_teacher_id"))) or {}
+        subjects.append(
+            {
+                "subject_id": _to_int(item.get("subject_id")),
+                "subject_code": _vn_fallback(subject.get("subject_code")),
+                "subject_name": _vn_fallback(subject.get("subject_name")),
+                "assigned_teacher_name": _vn_fallback(assigned_teacher.get("full_name") or assigned_teacher.get("username")),
+            }
+        )
+
+    student_rows = []
+    for item in students:
+        student = user_map.get(_to_int(item.get("student_id"))) or {}
+        student_rows.append(
+            {
+                "student_id": _to_int(item.get("student_id")),
+                "full_name": _vn_fallback(student.get("full_name")),
+                "username": _vn_fallback(student.get("username")),
+                "joined_at": item.get("joined_at"),
+            }
+        )
+
+    practice_sets = await list_practice_sets_by_student_ids(student_ids)
+    subject_ids_in_class = {_to_int(item.get("subject_id")) for item in class_subjects}
+    filtered_sets = [item for item in practice_sets if _to_int(item.get("subject_id")) in subject_ids_in_class]
+    practice_set_ids = [_to_int(item.get("practice_set_id")) for item in filtered_sets]
+    attempts = await list_submitted_practice_attempts_by_set_ids(practice_set_ids, date_from=date_from, date_to=date_to)
+
+    set_by_id = {_to_int(item.get("practice_set_id")): item for item in filtered_sets}
+    stats_by_student: dict[int, dict] = defaultdict(
+        lambda: {
+            "attempt_count": 0,
+            "score_sum": 0.0,
+            "total_correct": 0,
+            "total_wrong": 0,
+            "latest_submitted_at": None,
+        }
+    )
+    for attempt in attempts:
+        practice_set = set_by_id.get(_to_int(attempt.get("practice_set_id")))
+        if not practice_set:
+            continue
+        student_id = _to_int(practice_set.get("student_id"))
+        if student_id <= 0:
+            continue
+        stat = stats_by_student[student_id]
+        stat["attempt_count"] += 1
+        stat["score_sum"] += _safe_float(attempt.get("score"))
+        stat["total_correct"] += _to_int(attempt.get("total_correct"))
+        stat["total_wrong"] += _to_int(attempt.get("total_wrong"))
+        submitted_at = attempt.get("submitted_at")
+        if submitted_at and (not stat["latest_submitted_at"] or str(submitted_at) > str(stat["latest_submitted_at"])):
+            stat["latest_submitted_at"] = submitted_at
+
+    learning_results = []
+    for student in student_rows:
+        student_id = _to_int(student.get("student_id"))
+        stat = stats_by_student.get(student_id, {})
+        attempt_count = _to_int(stat.get("attempt_count"))
+        avg_score = round((_safe_float(stat.get("score_sum")) / attempt_count), 2) if attempt_count > 0 else None
+        learning_results.append(
+            {
+                "student_id": student_id,
+                "student_name": student.get("full_name"),
+                "username": student.get("username"),
+                "attempt_count": attempt_count,
+                "average_score": avg_score,
+                "total_correct": _to_int(stat.get("total_correct")),
+                "total_wrong": _to_int(stat.get("total_wrong")),
+                "latest_submitted_at": stat.get("latest_submitted_at"),
+            }
+        )
+
+    learning_results.sort(key=lambda item: str(item.get("student_name") or ""))
+
+    homeroom_teacher = user_map.get(_to_int(class_row.get("teacher_id"))) or {}
+    class_info = {
+        "class_id": class_id,
+        "class_code": _vn_fallback(class_row.get("class_code")),
+        "class_name": _vn_fallback(class_row.get("class_name")),
+        "status": "Hoạt động" if str(class_row.get("status") or "").lower() == "active" else "Tạm khóa",
+        "teacher_name": _vn_fallback(homeroom_teacher.get("full_name") or homeroom_teacher.get("username")),
+        "student_count": len(student_rows),
+        "teacher_count": len(teachers),
+        "subject_count": len(subjects),
+    }
+
+    return {
+        "class_info": class_info,
+        "students": student_rows,
+        "teachers": teachers,
+        "subjects": subjects,
+        "learning_results": learning_results,
+        "summary": {
+            "total_attempts": sum(_to_int(item.get("attempt_count")) for item in learning_results),
+            "students_with_attempts": sum(1 for item in learning_results if _to_int(item.get("attempt_count")) > 0),
+        },
+    }
+
+
+async def get_class_summary_report(
+    current_user: CurrentUser,
+    class_id: int,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> dict:
+    return await _build_class_report_payload(
+        current_user=current_user,
+        class_id=class_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+def _append_docx_table(document: Any, title: str, headers: list[str], rows: list[list[Any]]) -> None:
+    document.add_heading(title, level=2)
+    if not rows:
+        document.add_paragraph("Chưa có dữ liệu")
+        return
+    table = document.add_table(rows=1, cols=len(headers))
+    table.style = "Table Grid"
+    for index, header in enumerate(headers):
+        table.rows[0].cells[index].text = header
+    for row in rows:
+        cells = table.add_row().cells
+        for index, value in enumerate(row):
+            cells[index].text = _vn_fallback(value)
+
+
+def _class_report_to_docx_bytes(report: dict) -> bytes:
+    if Document is None:
+        raise RuntimeError("python-docx is required for docx export")
+
+    document = Document()
+    document.add_heading("BÁO CÁO LỚP HỌC", level=1)
+    document.add_paragraph(f"Ngày xuất báo cáo: {datetime.utcnow().strftime('%d/%m/%Y %H:%M:%S')}")
+
+    class_info = report.get("class_info") or {}
+    document.add_heading("1. Thông tin lớp", level=2)
+    document.add_paragraph(f"Mã lớp: {_vn_fallback(class_info.get('class_code'))}")
+    document.add_paragraph(f"Tên lớp: {_vn_fallback(class_info.get('class_name'))}")
+    document.add_paragraph(f"Trạng thái: {_vn_fallback(class_info.get('status'))}")
+    document.add_paragraph(f"Giáo viên chủ nhiệm: {_vn_fallback(class_info.get('teacher_name'))}")
+    document.add_paragraph(
+        f"Sĩ số: {_vn_fallback(class_info.get('student_count'))} | "
+        f"Số giáo viên: {_vn_fallback(class_info.get('teacher_count'))} | "
+        f"Số môn học: {_vn_fallback(class_info.get('subject_count'))}"
+    )
+
+    _append_docx_table(
+        document,
+        "2. Danh sách học sinh",
+        ["Mã học sinh", "Họ và tên", "Tên đăng nhập", "Ngày vào lớp"],
+        [
+            [item.get("student_id"), item.get("full_name"), item.get("username"), item.get("joined_at")]
+            for item in (report.get("students") or [])
+        ],
+    )
+    _append_docx_table(
+        document,
+        "3. Danh sách giáo viên",
+        ["Mã giáo viên", "Họ và tên", "Tên đăng nhập", "Vai trò"],
+        [
+            [item.get("teacher_id"), item.get("teacher_name"), item.get("username"), item.get("role")]
+            for item in (report.get("teachers") or [])
+        ],
+    )
+    _append_docx_table(
+        document,
+        "4. Danh sách môn học",
+        ["Mã môn", "Tên môn", "Giáo viên phụ trách"],
+        [
+            [item.get("subject_code"), item.get("subject_name"), item.get("assigned_teacher_name")]
+            for item in (report.get("subjects") or [])
+        ],
+    )
+    _append_docx_table(
+        document,
+        "5. Kết quả học tập / luyện tập",
+        ["Mã HS", "Họ và tên", "Số lượt nộp", "Điểm TB", "Tổng đúng", "Tổng sai", "Lần nộp gần nhất"],
+        [
+            [
+                item.get("student_id"),
+                item.get("student_name"),
+                item.get("attempt_count"),
+                item.get("average_score"),
+                item.get("total_correct"),
+                item.get("total_wrong"),
+                item.get("latest_submitted_at"),
+            ]
+            for item in (report.get("learning_results") or [])
+        ],
+    )
+
+    summary = report.get("summary") or {}
+    document.add_heading("6. Nhận xét tổng quan", level=2)
+    document.add_paragraph(f"Tổng số lượt nộp bài: {_vn_fallback(summary.get('total_attempts'))}")
+    document.add_paragraph(f"Số học sinh đã có kết quả: {_vn_fallback(summary.get('students_with_attempts'))}")
+
+    buffer = io.BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
+def _class_report_to_pdf_bytes(report: dict) -> bytes:
+    if SimpleDocTemplate is None:
+        raise RuntimeError("reportlab is required for pdf export")
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    normal_font, bold_font = _resolve_pdf_fonts()
+    styles["Normal"].fontName = normal_font
+    styles["Heading2"].fontName = bold_font
+    styles["Title"].fontName = bold_font
+    story = [
+        Paragraph("BÁO CÁO LỚP HỌC", styles["Title"]),
+        Paragraph(f"Ngày xuất báo cáo: {datetime.utcnow().strftime('%d/%m/%Y %H:%M:%S')}", styles["Normal"]),
+        Spacer(1, 12),
+    ]
+
+    class_info = report.get("class_info") or {}
+    story.append(Paragraph("1. Thông tin lớp", styles["Heading2"]))
+    story.append(Paragraph(f"Mã lớp: {_vn_fallback(class_info.get('class_code'))}", styles["Normal"]))
+    story.append(Paragraph(f"Tên lớp: {_vn_fallback(class_info.get('class_name'))}", styles["Normal"]))
+    story.append(Paragraph(f"Trạng thái: {_vn_fallback(class_info.get('status'))}", styles["Normal"]))
+    story.append(Paragraph(f"Giáo viên chủ nhiệm: {_vn_fallback(class_info.get('teacher_name'))}", styles["Normal"]))
+    story.append(Spacer(1, 10))
+
+    def add_table_section(title: str, headers: list[str], rows: list[list[Any]]) -> None:
+        story.append(Paragraph(title, styles["Heading2"]))
+        if not rows:
+            story.append(Paragraph("Chưa có dữ liệu", styles["Normal"]))
+            story.append(Spacer(1, 8))
+            return
+        table_data = [headers] + [[_vn_fallback(cell) for cell in row] for row in rows]
+        table = Table(table_data, repeatRows=1)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#9B0F06")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), bold_font),
+                    ("FONTNAME", (0, 1), (-1, -1), normal_font),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ]
+            )
+        )
+        story.append(table)
+        story.append(Spacer(1, 10))
+
+    add_table_section(
+        "2. Danh sách học sinh",
+        ["Mã học sinh", "Họ và tên", "Tên đăng nhập", "Ngày vào lớp"],
+        [[item.get("student_id"), item.get("full_name"), item.get("username"), item.get("joined_at")] for item in (report.get("students") or [])],
+    )
+    add_table_section(
+        "3. Danh sách giáo viên",
+        ["Mã giáo viên", "Họ và tên", "Tên đăng nhập", "Vai trò"],
+        [[item.get("teacher_id"), item.get("teacher_name"), item.get("username"), item.get("role")] for item in (report.get("teachers") or [])],
+    )
+    add_table_section(
+        "4. Danh sách môn học",
+        ["Mã môn", "Tên môn", "Giáo viên phụ trách"],
+        [[item.get("subject_code"), item.get("subject_name"), item.get("assigned_teacher_name")] for item in (report.get("subjects") or [])],
+    )
+    add_table_section(
+        "5. Kết quả học tập / luyện tập",
+        ["Mã HS", "Họ và tên", "Số lượt nộp", "Điểm TB", "Tổng đúng", "Tổng sai", "Lần nộp gần nhất"],
+        [
+            [
+                item.get("student_id"),
+                item.get("student_name"),
+                item.get("attempt_count"),
+                item.get("average_score"),
+                item.get("total_correct"),
+                item.get("total_wrong"),
+                item.get("latest_submitted_at"),
+            ]
+            for item in (report.get("learning_results") or [])
+        ],
+    )
+
+    summary = report.get("summary") or {}
+    story.append(Paragraph("6. Nhận xét tổng quan", styles["Heading2"]))
+    story.append(Paragraph(f"Tổng số lượt nộp bài: {_vn_fallback(summary.get('total_attempts'))}", styles["Normal"]))
+    story.append(Paragraph(f"Số học sinh đã có kết quả: {_vn_fallback(summary.get('students_with_attempts'))}", styles["Normal"]))
+
+    doc.build(story)
+    return buffer.getvalue()
+
+
+async def export_class_summary_report(
+    current_user: CurrentUser,
+    class_id: int,
+    export_format: str,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> tuple[bytes, str, str]:
+    report = await _build_class_report_payload(
+        current_user=current_user,
+        class_id=class_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    class_code = str((report.get("class_info") or {}).get("class_code") or class_id).replace(" ", "_")
+
+    if export_format == "docx":
+        return (
+            _class_report_to_docx_bytes(report),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            f"bao-cao-lop-{class_code}-{timestamp}.docx",
+        )
+    if export_format == "pdf":
+        return (
+            _class_report_to_pdf_bytes(report),
+            "application/pdf",
+            f"bao-cao-lop-{class_code}-{timestamp}.pdf",
+        )
+    raise ReportValidationError("Unsupported export format")
 
 
 async def export_report_data(

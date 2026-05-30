@@ -1,51 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  downloadReportExport,
-  getAiSummaryReport,
+  downloadClassSummaryExport,
+  getClassSummaryReport,
   getDashboardReport,
-  getDataQualityReport,
-  getDocumentSummaryReport,
-  getQuestionSummaryReport,
-  getTeacherActivityReport,
-  getTopicCoverageReport,
+  type ClassReportExportFormat,
+  type ClassSummaryReportData,
   type DashboardReportData,
-  type ReportFilterOptions,
-  type ReportKey,
-  type ReportListMeta,
-  type ReportQueryParams,
-  type ReportTableResult,
 } from '@/api/reportsApi';
 import EmptyState from '@/components/common/EmptyState';
 import ErrorState from '@/components/common/ErrorState';
 import LoadingState from '@/components/common/LoadingState';
 
-type ReportTabKey = 'overview' | ReportKey;
-type ExportFormat = 'csv' | 'xlsx' | 'pdf';
-
-const REPORT_TABS: Array<{ key: ReportTabKey; label: string }> = [
-  { key: 'overview', label: 'Tổng quan' },
-  { key: 'question-summary', label: 'Ngân hàng câu hỏi' },
-  { key: 'ai-summary', label: 'Sinh câu hỏi AI' },
-  { key: 'document-summary', label: 'Tài liệu' },
-  { key: 'teacher-activity', label: 'Hoạt động giáo viên' },
-  { key: 'topic-coverage', label: 'Độ phủ chủ đề' },
-  { key: 'data-quality', label: 'Chất lượng dữ liệu' },
-];
-
-const DEFAULT_REPORT_FILTERS: ReportQueryParams = {
-  page: 1,
-  limit: 10,
-  sort_by: 'created_at',
-  sort_order: 'desc',
-  search: '',
-};
-
-const DEFAULT_FILTER_OPTIONS: ReportFilterOptions = {
-  teachers: [],
-  subjects: [],
-  topics: [],
-};
+type ExportFormat = ClassReportExportFormat;
 
 const STATUS_LABEL_MAP: Record<string, string> = {
   active: 'Hoạt động',
@@ -100,7 +67,7 @@ const COLUMN_LABEL_MAP: Record<string, string> = {
   content: 'Nội dung',
   title: 'Tiêu đề',
   role: 'Vai trò',
-  approval_rate_pct: 'Tỉ lệ duyệt (%)',
+  approval_rate_pct: 'Tỷ lệ duyệt (%)',
   question_count: 'Số câu hỏi',
   document_count: 'Số tài liệu',
   ai_request_count: 'Số yêu cầu AI',
@@ -145,14 +112,13 @@ export default function AdminDashboardPage() {
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [activeReportTab, setActiveReportTab] = useState<ReportTabKey>('overview');
-  const [reportFilters, setReportFilters] = useState<ReportQueryParams>(DEFAULT_REPORT_FILTERS);
-  const [draftFilters, setDraftFilters] = useState<ReportQueryParams>(DEFAULT_REPORT_FILTERS);
-  const [reportDataByTab, setReportDataByTab] = useState<Partial<Record<ReportKey, ReportTableResult>>>({});
-  const [reportLoadingByTab, setReportLoadingByTab] = useState<Partial<Record<ReportKey, boolean>>>({});
-  const [reportErrorByTab, setReportErrorByTab] = useState<Partial<Record<ReportKey, string>>>({});
+  const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
+  const [reportDateFrom, setReportDateFrom] = useState('');
+  const [reportDateTo, setReportDateTo] = useState('');
+  const [classReportData, setClassReportData] = useState<ClassSummaryReportData | null>(null);
+  const [isLoadingClassReport, setIsLoadingClassReport] = useState(false);
+  const [classReportError, setClassReportError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
   const fetchDashboard = async () => {
@@ -161,15 +127,9 @@ export default function AdminDashboardPage() {
     try {
       const data = await getDashboardReport();
       setDashboard(data);
-      const options = data.filter_options || DEFAULT_FILTER_OPTIONS;
-      const nextDraft: ReportQueryParams = {
-        ...DEFAULT_REPORT_FILTERS,
-      };
-      if (options.subjects.length > 0) {
-        nextDraft.subject_id = options.subjects[0].id;
+      if (data.classes_overview.length > 0) {
+        setSelectedClassId(data.classes_overview[0].id);
       }
-      setDraftFilters(nextDraft);
-      setReportFilters(nextDraft);
     } catch (error: any) {
       setDashboardError(error?.message || 'Không thể tải bảng điều khiển');
     } finally {
@@ -181,81 +141,56 @@ export default function AdminDashboardPage() {
     fetchDashboard();
   }, []);
 
-  const currentFilterOptions = useMemo(() => {
-    if (activeReportTab !== 'overview' && reportDataByTab[activeReportTab as ReportKey]?.filter_options) {
-      return reportDataByTab[activeReportTab as ReportKey]?.filter_options || DEFAULT_FILTER_OPTIONS;
-    }
-    return dashboard?.filter_options || DEFAULT_FILTER_OPTIONS;
-  }, [activeReportTab, dashboard?.filter_options, reportDataByTab]);
-
-  const currentReportMeta: ReportListMeta | null =
-    activeReportTab !== 'overview' ? reportDataByTab[activeReportTab as ReportKey]?.meta || null : null;
-
-  const fetchReportTab = async (tab: ReportKey, filters: ReportQueryParams) => {
-    setReportLoadingByTab((prev) => ({ ...prev, [tab]: true }));
-    setReportErrorByTab((prev) => ({ ...prev, [tab]: '' }));
+    const fetchClassReport = async () => {
+    if (!selectedClassId) return;
+    setIsLoadingClassReport(true);
+    setClassReportError(null);
     try {
-      let result: ReportTableResult;
-      if (tab === 'question-summary') {
-        result = await getQuestionSummaryReport(filters);
-      } else if (tab === 'ai-summary') {
-        result = await getAiSummaryReport(filters);
-      } else if (tab === 'document-summary') {
-        result = await getDocumentSummaryReport(filters);
-      } else if (tab === 'teacher-activity') {
-        result = await getTeacherActivityReport(filters);
-      } else if (tab === 'topic-coverage') {
-        result = await getTopicCoverageReport(filters);
-      } else {
-        result = await getDataQualityReport(filters);
-      }
-      setReportDataByTab((prev) => ({ ...prev, [tab]: result }));
+      const result = await getClassSummaryReport({
+        class_id: selectedClassId,
+        date_from: reportDateFrom || undefined,
+        date_to: reportDateTo || undefined,
+      });
+      setClassReportData(result);
     } catch (error: any) {
-      setReportErrorByTab((prev) => ({ ...prev, [tab]: error?.message || 'Không thể tải báo cáo' }));
+      setClassReportError(error?.message || 'Không thể tải báo cáo lớp');
     } finally {
-      setReportLoadingByTab((prev) => ({ ...prev, [tab]: false }));
+      setIsLoadingClassReport(false);
     }
   };
 
   useEffect(() => {
     if (!isReportModalOpen) return;
-    if (activeReportTab === 'overview') return;
-    fetchReportTab(activeReportTab, reportFilters);
-  }, [activeReportTab, isReportModalOpen, reportFilters]);
+    fetchClassReport();
+  }, [isReportModalOpen, selectedClassId]);
 
   const handleOpenReports = () => {
     setIsReportModalOpen(true);
-    setActiveReportTab('overview');
+    setClassReportError(null);
   };
 
   const handleApplyFilters = () => {
-    setReportFilters((prev) => ({
-      ...prev,
-      ...draftFilters,
-      page: 1,
-    }));
+    fetchClassReport();
   };
 
   const handleResetFilters = () => {
-    setDraftFilters(DEFAULT_REPORT_FILTERS);
-    setReportFilters(DEFAULT_REPORT_FILTERS);
+    setReportDateFrom('');
+    setReportDateTo('');
   };
 
   const handleExport = async (format: ExportFormat) => {
-    if (activeReportTab === 'overview') return;
+    if (!selectedClassId) return;
     setIsExporting(true);
     try {
-      await downloadReportExport(activeReportTab as ReportKey, format, reportFilters);
+      await downloadClassSummaryExport(selectedClassId, format, {
+        date_from: reportDateFrom || undefined,
+        date_to: reportDateTo || undefined,
+      });
     } catch (error: any) {
       alert(error?.message || 'Không thể xuất báo cáo');
     } finally {
       setIsExporting(false);
     }
-  };
-
-  const handleChangePage = (nextPage: number) => {
-    if (nextPage < 1) return;
-    setReportFilters((prev) => ({ ...prev, page: nextPage }));
   };
 
   const filteredUsers = useMemo(() => {
@@ -418,94 +353,50 @@ export default function AdminDashboardPage() {
   };
 
   const renderReportTable = () => {
-    if (activeReportTab === 'overview') return renderOverviewContent();
-
-    const report = reportDataByTab[activeReportTab as ReportKey];
-    const isLoading = !!reportLoadingByTab[activeReportTab as ReportKey];
-    const error = reportErrorByTab[activeReportTab as ReportKey];
-
-    if (isLoading) {
-      return <LoadingState message="Đang tải dữ liệu báo cáo..." />;
+    if (isLoadingClassReport) {
+      return <LoadingState message="Đang tải dữ liệu báo cáo lớp..." />;
     }
-
-    if (error) {
-      return (
-        <ErrorState
-          title="Lỗi tải báo cáo"
-          message={error}
-          onRetry={() => fetchReportTab(activeReportTab, reportFilters)}
-        />
-      );
+    if (classReportError) {
+      return <ErrorState title="Lỗi tải báo cáo lớp" message={classReportError} onRetry={fetchClassReport} />;
     }
-
-    const rows = report?.table || [];
-    if (rows.length === 0) {
-      return <EmptyState title="Không có dữ liệu" message="Không có bản ghi phù hợp với bộ lọc hiện tại." />;
+    if (!classReportData) {
+      return <EmptyState title="Chưa có dữ liệu" message="Vui lòng chọn lớp để xem báo cáo." />;
     }
-
-    const columns = Object.keys(rows[0]).slice(0, 8);
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
+        <div className="p-4 border rounded-xl border-slate-100 bg-slate-50">
+          <p className="text-sm font-black text-slate-900">{classReportData.class_info.class_name}</p>
+          <p className="text-xs text-slate-500">
+            Mã lớp: {classReportData.class_info.class_code} | GVCN: {classReportData.class_info.teacher_name}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Sĩ số: {classReportData.class_info.student_count} | Giáo viên: {classReportData.class_info.teacher_count} | Môn học: {classReportData.class_info.subject_count}
+          </p>
+        </div>
+
         <div className="overflow-auto border rounded-xl border-slate-100">
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50">
               <tr>
-                {columns.map((column) => (
-                  <th key={column} className="px-4 py-3 font-black tracking-widest uppercase text-slate-500">
-                    {toDisplayColumnLabel(column)}
-                  </th>
+                {['Mã HS', 'Học sinh', 'Lượt nộp', 'Điểm TB', 'Đúng', 'Sai', 'Lần nộp gần nhất'].map((column) => (
+                  <th key={column} className="px-4 py-3 font-black tracking-widest uppercase text-slate-500">{column}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((row: any, index: number) => (
+              {(classReportData.learning_results.length === 0 ? [{ student_id: '-', student_name: 'Chưa có dữ liệu', attempt_count: '-', average_score: '-', total_correct: '-', total_wrong: '-', latest_submitted_at: '-' }] : classReportData.learning_results).map((row: any, index: number) => (
                 <tr key={`row-${index}`} className="border-t border-slate-100">
-                  {columns.map((column) => {
-                    const value = row[column];
-                    return (
-                      <td key={`${index}-${column}`} className="px-4 py-3 text-slate-700">
-                        {Array.isArray(value)
-                          ? value.join(', ')
-                          : column === 'status'
-                            ? toDisplayStatus(value)
-                            : column === 'role'
-                              ? toDisplayRole(value)
-                              : column === 'difficulty'
-                                ? toDisplayDifficulty(value)
-                                : column === 'source'
-                                  ? toDisplaySource(value)
-                                  : value === null || value === undefined
-                                    ? '-'
-                                    : String(value)}
-                      </td>
-                    );
-                  })}
+                  <td className="px-4 py-3 text-slate-700">{row.student_id ?? '-'}</td>
+                  <td className="px-4 py-3 text-slate-700">{row.student_name ?? 'Chưa có dữ liệu'}</td>
+                  <td className="px-4 py-3 text-slate-700">{row.attempt_count ?? 0}</td>
+                  <td className="px-4 py-3 text-slate-700">{row.average_score ?? 'Chưa có dữ liệu'}</td>
+                  <td className="px-4 py-3 text-slate-700">{row.total_correct ?? 0}</td>
+                  <td className="px-4 py-3 text-slate-700">{row.total_wrong ?? 0}</td>
+                  <td className="px-4 py-3 text-slate-700">{row.latest_submitted_at ?? 'Chưa có dữ liệu'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="text-xs text-slate-500">
-            Trang {currentReportMeta?.page || 1} / {currentReportMeta?.total_pages || 1} - Tổng {currentReportMeta?.total || rows.length}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleChangePage((reportFilters.page || 1) - 1)}
-              disabled={(reportFilters.page || 1) <= 1}
-              className="px-3 py-2 text-xs font-black border rounded-lg border-slate-200 disabled:opacity-50"
-            >
-              Trước
-            </button>
-            <button
-              onClick={() => handleChangePage((reportFilters.page || 1) + 1)}
-              disabled={(currentReportMeta?.page || 1) >= (currentReportMeta?.total_pages || 1)}
-              className="px-3 py-2 text-xs font-black border rounded-lg border-slate-200 disabled:opacity-50"
-            >
-              Sau
-            </button>
-          </div>
         </div>
       </div>
     );
@@ -766,108 +657,29 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="p-6 space-y-4 bg-white border-b border-slate-100">
-              <div className="flex gap-2 pb-1 overflow-x-auto">
-                {REPORT_TABS.map((tab) => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveReportTab(tab.key)}
-                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${activeReportTab === tab.key ? 'bg-[#b20112] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-                <input
-                  value={draftFilters.search || ''}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
-                  placeholder="Tìm kiếm..."
-                  className="px-3 py-2 text-xs font-bold border rounded-lg border-slate-200"
-                />
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <select
-                  value={draftFilters.teacher_id || ''}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, teacher_id: e.target.value ? Number(e.target.value) : undefined }))}
+                  value={selectedClassId || ''}
+                  onChange={(e) => setSelectedClassId(e.target.value ? Number(e.target.value) : null)}
                   className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
                 >
-                  <option value="">Tất cả giáo viên</option>
-                  {currentFilterOptions.teachers.map((option) => (
-                    <option key={option.id} value={option.id}>{option.name}</option>
+                  <option value="">Chọn lớp học</option>
+                  {dashboard.classes_overview.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.code} - {item.name}
+                    </option>
                   ))}
-                </select>
-                <select
-                  value={draftFilters.subject_id || ''}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, subject_id: e.target.value ? Number(e.target.value) : undefined }))}
-                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
-                >
-                  <option value="">Tất cả môn học</option>
-                  {currentFilterOptions.subjects.map((option) => (
-                    <option key={option.id} value={option.id}>{option.name}</option>
-                  ))}
-                </select>
-                <select
-                  value={draftFilters.topic_id || ''}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, topic_id: e.target.value ? Number(e.target.value) : undefined }))}
-                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
-                >
-                  <option value="">Tất cả chủ đề</option>
-                  {currentFilterOptions.topics.map((option) => (
-                    <option key={option.id} value={option.id}>{option.name}</option>
-                  ))}
-                </select>
-                <select
-                  value={draftFilters.status || ''}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value || undefined }))}
-                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
-                >
-                  <option value="">Tất cả trạng thái</option>
-                  <option value="draft">Nháp</option>
-                  <option value="approved">Đã duyệt</option>
-                  <option value="inactive">Ngưng hoạt động</option>
-                  <option value="rejected">Từ chối</option>
-                  <option value="pending">Đang chờ</option>
-                  <option value="processing">Đang xử lý</option>
-                  <option value="completed">Hoàn tất</option>
-                  <option value="failed">Thất bại</option>
-                  <option value="cancelled">Đã hủy</option>
-                </select>
-                <select
-                  value={draftFilters.difficulty || ''}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, difficulty: e.target.value || undefined }))}
-                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
-                >
-                  <option value="">Tất cả độ khó</option>
-                  <option value="easy">Dễ</option>
-                  <option value="medium">Trung bình</option>
-                  <option value="hard">Khó</option>
-                </select>
-                <select
-                  value={draftFilters.source || ''}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, source: e.target.value || undefined }))}
-                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
-                >
-                  <option value="">Tất cả nguồn</option>
-                  <option value="ai">AI</option>
-                  <option value="manual">Thủ công</option>
-                </select>
-                <select
-                  value={draftFilters.sort_order || 'desc'}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, sort_order: e.target.value as 'asc' | 'desc' }))}
-                  className="px-3 py-2 text-xs font-bold bg-white border rounded-lg border-slate-200"
-                >
-                  <option value="desc">Giảm dần</option>
-                  <option value="asc">Tăng dần</option>
                 </select>
                 <input
                   type="datetime-local"
-                  value={draftFilters.date_from || ''}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, date_from: e.target.value || undefined }))}
+                  value={reportDateFrom}
+                  onChange={(e) => setReportDateFrom(e.target.value)}
                   className="px-3 py-2 text-xs font-bold border rounded-lg border-slate-200"
                 />
                 <input
                   type="datetime-local"
-                  value={draftFilters.date_to || ''}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, date_to: e.target.value || undefined }))}
+                  value={reportDateTo}
+                  onChange={(e) => setReportDateTo(e.target.value)}
                   className="px-3 py-2 text-xs font-bold border rounded-lg border-slate-200"
                 />
               </div>
@@ -885,31 +697,20 @@ export default function AdminDashboardPage() {
                 >
                   Đặt lại
                 </button>
-                {activeReportTab !== 'overview' && (
-                  <>
-                    <button
-                      onClick={() => handleExport('csv')}
-                      disabled={isExporting}
-                      className="px-4 py-2 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest"
-                    >
-                      CSV
-                    </button>
-                    <button
-                      onClick={() => handleExport('xlsx')}
-                      disabled={isExporting}
-                      className="px-4 py-2 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest"
-                    >
-                      Excel
-                    </button>
-                    <button
-                      onClick={() => handleExport('pdf')}
-                      disabled={isExporting}
-                      className="px-4 py-2 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest"
-                    >
-                      PDF
-                    </button>
-                  </>
-                )}
+                <button
+                  onClick={() => handleExport('docx')}
+                  disabled={isExporting || !selectedClassId}
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                >
+                  DOCX
+                </button>
+                <button
+                  onClick={() => handleExport('pdf')}
+                  disabled={isExporting || !selectedClassId}
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                >
+                  PDF
+                </button>
               </div>
             </div>
 
@@ -927,3 +728,13 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+

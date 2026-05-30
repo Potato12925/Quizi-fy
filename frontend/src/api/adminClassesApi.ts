@@ -23,8 +23,9 @@ export interface ClassListParams {
   page?: number;
   limit?: number;
   search?: string;
+  teacher_id?: number;
   status?: 'all' | 'active' | 'inactive';
-  sort_by?: 'created_at' | 'class_name';
+  sort_by?: 'created_at' | 'class_name' | 'student_count';
   sort_order?: 'asc' | 'desc';
 }
 
@@ -65,6 +66,22 @@ export interface AdminClassStudentRecord {
   joined_at: string | null;
 }
 
+export interface AdminClassTeacherRecord {
+  class_teacher_id: number;
+  class_id: number;
+  teacher_id: number;
+  username: string | null;
+  full_name: string | null;
+  is_active: boolean;
+  joined_at: string | null;
+}
+
+export interface AdminClassStatistics {
+  total_students: number;
+  total_teachers: number;
+  total_subjects: number;
+}
+
 export interface AdminClassTeacherOption {
   user_id: number;
   username: string;
@@ -100,6 +117,7 @@ export const getAdminClasses = async (
       page: String(params.page ?? 1),
       limit: String(params.limit ?? 10),
       search: params.search?.trim() || undefined,
+      teacher_id: params.teacher_id ? String(params.teacher_id) : undefined,
       status: params.status ?? 'all',
       sort_by: params.sort_by ?? 'created_at',
       sort_order: params.sort_order ?? 'desc',
@@ -163,8 +181,23 @@ export const assignSubjectToAdminClass = async (
   return response.data;
 };
 
-export const removeSubjectFromAdminClass = async (classId: number, subjectId: number): Promise<void> => {
-  await api.delete<BackendSuccessEnvelope<{ deleted: boolean }>>(`/classes/${classId}/subjects/${subjectId}`);
+export const updateAdminClassSubjectById = async (
+  classId: number,
+  classSubjectId: number,
+  payload: { assigned_teacher_id?: number; status?: 'active' | 'inactive' },
+): Promise<AdminClassSubjectRecord> => {
+  const response = await api.put<BackendSuccessEnvelope<AdminClassSubjectRecord>>(
+    `/classes/${classId}/subjects/${classSubjectId}`,
+    payload,
+  );
+  return response.data;
+};
+
+export const removeSubjectFromAdminClassByClassSubjectId = async (
+  classId: number,
+  classSubjectId: number,
+): Promise<void> => {
+  await api.delete<BackendSuccessEnvelope<{ deleted: boolean }>>(`/classes/${classId}/subjects/${classSubjectId}`);
 };
 
 export const getAdminClassStudents = async (classId: number): Promise<AdminClassStudentRecord[]> => {
@@ -185,6 +218,31 @@ export const assignStudentToAdminClass = async (
 
 export const removeStudentFromAdminClass = async (classId: number, studentId: number): Promise<void> => {
   await api.delete<BackendSuccessEnvelope<{ deleted: boolean }>>(`/classes/${classId}/students/${studentId}`);
+};
+
+export const getAdminClassTeachers = async (classId: number): Promise<AdminClassTeacherRecord[]> => {
+  const response = await api.get<BackendSuccessEnvelope<AdminClassTeacherRecord[]>>(`/classes/${classId}/teachers`);
+  return response.data || [];
+};
+
+export const assignTeacherToAdminClass = async (
+  classId: number,
+  payload: { teacher_id: number },
+): Promise<AdminClassTeacherRecord> => {
+  const response = await api.post<BackendSuccessEnvelope<AdminClassTeacherRecord>>(
+    `/classes/${classId}/teachers`,
+    payload,
+  );
+  return response.data;
+};
+
+export const removeTeacherFromAdminClass = async (classId: number, teacherId: number): Promise<void> => {
+  await api.delete<BackendSuccessEnvelope<{ deleted: boolean }>>(`/classes/${classId}/teachers/${teacherId}`);
+};
+
+export const getAdminClassStatistics = async (classId: number): Promise<AdminClassStatistics> => {
+  const response = await api.get<BackendSuccessEnvelope<AdminClassStatistics>>(`/classes/${classId}/statistics`);
+  return response.data;
 };
 
 export const getAdminTeacherOptions = async (): Promise<AdminClassTeacherOption[]> => {

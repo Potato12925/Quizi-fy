@@ -22,14 +22,24 @@ class ClassListQueryParams(BaseModel):
     page: int = Field(default=1, ge=1)
     limit: int = Field(default=20, ge=1, le=100)
     search: str | None = None
+    teacher_id: int | None = Field(default=None, ge=1)
     status: Literal["all", "active", "inactive"] = "all"
-    sort_by: Literal["created_at", "class_name"] = "created_at"
+    sort_by: Literal["created_at", "class_name", "student_count"] = "created_at"
     sort_order: Literal["asc", "desc"] = "desc"
 
 
 class AssignSubjectToClassRequest(BaseModel):
     subject_id: int = Field(ge=1)
     assigned_teacher_id: int = Field(ge=1)
+
+
+class UpdateClassSubjectRequest(BaseModel):
+    assigned_teacher_id: int | None = Field(default=None, ge=1)
+    status: Literal["active", "inactive"] | None = None
+
+
+class AssignTeacherToClassRequest(BaseModel):
+    teacher_id: int = Field(ge=1)
 
 
 class AssignStudentToClassRequest(BaseModel):

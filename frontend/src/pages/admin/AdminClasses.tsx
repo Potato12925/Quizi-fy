@@ -12,7 +12,7 @@ import {
   getAdminSubjectOptions,
   getAdminTeacherOptions,
   removeStudentFromAdminClass,
-  removeSubjectFromAdminClass,
+  removeSubjectFromAdminClassByClassSubjectId,
   type AdminClassRecord,
   type AdminClassStudentRecord,
   type AdminClassSubjectRecord,
@@ -52,8 +52,9 @@ export default function AdminClassesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [sortBy, setSortBy] = useState<'created_at' | 'class_name'>('created_at');
+  const [sortBy, setSortBy] = useState<'created_at' | 'class_name' | 'student_count'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [teacherFilterId, setTeacherFilterId] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const pageLimit = 10;
 
@@ -98,6 +99,7 @@ export default function AdminClassesPage() {
         status: statusFilter,
         sort_by: sortBy,
         sort_order: sortOrder,
+        teacher_id: teacherFilterId === 'all' ? undefined : Number(teacherFilterId),
       });
       setClasses(result.items);
       setPagination(result.meta);
@@ -148,7 +150,7 @@ export default function AdminClassesPage() {
 
   useEffect(() => {
     fetchClasses();
-  }, [currentPage, statusFilter, sortBy, sortOrder, appliedSearch]);
+  }, [currentPage, statusFilter, sortBy, sortOrder, appliedSearch, teacherFilterId]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -294,12 +296,12 @@ export default function AdminClassesPage() {
     }
   };
 
-  const handleRemoveSubject = async (subjectId: number, subjectName: string | null) => {
+  const handleRemoveSubject = async (classSubjectId: number, subjectName: string | null) => {
     if (!selectedClassId) return;
-    const label = subjectName || `#${subjectId}`;
+    const label = subjectName || `#${classSubjectId}`;
     if (!window.confirm(`Bạn có chắc muốn gỡ môn học ${label} ra khỏi lớp?`)) return;
     try {
-      await removeSubjectFromAdminClass(selectedClassId, subjectId);
+      await removeSubjectFromAdminClassByClassSubjectId(selectedClassId, classSubjectId);
       await fetchSelectedClassDetail(selectedClassId);
       await fetchClasses();
       alert('Đã gỡ môn học khỏi lớp.');
@@ -416,7 +418,7 @@ export default function AdminClassesPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <select
                 value={statusFilter}
                 onChange={(e) => {
@@ -430,15 +432,30 @@ export default function AdminClassesPage() {
                 <option value="inactive">Tạm khóa</option>
               </select>
               <select
+                value={teacherFilterId}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setTeacherFilterId(e.target.value);
+                }}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs font-bold bg-white"
+              >
+                <option value="all">Tất cả giáo viên</option>
+                {teacherOptions.filter((item) => item.is_active).map((teacher) => (
+                  <option key={teacher.user_id} value={teacher.user_id}>
+                    {teacher.full_name}
+                  </option>
+                ))}
+              </select>              <select
                 value={sortBy}
                 onChange={(e) => {
                   setCurrentPage(1);
-                  setSortBy(e.target.value as 'created_at' | 'class_name');
+                  setSortBy(e.target.value as 'created_at' | 'class_name' | 'student_count');
                 }}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs font-bold bg-white"
               >
                 <option value="created_at">Sắp xếp theo thời gian tạo</option>
                 <option value="class_name">Sắp xếp theo tên lớp</option>
+                <option value="student_count">Sắp xếp theo số học sinh</option>
               </select>
               <select
                 value={sortOrder}
@@ -483,7 +500,9 @@ export default function AdminClassesPage() {
                       >
                         <td className="px-8 py-6">
                           <p className="text-sm font-black text-slate-900">{row.class_name}</p>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{row.class_code}</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{row.class_code} | ID: {row.class_id}</p>
+                          <p className="text-[11px] text-slate-500 mt-1">{row.description || 'Không có mô t?'}</p>
+                          <p className="text-[10px] text-slate-400 mt-1">Tạo: {row.created_at ? new Date(row.created_at).toLocaleDateString('vi-VN') : '-'}</p>
                         </td>
                         <td className="px-6 py-6 text-sm font-semibold text-slate-700">{row.teacher_name}</td>
                         <td className="px-6 py-6 text-center text-sm font-black text-slate-900">{row.student_count}</td>
@@ -608,7 +627,7 @@ export default function AdminClassesPage() {
                                   {subject.assigned_teacher_name || 'Chưa gán'}
                                 </span>
                                 <button
-                                  onClick={() => handleRemoveSubject(subject.subject_id, subject.subject_name)}
+                                  onClick={() => handleRemoveSubject(subject.class_subject_id, subject.subject_name)}
                                   className="w-8 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-[#b20112] hover:border-red-100 transition-all cursor-pointer flex items-center justify-center"
                                 >
                                   <span className="material-symbols-outlined text-base">close</span>
@@ -838,3 +857,7 @@ export default function AdminClassesPage() {
     </div>
   );
 }
+
+
+
+

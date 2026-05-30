@@ -56,6 +56,7 @@ async def list_classes(
     page: int,
     limit: int,
     search: str | None,
+    teacher_id: int | None,
     status: str,
     sort_by: str,
     sort_order: str,
@@ -65,6 +66,8 @@ async def list_classes(
     end = start + limit - 1
 
     query = supabase.table("classes").select(CLASS_SELECT_FIELDS, count="exact").is_("deleted_at", None)
+    if teacher_id is not None:
+        query = query.eq("teacher_id", teacher_id)
     if status in {"active", "inactive"}:
         query = query.eq("status", status)
 
@@ -73,9 +76,20 @@ async def list_classes(
         if search_text:
             query = query.or_(f"class_code.ilike.%{search_text}%,class_name.ilike.%{search_text}%")
 
-    response = await asyncio.to_thread(
-        lambda: query.order(sort_by, desc=sort_order == "desc").range(start, end).execute()
-    )
+    if sort_by == "student_count":
+        response = await asyncio.to_thread(lambda: query.execute())
+        items = response.data or []
+        class_ids = [int(item["class_id"]) for item in items if item.get("class_id") is not None]
+        student_counts = await list_class_student_counts(class_ids)
+        sorted_items = sorted(
+            items,
+            key=lambda row: (student_counts.get(int(row["class_id"]), 0), int(row["class_id"])),
+            reverse=sort_order == "desc",
+        )
+        paged_items = sorted_items[start : end + 1]
+        return paged_items, int(response.count or 0)
+
+    response = await asyncio.to_thread(lambda: query.order(sort_by, desc=sort_order == "desc").range(start, end).execute())
     return response.data or [], int(response.count or 0)
 
 
@@ -297,6 +311,36 @@ async def soft_delete_class_subject_mapping(class_id: int, subject_id: int) -> b
     return len(rows) > 0
 
 
+async def find_class_subject_by_record_id(class_id: int, class_subject_id: int, include_deleted: bool = False) -> dict | None:
+    supabase = SupabaseManager.get_client()
+    query = (
+        supabase.table("class_subjects")
+        .select(CLASS_SUBJECT_SELECT_FIELDS)
+        .eq("class_id", class_id)
+        .eq("class_subject_id", class_subject_id)
+    )
+    if not include_deleted:
+        query = query.is_("deleted_at", None)
+    response = await asyncio.to_thread(lambda: query.limit(1).execute())
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
+async def soft_delete_class_subject_mapping_by_record_id(class_id: int, class_subject_id: int) -> bool:
+    supabase = SupabaseManager.get_client()
+    payload = {"deleted_at": _utc_now_iso()}
+    response = await asyncio.to_thread(
+        lambda: supabase.table("class_subjects")
+        .update(payload)
+        .eq("class_id", class_id)
+        .eq("class_subject_id", class_subject_id)
+        .is_("deleted_at", None)
+        .execute()
+    )
+    rows = response.data or []
+    return len(rows) > 0
+
+
 async def find_class_student_mapping(class_id: int, student_id: int, include_deleted: bool = False) -> dict | None:
     supabase = SupabaseManager.get_client()
     query = (
@@ -397,3 +441,31 @@ async def update_class_teacher_mapping(record_id: int, payload: dict) -> dict | 
     )
     rows = response.data or []
     return rows[0] if rows else None
+
+
+async def list_class_teachers(class_id: int) -> list[dict]:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("class_teachers")
+        .select(CLASS_TEACHER_SELECT_FIELDS)
+        .eq("class_id", class_id)
+        .is_("deleted_at", None)
+        .order("class_teacher_id")
+        .execute()
+    )
+    return response.data or []
+
+
+async def soft_delete_class_teacher_mapping(class_id: int, teacher_id: int) -> bool:
+    supabase = SupabaseManager.get_client()
+    payload = {"deleted_at": _utc_now_iso()}
+    response = await asyncio.to_thread(
+        lambda: supabase.table("class_teachers")
+        .update(payload)
+        .eq("class_id", class_id)
+        .eq("teacher_id", teacher_id)
+        .is_("deleted_at", None)
+        .execute()
+    )
+    rows = response.data or []
+    return len(rows) > 0

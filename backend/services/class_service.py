@@ -10,10 +10,12 @@ from repositories.class_repository import (
     find_class_by_id,
     find_class_student_mapping,
     find_class_subject_mapping,
+    find_class_subject_by_record_id,
     find_class_teacher_mapping,
     has_any_class_links,
     list_class_student_counts,
     list_class_students,
+    list_class_teachers,
     list_class_subject_counts,
     list_class_subjects,
     list_class_teacher_counts,
@@ -23,6 +25,8 @@ from repositories.class_repository import (
     soft_delete_class_by_id,
     soft_delete_class_student_mapping,
     soft_delete_class_subject_mapping,
+    soft_delete_class_subject_mapping_by_record_id,
+    soft_delete_class_teacher_mapping,
     update_class_by_id,
     update_class_student_mapping,
     update_class_subject_mapping,
@@ -31,11 +35,13 @@ from repositories.class_repository import (
 from repositories.subject_repository import find_subject_by_id
 from repositories.user_repository import find_role_codes_by_user_id, find_user_by_id
 from schemas.class_schema import (
+    AssignTeacherToClassRequest,
     AssignStudentToClassRequest,
     AssignSubjectToClassRequest,
     ClassCreateRequest,
     ClassListQueryParams,
     ClassUpdateRequest,
+    UpdateClassSubjectRequest,
 )
 
 
@@ -163,6 +169,7 @@ async def get_classes(params: ClassListQueryParams) -> dict:
         page=params.page,
         limit=params.limit,
         search=params.search,
+        teacher_id=params.teacher_id,
         status=params.status,
         sort_by=params.sort_by,
         sort_order=params.sort_order,
@@ -286,6 +293,13 @@ async def assign_subject_to_class(class_id: int, payload: AssignSubjectToClassRe
         raise ValueError("Subject not found")
 
     await _ensure_teacher_exists(payload.assigned_teacher_id)
+    teacher_mapping = await find_class_teacher_mapping(
+        class_id=class_id,
+        teacher_id=payload.assigned_teacher_id,
+        include_deleted=False,
+    )
+    if teacher_mapping is None:
+        await _sync_owner_teacher_mapping(class_id=class_id, teacher_id=payload.assigned_teacher_id)
 
     existing = await find_class_subject_mapping(
         class_id=class_id,
@@ -331,6 +345,58 @@ async def remove_subject_from_class(class_id: int, subject_id: int) -> dict:
     if not deleted:
         raise ValueError("Class subject assignment not found")
     return {"class_id": class_id, "subject_id": subject_id, "deleted": True}
+
+
+async def update_class_subject(class_id: int, class_subject_id: int, payload: UpdateClassSubjectRequest) -> dict:
+    class_data = await find_class_by_id(class_id)
+    if not class_data:
+        raise ValueError("Class not found")
+
+    class_subject = await find_class_subject_by_record_id(class_id, class_subject_id, include_deleted=False)
+    if not class_subject:
+        raise ValueError("Class subject assignment not found")
+
+    update_payload: dict = {}
+    if payload.assigned_teacher_id is not None:
+        await _ensure_teacher_exists(payload.assigned_teacher_id)
+        teacher_mapping = await find_class_teacher_mapping(
+            class_id=class_id,
+            teacher_id=payload.assigned_teacher_id,
+            include_deleted=False,
+        )
+        if teacher_mapping is None:
+            await _sync_owner_teacher_mapping(class_id=class_id, teacher_id=payload.assigned_teacher_id)
+        update_payload["assigned_teacher_id"] = payload.assigned_teacher_id
+    if payload.status is not None:
+        update_payload["status"] = payload.status
+
+    if not update_payload:
+        raise ValueError("No fields to update")
+
+    updated = await update_class_subject_mapping(class_subject_id, update_payload)
+    if not updated:
+        raise ValueError("Class subject assignment not found")
+
+    rows = await get_class_subjects(class_id)
+    for row in rows:
+        if int(row["class_subject_id"]) == class_subject_id:
+            return row
+    raise ValueError("Class subject assignment not found")
+
+
+async def remove_subject_from_class_by_record_id(class_id: int, class_subject_id: int) -> dict:
+    class_data = await find_class_by_id(class_id)
+    if not class_data:
+        raise ValueError("Class not found")
+
+    existing = await find_class_subject_by_record_id(class_id=class_id, class_subject_id=class_subject_id, include_deleted=False)
+    if not existing:
+        raise ValueError("Class subject assignment not found")
+
+    deleted = await soft_delete_class_subject_mapping_by_record_id(class_id=class_id, class_subject_id=class_subject_id)
+    if not deleted:
+        raise ValueError("Class subject assignment not found")
+    return {"class_id": class_id, "class_subject_id": class_subject_id, "deleted": True}
 
 
 async def get_class_students(class_id: int) -> list[dict]:
@@ -402,3 +468,83 @@ async def remove_student_from_class(class_id: int, student_id: int) -> dict:
     if not deleted:
         raise ValueError("Class student assignment not found")
     return {"class_id": class_id, "student_id": student_id, "deleted": True}
+
+
+async def get_class_teachers(class_id: int) -> list[dict]:
+    class_data = await find_class_by_id(class_id)
+    if not class_data:
+        raise ValueError("Class not found")
+
+    rows = await list_class_teachers(class_id)
+    teacher_ids = sorted({int(item["teacher_id"]) for item in rows if item.get("teacher_id") is not None})
+    teacher_map = await list_user_profiles(teacher_ids)
+
+    results = []
+    for item in rows:
+        teacher_id = int(item["teacher_id"])
+        teacher = teacher_map.get(teacher_id) or {}
+        results.append(
+            {
+                "class_teacher_id": int(item["class_teacher_id"]),
+                "class_id": int(item["class_id"]),
+                "teacher_id": teacher_id,
+                "username": teacher.get("username"),
+                "full_name": teacher.get("full_name"),
+                "is_active": teacher.get("is_active", True),
+                "joined_at": item.get("joined_at"),
+            }
+        )
+    return results
+
+
+async def assign_teacher_to_class(class_id: int, payload: AssignTeacherToClassRequest) -> dict:
+    class_data = await find_class_by_id(class_id)
+    if not class_data:
+        raise ValueError("Class not found")
+    await _ensure_teacher_exists(payload.teacher_id)
+
+    existing = await find_class_teacher_mapping(class_id=class_id, teacher_id=payload.teacher_id, include_deleted=True)
+    if existing is None:
+        await create_class_teacher_mapping({"class_id": class_id, "teacher_id": payload.teacher_id})
+    elif existing.get("deleted_at") is not None:
+        await update_class_teacher_mapping(int(existing["class_teacher_id"]), {"deleted_at": None})
+    else:
+        raise ValueError("Teacher already assigned to class")
+
+    rows = await get_class_teachers(class_id)
+    for row in rows:
+        if int(row["teacher_id"]) == payload.teacher_id:
+            return row
+    raise ValueError("Unable to assign teacher to class")
+
+
+async def remove_teacher_from_class(class_id: int, teacher_id: int) -> dict:
+    class_data = await find_class_by_id(class_id)
+    if not class_data:
+        raise ValueError("Class not found")
+    if int(class_data["teacher_id"]) == teacher_id:
+        raise ValueError("Cannot remove homeroom teacher from class teachers")
+
+    existing = await find_class_teacher_mapping(class_id=class_id, teacher_id=teacher_id, include_deleted=False)
+    if not existing:
+        raise ValueError("Class teacher assignment not found")
+
+    deleted = await soft_delete_class_teacher_mapping(class_id=class_id, teacher_id=teacher_id)
+    if not deleted:
+        raise ValueError("Class teacher assignment not found")
+    return {"class_id": class_id, "teacher_id": teacher_id, "deleted": True}
+
+
+async def get_class_statistics(class_id: int) -> dict:
+    class_data = await find_class_by_id(class_id)
+    if not class_data:
+        raise ValueError("Class not found")
+
+    student_counts = await list_class_student_counts([class_id])
+    teacher_counts = await list_class_teacher_counts([class_id])
+    subject_counts = await list_class_subject_counts([class_id])
+    return {
+        "total_students": student_counts.get(class_id, 0),
+        "total_teachers": max(teacher_counts.get(class_id, 0), 1),
+        "total_subjects": subject_counts.get(class_id, 0),
+    }

@@ -3,23 +3,30 @@ from fastapi import APIRouter, Depends, Query
 from core.responses import error_response, success_response
 from middlewares.auth_middleware import CurrentUser, require_roles
 from schemas.class_schema import (
+    AssignTeacherToClassRequest,
     AssignStudentToClassRequest,
     AssignSubjectToClassRequest,
     ClassCreateRequest,
     ClassListQueryParams,
     ClassUpdateRequest,
+    UpdateClassSubjectRequest,
 )
 from services.class_service import (
+    assign_teacher_to_class,
     assign_student_to_class,
     assign_subject_to_class,
     create_class,
     delete_class,
     get_class_by_id,
+    get_class_statistics,
     get_class_students,
     get_class_subjects,
+    get_class_teachers,
     get_classes,
+    remove_teacher_from_class,
     remove_student_from_class,
-    remove_subject_from_class,
+    remove_subject_from_class_by_record_id,
+    update_class_subject,
     update_class,
 )
 
@@ -57,6 +64,7 @@ async def get_class_list(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
     search: str | None = Query(default=None),
+    teacher_id: int | None = Query(default=None, ge=1),
     status: str = Query(default="all"),
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc"),
@@ -67,6 +75,7 @@ async def get_class_list(
             page=page,
             limit=limit,
             search=search,
+            teacher_id=teacher_id,
             status=status,  # type: ignore[arg-type]
             sort_by=sort_by,  # type: ignore[arg-type]
             sort_order=sort_order,  # type: ignore[arg-type]
@@ -172,6 +181,60 @@ async def get_class_students_route(
         )
 
 
+@router.get("/{class_id}/teachers", summary="Get class teachers")
+async def get_class_teachers_route(
+    class_id: int,
+    _: CurrentUser = Depends(require_roles("admin")),
+):
+    try:
+        result = await get_class_teachers(class_id)
+        return success_response(
+            data=result,
+            message="Class teachers loaded successfully",
+            status_code=200,
+        )
+    except ValueError as exc:
+        status_code = 404 if str(exc) == "Class not found" else 400
+        return error_response(
+            message=str(exc),
+            status_code=status_code,
+            error_code="CLASS_TEACHERS_GET_INVALID",
+        )
+    except Exception:
+        return error_response(
+            message="Unable to load class teachers",
+            status_code=500,
+            error_code="CLASS_TEACHERS_GET_FAILED",
+        )
+
+
+@router.get("/{class_id}/statistics", summary="Get class statistics")
+async def get_class_statistics_route(
+    class_id: int,
+    _: CurrentUser = Depends(require_roles("admin")),
+):
+    try:
+        result = await get_class_statistics(class_id)
+        return success_response(
+            data=result,
+            message="Class statistics loaded successfully",
+            status_code=200,
+        )
+    except ValueError as exc:
+        status_code = 404 if str(exc) == "Class not found" else 400
+        return error_response(
+            message=str(exc),
+            status_code=status_code,
+            error_code="CLASS_STATS_GET_INVALID",
+        )
+    except Exception:
+        return error_response(
+            message="Unable to load class statistics",
+            status_code=500,
+            error_code="CLASS_STATS_GET_FAILED",
+        )
+
+
 @router.put("/{class_id}", summary="Update class")
 async def put_class(
     class_id: int,
@@ -228,14 +291,43 @@ async def post_assign_subject_to_class(
         )
 
 
-@router.delete("/{class_id}/subjects/{subject_id}", summary="Remove subject from class")
-async def delete_class_subject_assignment(
+@router.put("/{class_id}/subjects/{class_subject_id}", summary="Update class subject assignment")
+async def put_class_subject_assignment(
     class_id: int,
-    subject_id: int,
+    class_subject_id: int,
+    payload: UpdateClassSubjectRequest,
     _: CurrentUser = Depends(require_roles("admin")),
 ):
     try:
-        result = await remove_subject_from_class(class_id, subject_id)
+        result = await update_class_subject(class_id, class_subject_id, payload)
+        return success_response(
+            data=result,
+            message="Class subject updated successfully",
+            status_code=200,
+        )
+    except ValueError as exc:
+        status_code = 404 if str(exc) in {"Class not found", "Class subject assignment not found"} else 400
+        return error_response(
+            message=str(exc),
+            status_code=status_code,
+            error_code="CLASS_SUBJECT_UPDATE_INVALID",
+        )
+    except Exception:
+        return error_response(
+            message="Unable to update class subject",
+            status_code=500,
+            error_code="CLASS_SUBJECT_UPDATE_FAILED",
+        )
+
+
+@router.delete("/{class_id}/subjects/{class_subject_id}", summary="Remove subject from class by class_subject_id")
+async def delete_class_subject_assignment_by_record(
+    class_id: int,
+    class_subject_id: int,
+    _: CurrentUser = Depends(require_roles("admin")),
+):
+    try:
+        result = await remove_subject_from_class_by_record_id(class_id, class_subject_id)
         return success_response(
             data=result,
             message="Subject removed from class successfully",
@@ -309,6 +401,66 @@ async def delete_class_student_assignment(
             message="Unable to remove student from class",
             status_code=500,
             error_code="CLASS_STUDENT_DELETE_FAILED",
+        )
+
+
+@router.post("/{class_id}/teachers", summary="Assign teacher to class")
+async def post_assign_teacher_to_class(
+    class_id: int,
+    payload: AssignTeacherToClassRequest,
+    _: CurrentUser = Depends(require_roles("admin")),
+):
+    try:
+        result = await assign_teacher_to_class(class_id, payload)
+        return success_response(
+            data=result,
+            message="Teacher assigned to class successfully",
+            status_code=201,
+        )
+    except ValueError as exc:
+        status_code = 404 if str(exc) in {"Class not found", "Teacher does not exist"} else 400
+        return error_response(
+            message=str(exc),
+            status_code=status_code,
+            error_code="CLASS_TEACHER_ASSIGN_INVALID",
+        )
+    except Exception:
+        return error_response(
+            message="Unable to assign teacher to class",
+            status_code=500,
+            error_code="CLASS_TEACHER_ASSIGN_FAILED",
+        )
+
+
+@router.delete("/{class_id}/teachers/{teacher_id}", summary="Remove teacher from class")
+async def delete_class_teacher_assignment(
+    class_id: int,
+    teacher_id: int,
+    _: CurrentUser = Depends(require_roles("admin")),
+):
+    try:
+        result = await remove_teacher_from_class(class_id, teacher_id)
+        return success_response(
+            data=result,
+            message="Teacher removed from class successfully",
+            status_code=200,
+        )
+    except ValueError as exc:
+        status_code = (
+            404
+            if str(exc) in {"Class not found", "Class teacher assignment not found"}
+            else 400
+        )
+        return error_response(
+            message=str(exc),
+            status_code=status_code,
+            error_code="CLASS_TEACHER_DELETE_INVALID",
+        )
+    except Exception:
+        return error_response(
+            message="Unable to remove teacher from class",
+            status_code=500,
+            error_code="CLASS_TEACHER_DELETE_FAILED",
         )
 
 

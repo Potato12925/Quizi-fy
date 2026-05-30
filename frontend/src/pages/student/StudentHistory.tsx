@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useId, useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getStudentHistory, exportStudentHistoryPdf, startRetakeSession } from '@/api/studentApi';
 import type { HistoryItem } from '@/api/studentApi';
@@ -8,6 +8,8 @@ import ErrorState from '@/components/common/ErrorState';
 import EmptyState from '@/components/common/EmptyState';
 
 export default function HistoryPage() {
+  const rawChartGradientId = useId();
+  const chartGradientId = useMemo(() => `history-grad-${rawChartGradientId.replace(/:/g, '')}`, [rawChartGradientId]);
   const navigate = useNavigate();
   const [allAttempts, setAllAttempts] = useState<HistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,9 +47,52 @@ export default function HistoryPage() {
 
   const chartData = useMemo(() => {
     const sortedByDate = [...allAttempts].sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
-    const top10 = sortedByDate.slice(0, 10);
-    return top10.reverse(); // oldest to newest in chart
+    const latestAttempts = sortedByDate.slice(0, 8);
+    return latestAttempts.reverse();
   }, [allAttempts]);
+
+  const chartGeometry = useMemo(() => {
+    if (chartData.length === 0) {
+      return null;
+    }
+
+    const viewWidth = 900;
+    const viewHeight = 320;
+    const paddingX = 34;
+    const paddingTop = 68;
+    const paddingBottom = 50;
+    const usableWidth = viewWidth - paddingX * 2;
+    const usableHeight = viewHeight - paddingTop - paddingBottom;
+    const stepX = chartData.length > 1 ? usableWidth / (chartData.length - 1) : 0;
+
+    const points = chartData.map((attempt, index) => {
+      const score = attempt.status === 'Đang làm' ? 0 : Math.max(0, Math.min(10, Number(attempt.score) || 0));
+      const x = paddingX + stepX * index;
+      const y = paddingTop + (1 - score / 10) * usableHeight;
+      return {
+        x,
+        y,
+        score,
+        lessonLabel: `Bài ${index + 1}`,
+        subjectLabel: attempt.subject,
+      };
+    });
+
+    const linePath = points
+      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+      .join(' ');
+    const areaPath = `${linePath} L ${points[points.length - 1].x} ${viewHeight} L ${points[0].x} ${viewHeight} Z`;
+    const gridLines = Array.from({ length: 4 }, (_, index) => paddingTop + (usableHeight / 3) * index);
+
+    return {
+      viewWidth,
+      viewHeight,
+      points,
+      linePath,
+      areaPath,
+      gridLines,
+    };
+  }, [chartData]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAttempts.length / itemsPerPage));
   const paginatedAttempts = filteredAttempts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -112,48 +157,66 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {/* Progress Chart Mockup */}
-      <section className="bg-slate-900 rounded-[3.5rem] p-12 text-white relative overflow-hidden shadow-2xl shadow-slate-900/20">
-        <div className="absolute top-0 right-0 p-20 opacity-5">
-          <span className="material-symbols-outlined text-[300px]">trending_up</span>
-        </div>
-        <div className="relative z-10 space-y-8">
-          <div className="flex justify-between items-center">
-            <h3 className="text-xl font-black uppercase tracking-tight">Xu hướng học tập</h3>
-            <div className="flex gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-[#b20112]"></div>
-                <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Điểm số</span>
-              </div>
+      <section className="bg-white rounded-[3.5rem] border border-slate-100 px-8 py-10 shadow-sm md:px-12 md:py-12">
+        <div className="space-y-10">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h3 className="text-2xl font-black uppercase italic tracking-tight text-slate-900 md:text-[2rem]">Xu hướng điểm số</h3>
+              <p className="mt-3 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">8 bài làm gần nhất</p>
+            </div>
+            <div className="flex gap-3 self-start rounded-2xl bg-slate-50 p-1.5">
+              <button className="min-w-20 rounded-2xl bg-slate-900 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-sm">Tuần</button>
+              <button className="min-w-20 rounded-2xl px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Tháng</button>
             </div>
           </div>
 
-          {/* Simple Bar Chart UI */}
-          <div className="flex justify-center md:justify-start h-48 gap-3 md:gap-5">
-            {chartData.length > 0 ? chartData.map((attempt, i) => {
-              const rawScore = Number(attempt.score) || 0;
-              const heightPercent = attempt.status === 'Đang làm' ? 5 : Math.max(rawScore * 10, 5);
+          {chartGeometry ? (
+            <div className="space-y-8">
+              <div className="relative h-[390px] w-full overflow-hidden rounded-[2rem] bg-gradient-to-b from-white via-white to-slate-50/40 px-2 py-2">
+                <svg className="h-full w-full" viewBox={`0 0 ${chartGeometry.viewWidth} ${chartGeometry.viewHeight}`} preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id={chartGradientId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#b20112" stopOpacity="0.22" />
+                      <stop offset="100%" stopColor="#b20112" stopOpacity="0.03" />
+                    </linearGradient>
+                  </defs>
+                  {chartGeometry.gridLines.map((y) => (
+                    <line key={y} x1="0" y1={y} x2={chartGeometry.viewWidth} y2={y} stroke="#e7edf6" strokeWidth="1.5" />
+                  ))}
+                  <path d={chartGeometry.areaPath} fill={`url(#${chartGradientId})`} />
+                  <path d={chartGeometry.linePath} fill="none" stroke="#b20112" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
+                  {chartGeometry.points.map((point, index) => (
+                    <g key={chartData[index].id}>
+                      <circle cx={point.x} cy={point.y} r="8.6" fill="white" stroke="#b20112" strokeWidth="4.6" />
+                    </g>
+                  ))}
+                </svg>
 
-              return (
-                <div key={attempt.id} className="flex-1 flex flex-col items-center justify-end gap-3 group mt-6 h-full max-w-[64px]">
-                  <div className="w-full bg-white/5 rounded-t-xl relative overflow-visible flex-1 flex items-end">
-                    <div
-                      className={`w-full bg-gradient-to-t rounded-t-xl transition-all duration-1000 group-hover:brightness-125 ${attempt.status === 'Đang làm' ? 'from-slate-400 to-slate-300' : 'from-[#b20112] to-[#ff4d4d]'
-                        }`}
-                      style={{ height: `${heightPercent}%` }}
-                    >
-                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-white text-slate-900 px-2 py-1 rounded text-[9px] font-black shadow-sm whitespace-nowrap z-10 border border-slate-100">
-                        {attempt.status === 'Đang làm' ? '...' : `${rawScore}`}
-                      </div>
+                <div className="pointer-events-none absolute inset-x-0 top-6 grid gap-3 px-5" style={{ gridTemplateColumns: `repeat(${chartGeometry.points.length}, minmax(0, 1fr))` }}>
+                  {chartGeometry.points.map((point, index) => (
+                    <div key={`score-${chartData[index].id}`} className="flex justify-center">
+                      <span className="inline-flex min-w-12 items-center justify-center rounded-2xl border border-slate-100 bg-white px-4 py-2 text-[10px] font-black text-slate-900 shadow-sm">
+                        {point.score.toFixed(point.score % 1 === 0 ? 0 : 2)}
+                      </span>
                     </div>
-                  </div>
-                  <span className="text-[8px] font-black opacity-30 uppercase tracking-tighter truncate max-w-full" title={attempt.subject}>Bài {i + 1}</span>
+                  ))}
                 </div>
-              );
-            }) : (
-              <div className="w-full h-full flex items-center justify-center opacity-50 text-sm">Chưa có dữ liệu</div>
-            )}
-          </div>
+              </div>
+
+              <div className="grid gap-3 text-center" style={{ gridTemplateColumns: `repeat(${chartGeometry.points.length}, minmax(0, 1fr))` }}>
+                {chartGeometry.points.map((point, index) => (
+                  <div key={`label-${chartData[index].id}`} className="space-y-2 px-1">
+                    <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">{point.lessonLabel}</p>
+                    <p className="line-clamp-2 text-[1.08rem] font-extrabold leading-tight text-slate-600">{point.subjectLabel}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-72 items-center justify-center rounded-[2rem] border border-dashed border-slate-200 text-sm font-bold text-slate-400">
+              Chưa có dữ liệu
+            </div>
+          )}
         </div>
       </section>
 

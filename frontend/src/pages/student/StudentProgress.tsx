@@ -1,22 +1,89 @@
-import React, { useState, useEffect } from 'react';
+import React, { useId, useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getStudentProgress } from '@/api/studentApi';
-import type { StudentProgressData } from '@/api/studentApi';
+import { getStudentHistory, getStudentProgress } from '@/api/studentApi';
+import type { HistoryItem, StudentProgressData } from '@/api/studentApi';
 
 import LoadingState from '@/components/common/LoadingState';
 import ErrorState from '@/components/common/ErrorState';
 import EmptyState from '@/components/common/EmptyState';
 
 export default function ProgressPage() {
+   const rawChartGradientId = useId();
+   const chartGradientId = useMemo(() => `progress-grad-${rawChartGradientId.replace(/:/g, '')}`, [rawChartGradientId]);
   const [data, setData] = useState<StudentProgressData | null>(null);
+   const [historyAttempts, setHistoryAttempts] = useState<HistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+
+   const latestAttempts = useMemo(() => {
+      return [...historyAttempts]
+         .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
+         .slice(0, 8)
+         .reverse();
+   }, [historyAttempts]);
+
+   const trendScores = useMemo(() => {
+      return latestAttempts.map((attempt) => (
+         attempt.status === 'Đang làm' ? 0 : Math.max(0, Math.min(10, Number(attempt.score) || 0))
+      ));
+   }, [latestAttempts]);
+   const trendGeometry = useMemo(() => {
+         if (trendScores.length === 0) {
+            return {
+               viewWidth: 900,
+               viewHeight: 320,
+               points: [] as Array<{ x: number; y: number; score: number }>,
+               linePath: '',
+               areaPath: '',
+               gridLines: [68, 134, 200, 266],
+            };
+         }
+
+      const viewWidth = 900;
+      const viewHeight = 320;
+      const paddingX = 34;
+      const paddingTop = 68;
+      const paddingBottom = 50;
+      const usableWidth = viewWidth - paddingX * 2;
+      const usableHeight = viewHeight - paddingTop - paddingBottom;
+      const stepX = trendScores.length > 1 ? usableWidth / (trendScores.length - 1) : 0;
+
+      const points = trendScores.map((score, index) => {
+         const normalized = Math.max(0, Math.min(10, score));
+         const x = paddingX + stepX * index;
+         const y = paddingTop + (1 - normalized / 10) * usableHeight;
+         return {
+            x,
+            y,
+            score: normalized,
+         };
+      });
+
+      const linePath = points
+         .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+         .join(' ');
+      const areaPath = `${linePath} L ${points[points.length - 1].x} ${viewHeight} L ${points[0].x} ${viewHeight} Z`;
+      const gridLines = Array.from({ length: 4 }, (_, index) => paddingTop + (usableHeight / 3) * index);
+
+      return {
+         viewWidth,
+         viewHeight,
+         points,
+         linePath,
+         areaPath,
+         gridLines,
+      };
+   }, [trendScores]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const result = await getStudentProgress();
+            const [result, history] = await Promise.all([
+               getStudentProgress(),
+               getStudentHistory(),
+            ]);
         setData(result);
+            setHistoryAttempts(history);
       } catch {
         setError('Không thể tải dữ liệu');
       } finally {
@@ -77,32 +144,45 @@ export default function ProgressPage() {
            </div>
            
            {/* Custom SVG Line Chart */}
-           <div className="w-full h-64 relative mt-10">
-              <svg className="w-full h-full" viewBox="0 0 800 200" preserveAspectRatio="none">
+                <div className="w-full h-72 relative mt-8">
+                     <svg className="w-full h-full" viewBox={`0 0 ${trendGeometry.viewWidth} ${trendGeometry.viewHeight}`} preserveAspectRatio="none">
                 <defs>
-                   <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#b20112" stopOpacity="0.2" />
-                      <stop offset="100%" stopColor="#b20112" stopOpacity="0" />
+                   <linearGradient id={chartGradientId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#b20112" stopOpacity="0.22" />
+                      <stop offset="100%" stopColor="#b20112" stopOpacity="0.03" />
                    </linearGradient>
                 </defs>
                 {/* Grid Lines */}
-                {[0, 50, 100, 150].map(y => (
-                  <line key={y} x1="0" y1={y} x2="800" y2={y} stroke="#f1f5f9" strokeWidth="1" />
+                        {trendGeometry.gridLines.map(y => (
+                           <line key={y} x1="0" y1={y} x2={trendGeometry.viewWidth} y2={y} stroke="#e7edf6" strokeWidth="1.5" />
                 ))}
                 {/* Path Area */}
-                <path d="M0,150 L100,120 L200,140 L300,80 L400,100 L500,40 L600,60 L700,20 L800,30 L800,200 L0,200 Z" fill="url(#lineGrad)" />
+                        <path d={trendGeometry.areaPath} fill={`url(#${chartGradientId})`} />
                 {/* Main Line */}
-                <path d="M0,150 L100,120 L200,140 L300,80 L400,100 L500,40 L600,60 L700,20 L800,30" fill="none" stroke="#b20112" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d={trendGeometry.linePath} fill="none" stroke="#b20112" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
                 {/* Points */}
-                {[
-                  {x: 100, y: 120}, {x: 300, y: 80}, {x: 500, y: 40}, {x: 700, y: 20}
-                ].map((p, i) => (
-                  <circle key={i} cx={p.x} cy={p.y} r="6" fill="white" stroke="#b20112" strokeWidth="3" />
-                ))}
+                        {trendGeometry.points.map((p, i) => (
+                           <circle key={i} cx={p.x} cy={p.y} r="8.6" fill="white" stroke="#b20112" strokeWidth="4.6" />
+                        ))}
               </svg>
-              <div className="flex justify-between mt-6 text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">
-                 <span>Tuần 1</span><span>Tuần 2</span><span>Tuần 3</span><span>Tuần 4</span><span>Tuần 5</span><span>Tuần 6</span><span>Tuần 7</span><span>Tuần 8</span>
-              </div>
+
+                     <div className="pointer-events-none absolute inset-x-0 top-2 grid gap-3 px-5" style={{ gridTemplateColumns: `repeat(${trendGeometry.points.length || 1}, minmax(0, 1fr))` }}>
+                        {trendGeometry.points.map((point, index) => (
+                           <div key={`progress-score-${index}`} className="flex justify-center">
+                              <span className="inline-flex min-w-12 items-center justify-center rounded-2xl border border-slate-100 bg-white px-4 py-2 text-[10px] font-black text-slate-900 shadow-sm">
+                                 {point.score.toFixed(point.score % 1 === 0 ? 0 : 2)}
+                              </span>
+                           </div>
+                        ))}
+                     </div>
+
+                       <div className="grid mt-7 gap-3 text-center" style={{ gridTemplateColumns: `repeat(${trendGeometry.points.length || 1}, minmax(0, 1fr))` }}>
+                          {latestAttempts.map((attempt, i) => (
+                                          <div key={`progress-label-${attempt.id}`} className="px-1">
+                              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">Bài {i + 1}</p>
+                            </div>
+                          ))}
+                       </div>
            </div>
         </div>
 

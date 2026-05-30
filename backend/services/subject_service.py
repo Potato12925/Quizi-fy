@@ -4,6 +4,7 @@ from middlewares.auth_middleware import CurrentUser
 from repositories.subject_repository import (
     create_subject_record,
     find_subject_by_code,
+    find_subject_by_code_excluding_id,
     find_subject_by_id,
     is_teacher_assigned_to_subject,
     list_subjects,
@@ -11,7 +12,7 @@ from repositories.subject_repository import (
     soft_delete_subject_by_id,
     update_subject_by_id,
 )
-from schemas.subject_schema import SubjectCreateRequest, SubjectUpdateRequest
+from schemas.subject_schema import SubjectCreateRequest, SubjectListQueryParams, SubjectUpdateRequest
 
 
 class SubjectAuthorizationError(ValueError):
@@ -54,17 +55,32 @@ async def get_subject_by_id(subject_id: int, current_user: CurrentUser) -> dict:
     return subject
 
 
-async def get_subjects(page: int, limit: int, current_user: CurrentUser) -> dict:
+async def get_subjects(params: SubjectListQueryParams, current_user: CurrentUser) -> dict:
     if _is_admin(current_user):
-        items, total = await list_subjects(page=page, limit=limit)
+        items, total = await list_subjects(
+            page=params.page,
+            limit=params.limit,
+            search=params.search,
+            status=params.status,
+            sort_by=params.sort_by,
+            sort_order=params.sort_order,
+        )
     else:
-        items, total = await list_subjects_by_teacher(page=page, limit=limit, teacher_id=current_user.user_id)
-    total_pages = ceil(total / limit) if total > 0 else 1
+        items, total = await list_subjects_by_teacher(
+            page=params.page,
+            limit=params.limit,
+            teacher_id=current_user.user_id,
+            search=params.search,
+            status=params.status,
+            sort_by=params.sort_by,
+            sort_order=params.sort_order,
+        )
+    total_pages = ceil(total / params.limit) if total > 0 else 1
     return {
         "items": items,
         "pagination": {
-            "page": page,
-            "limit": limit,
+            "page": params.page,
+            "limit": params.limit,
             "total": total,
             "total_pages": total_pages,
         },
@@ -80,7 +96,7 @@ async def update_subject(subject_id: int, payload: SubjectUpdateRequest, current
     update_payload: dict = {}
     if payload.subject_code is not None:
         if payload.subject_code != existing_subject["subject_code"]:
-            code_exists = await find_subject_by_code(payload.subject_code)
+            code_exists = await find_subject_by_code_excluding_id(payload.subject_code, subject_id=subject_id)
             if code_exists:
                 raise ValueError("Subject code already exists")
         update_payload["subject_code"] = payload.subject_code

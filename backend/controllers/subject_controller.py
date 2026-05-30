@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 
 from core.responses import error_response, success_response
 from middlewares.auth_middleware import CurrentUser, require_roles
-from schemas.subject_schema import SubjectCreateRequest, SubjectUpdateRequest
+from schemas.subject_schema import SubjectCreateRequest, SubjectListQueryParams, SubjectUpdateRequest
 from services.subject_service import (
     SubjectAuthorizationError,
     create_subject,
@@ -45,15 +45,33 @@ async def post_subject(
 async def get_subject_list(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
+    search: str | None = Query(default=None),
+    status: str = Query(default="all"),
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc"),
     current_user: CurrentUser = Depends(require_roles("admin", "teacher")),
 ):
     try:
-        result = await get_subjects(page=page, limit=limit, current_user=current_user)
+        params = SubjectListQueryParams(
+            page=page,
+            limit=limit,
+            search=search,
+            status=status,  # type: ignore[arg-type]
+            sort_by=sort_by,  # type: ignore[arg-type]
+            sort_order=sort_order,  # type: ignore[arg-type]
+        )
+        result = await get_subjects(params=params, current_user=current_user)
         return success_response(
             data=result["items"],
             meta=result["pagination"],
             message="Subjects loaded successfully",
             status_code=200,
+        )
+    except ValueError as exc:
+        return error_response(
+            message=str(exc),
+            status_code=400,
+            error_code="SUBJECT_LIST_INVALID",
         )
     except Exception:
         return error_response(
@@ -99,7 +117,7 @@ async def get_subject_detail(
 async def put_subject(
     subject_id: int,
     payload: SubjectUpdateRequest,
-    current_user: CurrentUser = Depends(require_roles("admin", "teacher")),
+    current_user: CurrentUser = Depends(require_roles("admin")),
 ):
     try:
         result = await update_subject(subject_id, payload, current_user=current_user)
@@ -132,7 +150,7 @@ async def put_subject(
 @router.delete("/{subject_id}", summary="Soft delete subject")
 async def delete_subject_route(
     subject_id: int,
-    current_user: CurrentUser = Depends(require_roles("admin", "teacher")),
+    current_user: CurrentUser = Depends(require_roles("admin")),
 ):
     try:
         result = await delete_subject(subject_id, current_user=current_user)

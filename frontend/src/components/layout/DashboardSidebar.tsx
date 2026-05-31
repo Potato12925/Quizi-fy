@@ -21,6 +21,7 @@ export default function DashboardSidebar({ role }: { role?: 'student' | 'teacher
     { name: 'Tạo câu hỏi AI', icon: 'auto_awesome', path: '/teacher/ai-generator' },
     { name: 'Ngân hàng câu hỏi', icon: 'database', path: '/teacher/question-bank' },
     { name: 'Thống kê lớp', icon: 'bar_chart', path: '/teacher/stats' },
+    { name: 'Cài đặt ', icon: 'settings', path: '/teacher/settings' },
   ];
 
   const adminMenu = [
@@ -88,3 +89,4 @@ export default function DashboardSidebar({ role }: { role?: 'student' | 'teacher
     </aside>
   );
 }
+

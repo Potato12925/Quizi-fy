@@ -4,8 +4,9 @@ from math import ceil
 from middlewares.auth_middleware import CurrentUser
 from repositories.teacher_stats_repository import (
     list_practice_attempts_by_practice_set_ids,
-    list_practice_sets_by_document_topic_ids,
+    list_scoped_practice_sets,
     list_question_document_topics,
+    list_teacher_assigned_topics_scope,
     list_student_answers_by_attempt_ids,
     list_teacher_document_topics_scope,
 )
@@ -65,6 +66,22 @@ def _build_scope_context(rows: list[dict]) -> dict[int, dict]:
     return context
 
 
+def _build_assigned_topic_context(rows: list[dict]) -> dict[int, dict]:
+    context: dict[int, dict] = {}
+    for row in rows:
+        class_subject = row.get("class_subjects") or {}
+        topic_id = _safe_int(row.get("topic_id"))
+        if topic_id <= 0:
+            continue
+        context[topic_id] = {
+            "topic_id": topic_id,
+            "topic_name": row.get("topic_name") or "Unknown topic",
+            "class_subject_id": _safe_int(row.get("class_subject_id")),
+            "subject_id": _safe_int(class_subject.get("subject_id")),
+        }
+    return context
+
+
 def _empty_stats_response() -> dict:
     return TeacherStatsResponse(
         summary={
@@ -87,31 +104,54 @@ async def get_teacher_stats(
     current_user: CurrentUser,
     subject_id: int | None = None,
     topic_id: int | None = None,
+    debug: bool = False,
 ) -> dict:
+    debug_info: dict[str, object] = {"teacher_id": current_user.user_id}
+
+    assigned_topic_rows = await list_teacher_assigned_topics_scope(current_user.user_id)
+    assigned_topic_context = _build_assigned_topic_context(assigned_topic_rows)
+    teacher_subject_ids = sorted(
+        {
+            item["subject_id"]
+            for item in assigned_topic_context.values()
+            if item["subject_id"] > 0
+        }
+    )
+    teacher_topic_ids = sorted(assigned_topic_context.keys())
+    teacher_subject_id_set = set(teacher_subject_ids)
+    teacher_topic_id_set = set(teacher_topic_ids)
+
+    debug_info["assigned_subject_ids"] = teacher_subject_ids
+    debug_info["assigned_topic_ids"] = teacher_topic_ids
+
     scope_rows = await list_teacher_document_topics_scope(current_user.user_id)
     scope_context = _build_scope_context(scope_rows)
-    if not scope_context:
-        return _empty_stats_response()
+    debug_info["scope_document_topics_count"] = len(scope_context)
+    if not teacher_subject_ids:
+        response = _empty_stats_response()
+        if debug:
+            debug_info["filtered_scope_document_topics_count"] = 0
+            debug_info["scoped_practice_sets_count"] = 0
+            debug_info["practice_sets_with_null_document_topic_count"] = 0
+            debug_info["attempts_count"] = 0
+            debug_info["submitted_attempts_count"] = 0
+            debug_info["answers_raw_count"] = 0
+            debug_info["answers_selected_count"] = 0
+            debug_info["mapped_questions_count"] = 0
+            debug_info["weak_topics_count"] = 0
+            debug_info["students_with_scores_count"] = 0
+        if debug:
+            response["debug"] = debug_info
+        return response
 
-    teacher_subject_ids = {
-        item["subject_id"]
-        for item in scope_context.values()
-        if item["subject_id"] > 0
-    }
-    teacher_topic_ids = {
-        item["topic_id"]
-        for item in scope_context.values()
-        if item["topic_id"] > 0
-    }
-
-    if subject_id is not None and subject_id not in teacher_subject_ids:
+    if subject_id is not None and subject_id not in teacher_subject_id_set:
         raise TeacherStatsAuthorizationError("You can only view stats for your assigned subjects")
-    if topic_id is not None and topic_id not in teacher_topic_ids:
+    if topic_id is not None and topic_id not in teacher_topic_id_set:
         raise TeacherStatsAuthorizationError("You can only view stats for your assigned topics")
     if subject_id is not None and topic_id is not None:
         subject_ids_of_topic = {
             item["subject_id"]
-            for item in scope_context.values()
+            for item in assigned_topic_context.values()
             if item["topic_id"] == topic_id
         }
         if subject_id not in subject_ids_of_topic:
@@ -125,12 +165,52 @@ async def get_teacher_stats(
             continue
         filtered_scope_ids.append(document_topic_id)
 
-    if not filtered_scope_ids:
-        return _empty_stats_response()
+    if topic_id is not None and not filtered_scope_ids:
+        debug_info["filtered_scope_document_topics_count"] = 0
+        response = _empty_stats_response()
+        if debug:
+            debug_info["scoped_practice_sets_count"] = 0
+            debug_info["practice_sets_with_null_document_topic_count"] = 0
+            debug_info["attempts_count"] = 0
+            debug_info["submitted_attempts_count"] = 0
+            debug_info["answers_raw_count"] = 0
+            debug_info["answers_selected_count"] = 0
+            debug_info["mapped_questions_count"] = 0
+            debug_info["weak_topics_count"] = 0
+            debug_info["students_with_scores_count"] = 0
+        if debug:
+            response["debug"] = debug_info
+        return response
+    debug_info["filtered_scope_document_topics_count"] = len(filtered_scope_ids)
 
-    practice_sets = await list_practice_sets_by_document_topic_ids(filtered_scope_ids)
+    practice_sets = await list_scoped_practice_sets(
+        assigned_subject_ids=teacher_subject_ids,
+        scoped_document_topic_ids=filtered_scope_ids,
+    )
+    if topic_id is not None:
+        filtered_scope_set = set(filtered_scope_ids)
+        practice_sets = [
+            item
+            for item in practice_sets
+            if _safe_int(item.get("document_topic_id")) in filtered_scope_set
+        ]
+    debug_info["scoped_practice_sets_count"] = len(practice_sets)
+    debug_info["practice_sets_with_null_document_topic_count"] = sum(
+        1 for item in practice_sets if item.get("document_topic_id") is None
+    )
     if not practice_sets:
-        return _empty_stats_response()
+        response = _empty_stats_response()
+        if debug:
+            debug_info["attempts_count"] = 0
+            debug_info["submitted_attempts_count"] = 0
+            debug_info["answers_raw_count"] = 0
+            debug_info["answers_selected_count"] = 0
+            debug_info["mapped_questions_count"] = 0
+            debug_info["weak_topics_count"] = 0
+            debug_info["students_with_scores_count"] = 0
+        if debug:
+            response["debug"] = debug_info
+        return response
 
     practice_set_ids = []
     student_id_by_practice_set_id: dict[int, int] = {}
@@ -145,6 +225,7 @@ async def get_teacher_stats(
 
     attempts = await list_practice_attempts_by_practice_set_ids(practice_set_ids)
     total_attempts = len(attempts)
+    debug_info["attempts_count"] = total_attempts
     submitted_attempts = []
     for item in attempts:
         if item.get("status") == "submitted":
@@ -156,6 +237,7 @@ async def get_teacher_stats(
         if _safe_int(item.get("attempt_id")) > 0
     ]
     submitted_attempt_id_set = set(submitted_attempt_ids)
+    debug_info["submitted_attempts_count"] = len(submitted_attempts)
 
     total_score = 0.0
     scored_attempt_count = 0
@@ -183,6 +265,7 @@ async def get_teacher_stats(
             student_scores.setdefault(student_id, []).append(score)
 
     answers = await list_student_answers_by_attempt_ids(submitted_attempt_ids)
+    debug_info["answers_raw_count"] = len(answers)
     answered_rows = [
         item
         for item in answers
@@ -190,6 +273,7 @@ async def get_teacher_stats(
         and item.get("selected_option_id") is not None
     ]
     total_answered_questions = len(answered_rows)
+    debug_info["answers_selected_count"] = total_answered_questions
 
     question_ids = sorted(
         {
@@ -205,6 +289,7 @@ async def get_teacher_stats(
         document_topic_id = _safe_int(row.get("document_topic_id"))
         if question_id > 0 and document_topic_id > 0:
             document_topic_id_by_question_id[question_id] = document_topic_id
+    debug_info["mapped_questions_count"] = len(document_topic_id_by_question_id)
 
     weak_topic_accumulator: dict[int, dict] = {}
     scoped_document_topic_ids = set(filtered_scope_ids)
@@ -281,4 +366,9 @@ async def get_teacher_stats(
             "total_students": total_students,
         },
     )
-    return response.model_dump()
+    payload = response.model_dump()
+    if debug:
+        debug_info["weak_topics_count"] = len(payload.get("weak_topics") or [])
+        debug_info["students_with_scores_count"] = total_students
+        payload["debug"] = debug_info
+    return payload

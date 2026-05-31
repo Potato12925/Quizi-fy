@@ -80,19 +80,38 @@ async def get_topic_by_id_for_user(record_id: int, current_user: CurrentUser) ->
     return _serialize_topic(data)
 
 
-async def get_topics(page: int, limit: int, current_user: CurrentUser, class_subject_id: int | None = None) -> dict:
+async def get_topics(
+    page: int,
+    limit: int,
+    current_user: CurrentUser,
+    class_subject_id: int | None = None,
+    subject_id: int | None = None,
+) -> dict:
     if not _is_admin(current_user):
         teacher_class_subject_ids = await _get_teacher_class_subject_ids(current_user)
         if class_subject_id is not None and class_subject_id not in teacher_class_subject_ids:
             raise TopicAuthorizationError("You can only view topics for your assigned class subjects")
         if class_subject_id is not None:
-            items, total = await list_topics(page=page, limit=limit, class_subject_id=class_subject_id)
+            items, total = await list_topics(
+                page=page,
+                limit=limit,
+                class_subject_id=class_subject_id,
+                subject_id=subject_id,
+            )
         else:
             items, total = await list_topics_by_class_subject_ids(
-                page=page, limit=limit, class_subject_ids=sorted(teacher_class_subject_ids)
+                page=page,
+                limit=limit,
+                class_subject_ids=sorted(teacher_class_subject_ids),
+                subject_id=subject_id,
             )
     else:
-        items, total = await list_topics(page=page, limit=limit, class_subject_id=class_subject_id)
+        items, total = await list_topics(
+            page=page,
+            limit=limit,
+            class_subject_id=class_subject_id,
+            subject_id=subject_id,
+        )
     total_pages = ceil(total / limit) if total > 0 else 1
     return {
         "items": [_serialize_topic(item) for item in items],

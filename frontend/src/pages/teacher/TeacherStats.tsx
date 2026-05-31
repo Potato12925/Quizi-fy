@@ -195,7 +195,7 @@ export default function TeacherStatsPage() {
           </p>
         </div>
 
-        <div className="bg-white p-2 rounded-2xl border border-slate-100 flex gap-2 relative">
+        <div className="bg-white p-2 rounded-2xl border border-slate-100 flex gap-2 relative flex-wrap">
           <div className="relative">
             <button
               onClick={(event) => {
@@ -417,3 +417,5 @@ export default function TeacherStatsPage() {
     </div>
   );
 }
+
+

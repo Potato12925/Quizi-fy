@@ -214,7 +214,7 @@ CREATE TABLE public.topics (
   created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
   deleted_at timestamp without time zone,
-  class_subject_id bigint,
+  class_subject_id bigint NOT NULL,
   CONSTRAINT topics_pkey PRIMARY KEY (topic_id),
   CONSTRAINT topics_class_subject_id_fkey FOREIGN KEY (class_subject_id) REFERENCES public.class_subjects(class_subject_id)
 );

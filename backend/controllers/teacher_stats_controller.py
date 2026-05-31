@@ -14,6 +14,7 @@ router = APIRouter(prefix="/teacher", tags=["Teacher Stats"])
 async def get_teacher_stats_route(
     subject_id: int | None = Query(default=None, ge=1),
     topic_id: int | None = Query(default=None, ge=1),
+    debug: bool = Query(default=False),
     current_user: CurrentUser = Depends(require_roles("teacher")),
 ):
     try:
@@ -21,6 +22,7 @@ async def get_teacher_stats_route(
             current_user=current_user,
             subject_id=subject_id,
             topic_id=topic_id,
+            debug=debug,
         )
         return success_response(
             data=result,
@@ -39,9 +41,9 @@ async def get_teacher_stats_route(
             status_code=400,
             error_code="TEACHER_STATS_INVALID",
         )
-    except Exception:
+    except Exception as exc:
         return error_response(
-            message="Unable to load teacher stats",
+            message=str(exc),
             status_code=500,
             error_code="TEACHER_STATS_LOAD_FAILED",
         )

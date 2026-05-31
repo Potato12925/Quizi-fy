@@ -2,6 +2,8 @@ import asyncio
 
 from core.supabase import SupabaseManager
 
+ALLOWED_AI_REQUEST_STATUSES = {"pending", "processing", "completed", "failed", "cancelled"}
+
 
 async def list_assigned_subjects_for_teacher(teacher_id: int) -> list[dict]:
     supabase = SupabaseManager.get_client()
@@ -38,8 +40,12 @@ async def count_active_topics_by_subject_ids(subject_ids: list[int]) -> int:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("topics")
-        .select("topic_id,class_subjects!inner(subject_id)", count="exact")
+        .select("topic_id,class_subjects!inner(subject_id,status,deleted_at,subjects!inner(subject_id,status,deleted_at))", count="exact")
         .in_("class_subjects.subject_id", subject_ids)
+        .eq("class_subjects.status", "active")
+        .is_("class_subjects.deleted_at", None)
+        .eq("class_subjects.subjects.status", "active")
+        .is_("class_subjects.subjects.deleted_at", None)
         .is_("deleted_at", None)
         .execute()
     )
@@ -52,8 +58,15 @@ async def list_active_topics_by_subject_ids(subject_ids: list[int]) -> list[dict
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("topics")
-        .select("topic_id,topic_name,class_subject_id,class_subjects!inner(subject_id)")
+        .select(
+            "topic_id,topic_name,class_subject_id,"
+            "class_subjects!inner(subject_id,status,deleted_at,subjects!inner(subject_id,status,deleted_at))"
+        )
         .in_("class_subjects.subject_id", subject_ids)
+        .eq("class_subjects.status", "active")
+        .is_("class_subjects.deleted_at", None)
+        .eq("class_subjects.subjects.status", "active")
+        .is_("class_subjects.subjects.deleted_at", None)
         .is_("deleted_at", None)
         .order("topic_id")
         .execute()
@@ -90,6 +103,10 @@ async def list_teacher_document_topic_context(teacher_id: int) -> list[dict]:
         .eq("documents.status", "active")
         .is_("documents.deleted_at", None)
         .is_("topics.deleted_at", None)
+        .eq("topics.class_subjects.status", "active")
+        .is_("topics.class_subjects.deleted_at", None)
+        .eq("topics.class_subjects.classes.status", "active")
+        .is_("topics.class_subjects.classes.deleted_at", None)
         .eq("topics.class_subjects.subjects.status", "active")
         .is_("topics.class_subjects.subjects.deleted_at", None)
         .order("document_topic_id", desc=True)
@@ -101,6 +118,8 @@ async def list_teacher_document_topic_context(teacher_id: int) -> list[dict]:
 async def count_ai_requests_by_document_topic_ids(document_topic_ids: list[int], status: str | None = None) -> int:
     if not document_topic_ids:
         return 0
+    if status is not None and status not in ALLOWED_AI_REQUEST_STATUSES:
+        return 0
     supabase = SupabaseManager.get_client()
     query = (
         supabase.table("ai_requests")
@@ -111,6 +130,20 @@ async def count_ai_requests_by_document_topic_ids(document_topic_ids: list[int],
         query = query.eq("status", status)
     response = await asyncio.to_thread(lambda: query.execute())
     return int(response.count or 0)
+
+
+async def list_ai_requests_by_document_topic_ids_for_stats(document_topic_ids: list[int]) -> list[dict]:
+    if not document_topic_ids:
+        return []
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("ai_requests")
+        .select("request_id,document_topic_id,status,created_at")
+        .in_("document_topic_id", document_topic_ids)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return response.data or []
 
 
 async def count_questions_by_document_topic_ids(
@@ -135,6 +168,21 @@ async def count_questions_by_document_topic_ids(
         query = query.eq("difficulty", difficulty)
     response = await asyncio.to_thread(lambda: query.execute())
     return int(response.count or 0)
+
+
+async def list_questions_by_document_topic_ids_for_stats(teacher_id: int, document_topic_ids: list[int]) -> list[dict]:
+    if not document_topic_ids:
+        return []
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("questions")
+        .select("question_id,document_topic_id,status,difficulty")
+        .eq("teacher_id", teacher_id)
+        .in_("document_topic_id", document_topic_ids)
+        .is_("deleted_at", None)
+        .execute()
+    )
+    return response.data or []
 
 
 async def list_recent_ai_requests_by_document_topic_ids(document_topic_ids: list[int], limit: int) -> list[dict]:

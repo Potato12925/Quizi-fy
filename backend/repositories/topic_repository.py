@@ -43,18 +43,30 @@ async def create_topic_record(payload: dict) -> dict:
     return rows[0]
 
 
-async def list_topics(page: int, limit: int, class_subject_id: int | None = None) -> tuple[list[dict], int]:
+async def list_topics(
+    page: int,
+    limit: int,
+    class_subject_id: int | None = None,
+    subject_id: int | None = None,
+) -> tuple[list[dict], int]:
     supabase = SupabaseManager.get_client()
     start = (page - 1) * limit
     end = start + limit - 1
     query = supabase.table("topics").select(SELECT_FIELDS, count="exact").is_("deleted_at", None)
     if class_subject_id is not None:
         query = query.eq("class_subject_id", class_subject_id)
+    if subject_id is not None:
+        query = query.eq("class_subjects.subject_id", subject_id)
     response = await asyncio.to_thread(lambda: query.order("topic_id").range(start, end).execute())
     return response.data or [], int(response.count or 0)
 
 
-async def list_topics_by_class_subject_ids(page: int, limit: int, class_subject_ids: list[int]) -> tuple[list[dict], int]:
+async def list_topics_by_class_subject_ids(
+    page: int,
+    limit: int,
+    class_subject_ids: list[int],
+    subject_id: int | None = None,
+) -> tuple[list[dict], int]:
     if not class_subject_ids:
         return [], 0
     supabase = SupabaseManager.get_client()
@@ -66,6 +78,8 @@ async def list_topics_by_class_subject_ids(page: int, limit: int, class_subject_
         .in_("class_subject_id", class_subject_ids)
         .is_("deleted_at", None)
     )
+    if subject_id is not None:
+        query = query.eq("class_subjects.subject_id", subject_id)
     response = await asyncio.to_thread(lambda: query.order("topic_id").range(start, end).execute())
     return response.data or [], int(response.count or 0)
 

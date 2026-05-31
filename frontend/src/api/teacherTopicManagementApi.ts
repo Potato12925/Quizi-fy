@@ -54,31 +54,32 @@ const fetchTeacherSubjects = async (): Promise<TeacherSubjectItem[]> => {
   return response.data || [];
 };
 
-const fetchTopicsBySubject = async (classSubjectId: number): Promise<TeacherTopicItem[]> => {
+const fetchAllTeacherTopics = async (): Promise<TeacherTopicItem[]> => {
   const response = await api.get<ApiEnvelope<TeacherTopicItem[]>>('/topics', {
     params: {
       page: '1',
       limit: '200',
-      class_subject_id: String(classSubjectId),
     },
   });
   return response.data || [];
 };
 
 export const getTeacherSubjectsWithTopics = async (): Promise<SubjectWithTopicsViewModel[]> => {
-  const subjects = await fetchTeacherSubjects();
-  const topicsBySubject = await Promise.all(
-    subjects.map(async (subject) => {
-      const topics = await fetchTopicsBySubject(subject.subject_id);
-      return {
-        subject_id: subject.subject_id,
-        subject_name: subject.subject_name,
-        topics,
-      } satisfies SubjectWithTopicsViewModel;
-    }),
-  );
+  const [subjects, topics] = await Promise.all([fetchTeacherSubjects(), fetchAllTeacherTopics()]);
+  const topicsBySubjectId = new Map<number, TeacherTopicItem[]>();
 
-  return topicsBySubject;
+  for (const topic of topics) {
+    const topicSubjectId = Number(topic.subject_id);
+    const existing = topicsBySubjectId.get(topicSubjectId) || [];
+    existing.push(topic);
+    topicsBySubjectId.set(topicSubjectId, existing);
+  }
+
+  return subjects.map((subject) => ({
+    subject_id: subject.subject_id,
+    subject_name: subject.subject_name,
+    topics: topicsBySubjectId.get(subject.subject_id) || [],
+  }));
 };
 
 export const createTopicForTeacherSubject = async (

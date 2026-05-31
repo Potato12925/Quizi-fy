@@ -9,7 +9,6 @@ import {
 } from '@/api/teacherDocumentApi';
 import {
   getTeacherSubjectsWithTopics,
-  getTeacherTopicsBySubject,
   type TeacherSubjectItem,
   type TeacherTopicItem,
 } from '@/api/teacherTopicManagementApi';
@@ -115,10 +114,7 @@ export default function TeacherResourcesPage() {
         setModalTopics(cached);
         return;
       }
-      const response = await getTeacherTopicsBySubject(subjectId);
-      const topicItems = response.items;
-      setModalTopics(topicItems);
-      setTopicsBySubject((prev) => ({ ...prev, [subjectId]: topicItems }));
+      setModalTopics([]);
     } catch {
       setModalTopics([]);
       setModalTopicError('Không thể tải danh sách topic cho môn học đã chọn');

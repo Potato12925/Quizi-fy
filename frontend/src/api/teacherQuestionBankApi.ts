@@ -87,9 +87,9 @@ export const getAssignedSubjects = async (): Promise<AssignedSubject[]> => {
   return res.data || [];
 };
 
-export const getTopicsBySubjectId = async (classSubjectId: number): Promise<TopicItem[]> => {
+export const getTopicsBySubjectId = async (subjectId: number): Promise<TopicItem[]> => {
   const res = await api.get<ApiEnvelope<TopicItem[]>>('/topics', {
-    params: { page: '1', limit: '100', class_subject_id: String(classSubjectId) },
+    params: { page: '1', limit: '100', subject_id: String(subjectId) },
   });
   return res.data || [];
 };
@@ -111,8 +111,8 @@ export const getTeacherQuestionBank = async (filters: QuestionBankFilters): Prom
   return { items: res.data || [], meta: res.meta || null };
 };
 
-export const getDocumentTopicOptions = async (classSubjectId: number, topicId?: number): Promise<DocumentTopicOption[]> => {
-  const params: Record<string, string> = { class_subject_id: String(classSubjectId) };
+export const getDocumentTopicOptions = async (subjectId: number, topicId?: number): Promise<DocumentTopicOption[]> => {
+  const params: Record<string, string> = { subject_id: String(subjectId) };
   if (topicId) params.topic_id = String(topicId);
   const res = await api.get<ApiEnvelope<DocumentTopicOption[]>>('/teacher/question-bank/document-topic-options', { params });
   return res.data || [];

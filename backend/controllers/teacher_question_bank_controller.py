@@ -20,6 +20,7 @@ router = APIRouter(prefix="/teacher/question-bank", tags=["Teacher Question Bank
 async def get_teacher_question_bank_route(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
+    class_subject_id: int | None = Query(default=None, ge=1),
     subject_id: int | None = Query(default=None, ge=1),
     topic_id: int | None = Query(default=None, ge=1),
     difficulty: str | None = Query(default=None),
@@ -33,6 +34,7 @@ async def get_teacher_question_bank_route(
             current_user=current_user,
             page=page,
             limit=limit,
+            class_subject_id=class_subject_id,
             subject_id=subject_id,
             topic_id=topic_id,
             difficulty=difficulty,
@@ -47,12 +49,18 @@ async def get_teacher_question_bank_route(
 
 @router.get("/document-topic-options", summary="Get teacher document-topic options")
 async def get_teacher_document_topic_options_route(
-    subject_id: int = Query(ge=1),
+    class_subject_id: int | None = Query(default=None, ge=1),
+    subject_id: int | None = Query(default=None, ge=1),
     topic_id: int | None = Query(default=None, ge=1),
     current_user: CurrentUser = Depends(require_roles("teacher", "admin")),
 ):
     try:
-        result = await get_teacher_document_topic_options(current_user=current_user, subject_id=subject_id, topic_id=topic_id)
+        result = await get_teacher_document_topic_options(
+            current_user=current_user,
+            class_subject_id=class_subject_id,
+            subject_id=subject_id,
+            topic_id=topic_id,
+        )
         return success_response(data=result, message="Document topic options loaded successfully", status_code=200)
     except Exception:
         return error_response(message="Unable to load document topic options", status_code=500, error_code="TEACHER_QUESTION_BANK_DOC_TOPIC_OPTIONS_FAILED")

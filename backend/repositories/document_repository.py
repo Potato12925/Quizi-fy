@@ -23,7 +23,7 @@ async def find_document_enriched_by_id(record_id: int, include_deleted: bool = F
         supabase.table("documents")
         .select(
             "document_id,teacher_id,title,description,file_url,file_hash,file_type,file_size,status,created_at,updated_at,deleted_at,"
-            "document_topics(document_topic_id,topic_id,topics(topic_id,topic_name,subject_id,subjects(subject_id,subject_name)))"
+            "document_topics(document_topic_id,topic_id,topics(topic_id,topic_name,class_subject_id,class_subjects(class_subject_id,class_id,subject_id,assigned_teacher_id,classes(class_id,class_name),subjects(subject_id,subject_name))))"
         )
         .eq("document_id", record_id)
     )
@@ -48,7 +48,7 @@ async def list_documents(
     limit: int,
     teacher_id: int | None = None,
     search: str | None = None,
-    subject_id: int | None = None,
+    class_subject_id: int | None = None,
     topic_id: int | None = None,
     uploaded_from: str | None = None,
     uploaded_to: str | None = None,
@@ -76,12 +76,12 @@ async def list_documents(
     base_query = base_query.is_("deleted_at", None)
 
     filtered_document_ids: list[int] | None = None
-    if subject_id is not None or topic_id is not None:
-        dt_query = supabase.table("document_topics").select("document_id,topic_id,topics!inner(subject_id)")
+    if class_subject_id is not None or topic_id is not None:
+        dt_query = supabase.table("document_topics").select("document_id,topic_id,topics!inner(class_subject_id)")
         if topic_id is not None:
             dt_query = dt_query.eq("topic_id", topic_id)
-        if subject_id is not None:
-            dt_query = dt_query.eq("topics.subject_id", subject_id)
+        if class_subject_id is not None:
+            dt_query = dt_query.eq("topics.class_subject_id", class_subject_id)
         dt_response = await asyncio.to_thread(lambda: dt_query.execute())
         filtered_document_ids = sorted({int(row["document_id"]) for row in (dt_response.data or [])})
         if not filtered_document_ids:
@@ -112,13 +112,13 @@ async def soft_delete_document_by_id(record_id: int) -> bool:
     return len(rows) > 0
 
 
-async def is_teacher_assigned_to_subject(teacher_id: int, subject_id: int) -> bool:
+async def is_teacher_assigned_to_class_subject(teacher_id: int, class_subject_id: int) -> bool:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("class_subjects")
         .select("class_subject_id")
         .eq("assigned_teacher_id", teacher_id)
-        .eq("subject_id", subject_id)
+        .eq("class_subject_id", class_subject_id)
         .eq("status", "active")
         .is_("deleted_at", None)
         .limit(1)
@@ -128,12 +128,12 @@ async def is_teacher_assigned_to_subject(teacher_id: int, subject_id: int) -> bo
     return len(rows) > 0
 
 
-async def find_subject_by_id(subject_id: int) -> dict | None:
+async def find_class_subject_by_id(class_subject_id: int) -> dict | None:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
-        lambda: supabase.table("subjects")
-        .select("subject_id,subject_name,status")
-        .eq("subject_id", subject_id)
+        lambda: supabase.table("class_subjects")
+        .select("class_subject_id,class_id,subject_id,assigned_teacher_id,status")
+        .eq("class_subject_id", class_subject_id)
         .is_("deleted_at", None)
         .limit(1)
         .execute()
@@ -148,7 +148,7 @@ async def find_topics_by_ids(topic_ids: list[int]) -> list[dict]:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("topics")
-        .select("topic_id,topic_name,subject_id")
+        .select("topic_id,topic_name,class_subject_id")
         .in_("topic_id", topic_ids)
         .is_("deleted_at", None)
         .execute()
@@ -156,12 +156,14 @@ async def find_topics_by_ids(topic_ids: list[int]) -> list[dict]:
     return response.data or []
 
 
-async def find_active_document_by_title_in_subject(subject_id: int, title: str, teacher_id: int | None = None, exclude_document_id: int | None = None) -> dict | None:
+async def find_active_document_by_title_in_class_subject(
+    class_subject_id: int, title: str, teacher_id: int | None = None, exclude_document_id: int | None = None
+) -> dict | None:
     supabase = SupabaseManager.get_client()
     dt_query = (
         supabase.table("document_topics")
-        .select("document_id,documents!inner(document_id,title,teacher_id,status,deleted_at),topics!inner(subject_id)")
-        .eq("topics.subject_id", subject_id)
+        .select("document_id,documents!inner(document_id,title,teacher_id,status,deleted_at),topics!inner(class_subject_id)")
+        .eq("topics.class_subject_id", class_subject_id)
         .eq("documents.title", title)
         .eq("documents.status", "active")
         .is_("documents.deleted_at", None)
@@ -175,15 +177,17 @@ async def find_active_document_by_title_in_subject(subject_id: int, title: str, 
         document_ids = [doc_id for doc_id in document_ids if doc_id != exclude_document_id]
     if not document_ids:
         return None
-    return {"document_id": document_ids[0], "title": title, "subject_id": subject_id, "teacher_id": teacher_id}
+    return {"document_id": document_ids[0], "title": title, "class_subject_id": class_subject_id, "teacher_id": teacher_id}
 
 
-async def find_active_document_by_hash_in_subject(subject_id: int, file_hash: str, teacher_id: int | None = None, exclude_document_id: int | None = None) -> dict | None:
+async def find_active_document_by_hash_in_class_subject(
+    class_subject_id: int, file_hash: str, teacher_id: int | None = None, exclude_document_id: int | None = None
+) -> dict | None:
     supabase = SupabaseManager.get_client()
     dt_query = (
         supabase.table("document_topics")
-        .select("document_id,documents!inner(document_id,file_hash,teacher_id,status,deleted_at),topics!inner(subject_id)")
-        .eq("topics.subject_id", subject_id)
+        .select("document_id,documents!inner(document_id,file_hash,teacher_id,status,deleted_at),topics!inner(class_subject_id)")
+        .eq("topics.class_subject_id", class_subject_id)
         .eq("documents.file_hash", file_hash)
         .eq("documents.status", "active")
         .is_("documents.deleted_at", None)
@@ -197,7 +201,7 @@ async def find_active_document_by_hash_in_subject(subject_id: int, file_hash: st
         document_ids = [doc_id for doc_id in document_ids if doc_id != exclude_document_id]
     if not document_ids:
         return None
-    return {"document_id": document_ids[0], "file_hash": file_hash, "subject_id": subject_id, "teacher_id": teacher_id}
+    return {"document_id": document_ids[0], "file_hash": file_hash, "class_subject_id": class_subject_id, "teacher_id": teacher_id}
 
 
 async def count_ai_requests_by_document(document_id: int) -> int:

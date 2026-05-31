@@ -15,6 +15,7 @@ export interface AssignedSubject {
 
 export interface TopicItem {
   topic_id: number;
+  class_subject_id: number;
   subject_id: number;
   topic_name: string;
 }
@@ -59,6 +60,7 @@ export interface DocumentTopicOption {
 export interface QuestionBankFilters {
   page?: number;
   limit?: number;
+  class_subject_id?: number;
   subject_id?: number;
   topic_id?: number;
   difficulty?: 'easy' | 'medium' | 'hard';
@@ -85,9 +87,9 @@ export const getAssignedSubjects = async (): Promise<AssignedSubject[]> => {
   return res.data || [];
 };
 
-export const getTopicsBySubjectId = async (subjectId: number): Promise<TopicItem[]> => {
+export const getTopicsBySubjectId = async (classSubjectId: number): Promise<TopicItem[]> => {
   const res = await api.get<ApiEnvelope<TopicItem[]>>('/topics', {
-    params: { page: '1', limit: '100', subject_id: String(subjectId) },
+    params: { page: '1', limit: '100', class_subject_id: String(classSubjectId) },
   });
   return res.data || [];
 };
@@ -97,6 +99,7 @@ export const getTeacherQuestionBank = async (filters: QuestionBankFilters): Prom
     page: String(filters.page ?? 1),
     limit: String(filters.limit ?? 50),
   };
+  if (filters.class_subject_id) params.class_subject_id = String(filters.class_subject_id);
   if (filters.subject_id) params.subject_id = String(filters.subject_id);
   if (filters.topic_id) params.topic_id = String(filters.topic_id);
   if (filters.difficulty) params.difficulty = filters.difficulty;
@@ -108,8 +111,8 @@ export const getTeacherQuestionBank = async (filters: QuestionBankFilters): Prom
   return { items: res.data || [], meta: res.meta || null };
 };
 
-export const getDocumentTopicOptions = async (subjectId: number, topicId?: number): Promise<DocumentTopicOption[]> => {
-  const params: Record<string, string> = { subject_id: String(subjectId) };
+export const getDocumentTopicOptions = async (classSubjectId: number, topicId?: number): Promise<DocumentTopicOption[]> => {
+  const params: Record<string, string> = { class_subject_id: String(classSubjectId) };
   if (topicId) params.topic_id = String(topicId);
   const res = await api.get<ApiEnvelope<DocumentTopicOption[]>>('/teacher/question-bank/document-topic-options', { params });
   return res.data || [];

@@ -90,8 +90,8 @@ async def get_dashboard_report_route(
         return error_response(message=str(exc), status_code=403, error_code="REPORT_FORBIDDEN")
     except ReportValidationError as exc:
         return error_response(message=str(exc), status_code=400, error_code="REPORT_INVALID")
-    except Exception:
-        return error_response(message="Unable to load dashboard report", status_code=500, error_code="REPORT_DASHBOARD_FAILED")
+    except Exception as exc:
+        return error_response(message=str(exc), status_code=500, error_code="REPORT_DASHBOARD_FAILED")
 
 
 @router.get("/question-summary", summary="Get question summary report")

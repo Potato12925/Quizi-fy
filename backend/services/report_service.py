@@ -329,7 +329,7 @@ async def get_dashboard_report(current_user: CurrentUser, params: ReportQueryPar
         selected_topic_ids = {
             topic_id
             for topic_id, topic in topic_map.items()
-            if _to_int(topic.get("subject_id")) == params.subject_id
+            if _to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id"))) == params.subject_id
         }
     if params.topic_id is not None:
         selected_topic_ids = {params.topic_id}
@@ -387,7 +387,7 @@ async def get_dashboard_report(current_user: CurrentUser, params: ReportQueryPar
         doc_topic = doc_topic_map.get(document_topic_id) or {}
         topic_id = _to_int(doc_topic.get("topic_id"))
         topic = topic_map.get(topic_id) or {}
-        subject = subject_map.get(_to_int(topic.get("subject_id"))) or {}
+        subject = subject_map.get(_to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id")))) or {}
         document = document_map.get(_to_int(doc_topic.get("document_id"))) or {}
         teacher = user_map.get(_to_int(document.get("teacher_id"))) or {}
 
@@ -416,7 +416,7 @@ async def get_dashboard_report(current_user: CurrentUser, params: ReportQueryPar
         doc_topic = doc_topic_map.get(document_topic_id) or {}
         topic_id = _to_int(doc_topic.get("topic_id"))
         topic = topic_map.get(topic_id) or {}
-        subject = subject_map.get(_to_int(topic.get("subject_id"))) or {}
+        subject = subject_map.get(_to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id")))) or {}
         teacher = user_map.get(_to_int(item.get("teacher_id"))) or {}
         document = document_map.get(_to_int(doc_topic.get("document_id"))) or {}
 
@@ -451,9 +451,9 @@ async def get_dashboard_report(current_user: CurrentUser, params: ReportQueryPar
         ]
         topics = [topic_map.get(topic_id) or {} for topic_id in topic_ids]
         subject_names = sorted({
-            (subject_map.get(_to_int(topic.get("subject_id"))) or {}).get("subject_name")
+            (subject_map.get(_to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id")))) or {}).get("subject_name")
             for topic in topics
-            if _to_int(topic.get("subject_id")) in subject_map
+            if _to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id"))) in subject_map
         })
 
         recent_documents.append(
@@ -613,7 +613,7 @@ async def _build_question_rows(current_user: CurrentUser, params: ReportQueryPar
     for item in questions:
         document_topic = document_topic_map.get(_to_int(item.get("document_topic_id"))) or {}
         topic = topic_map.get(_to_int(document_topic.get("topic_id"))) or {}
-        subject = subject_map.get(_to_int(topic.get("subject_id"))) or {}
+        subject = subject_map.get(_to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id")))) or {}
 
         if params.subject_id is not None and _to_int(subject.get("subject_id")) != params.subject_id:
             continue
@@ -741,7 +741,7 @@ async def _build_ai_rows(current_user: CurrentUser, params: ReportQueryParams) -
     for item in ai_rows:
         document_topic = document_topic_map.get(_to_int(item.get("document_topic_id"))) or {}
         topic = topic_map.get(_to_int(document_topic.get("topic_id"))) or {}
-        subject = subject_map.get(_to_int(topic.get("subject_id"))) or {}
+        subject = subject_map.get(_to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id")))) or {}
         document = document_map.get(_to_int(document_topic.get("document_id"))) or {}
         teacher_id = _to_int(document.get("teacher_id"))
         teacher = user_map.get(teacher_id) or {}
@@ -873,7 +873,7 @@ async def _build_document_rows(current_user: CurrentUser, params: ReportQueryPar
         selected_topic_ids = {
             topic_id
             for topic_id, topic in topic_map.items()
-            if _to_int(topic.get("subject_id")) == params.subject_id
+            if _to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id"))) == params.subject_id
         }
     if params.topic_id is not None:
         selected_topic_ids = {params.topic_id}
@@ -912,7 +912,7 @@ async def _build_document_rows(current_user: CurrentUser, params: ReportQueryPar
         for topic_id in topic_ids:
             topic = topic_map.get(topic_id) or {}
             topic_names.append(str(topic.get("topic_name") or "Unknown"))
-            subject_id = _to_int(topic.get("subject_id"))
+            subject_id = _to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id")))
             if subject_id > 0:
                 subject_ids.add(subject_id)
                 subject = subject_map.get(subject_id) or {}
@@ -984,12 +984,12 @@ async def get_document_summary_report(current_user: CurrentUser, params: ReportQ
 
     for topic_id, topic in topic_map.items():
         if topic_document_count.get(topic_id, 0) == 0:
-            subject = subject_map.get(_to_int(topic.get("subject_id"))) or {}
+            subject = subject_map.get(_to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id")))) or {}
             topics_without_documents.append(
                 {
                     "topic_id": topic_id,
                     "topic_name": topic.get("topic_name") or "Unknown",
-                    "subject_id": _to_int(topic.get("subject_id")) or None,
+                    "subject_id": _to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id"))) or None,
                     "subject_name": subject.get("subject_name") or "Unknown",
                 }
             )
@@ -1080,7 +1080,7 @@ async def get_teacher_activity_report(current_user: CurrentUser, params: ReportQ
             topic = topic_map.get(_to_int(item.get("topic_id"))) or {}
             if params.topic_id is not None and _to_int(topic.get("topic_id")) != params.topic_id:
                 continue
-            if params.subject_id is not None and _to_int(topic.get("subject_id")) != params.subject_id:
+            if params.subject_id is not None and _to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id"))) != params.subject_id:
                 continue
             allowed_document_ids.add(_to_int(item.get("document_id")))
 
@@ -1236,7 +1236,7 @@ async def get_topic_coverage_report(
         topic_map = {
             topic_id: topic
             for topic_id, topic in topic_map.items()
-            if _to_int(topic.get("subject_id")) == params.subject_id
+            if _to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id"))) == params.subject_id
         }
     if params.topic_id is not None:
         topic_map = {
@@ -1283,11 +1283,11 @@ async def get_topic_coverage_report(
 
     table_rows = []
     for topic_id, topic in topic_map.items():
-        subject = subject_map.get(_to_int(topic.get("subject_id"))) or {}
+        subject = subject_map.get(_to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id")))) or {}
         row = {
             "topic_id": topic_id,
             "topic_name": topic.get("topic_name") or "Unknown",
-            "subject_id": _to_int(topic.get("subject_id")) or None,
+            "subject_id": _to_int((topic.get("subject_id") or (topic.get("class_subjects") or {}).get("subject_id"))) or None,
             "subject_name": subject.get("subject_name") or "Unknown",
             "question_count": question_count_by_topic.get(topic_id, 0),
             "hard_question_count": hard_question_count_by_topic.get(topic_id, 0),
@@ -2130,3 +2130,4 @@ async def export_report_data(
 
     filename = f"{report_key}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.{extension}"
     return file_bytes, media_type, filename
+

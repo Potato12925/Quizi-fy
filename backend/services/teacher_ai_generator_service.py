@@ -48,7 +48,9 @@ def _normalize_question_content(value: str) -> str:
 
 def _serialize_document_topic_row(row: dict) -> dict:
     topic = row.get("topics") or {}
-    subject = topic.get("subjects") or {}
+    class_subject = topic.get("class_subjects") or {}
+    subject = class_subject.get("subjects") or {}
+    class_ref = class_subject.get("classes") or {}
     document = row.get("documents") or {}
     return {
         "document_topic_id": int(row["document_topic_id"]),
@@ -56,7 +58,10 @@ def _serialize_document_topic_row(row: dict) -> dict:
         "document_title": document.get("title"),
         "topic_id": int(row["topic_id"]),
         "topic_name": topic.get("topic_name"),
-        "subject_id": int(topic["subject_id"]) if topic.get("subject_id") is not None else None,
+        "class_subject_id": int(topic["class_subject_id"]) if topic.get("class_subject_id") is not None else None,
+        "class_id": int(class_subject["class_id"]) if class_subject.get("class_id") is not None else None,
+        "class_name": class_ref.get("class_name"),
+        "subject_id": int(class_subject["subject_id"]) if class_subject.get("subject_id") is not None else None,
         "subject_name": subject.get("subject_name"),
         "file_url": document.get("file_url"),
         "file_type": document.get("file_type"),
@@ -83,6 +88,7 @@ def _serialize_question_item(item: dict, document_topic_map: dict[int, dict]) ->
         "document_title": doc_topic.get("document_title"),
         "topic_id": doc_topic.get("topic_id"),
         "topic_name": doc_topic.get("topic_name"),
+        "class_subject_id": doc_topic.get("class_subject_id"),
         "subject_id": doc_topic.get("subject_id"),
         "subject_name": doc_topic.get("subject_name"),
         "options": options,
@@ -123,14 +129,23 @@ def _normalize_review_option_payload(options: list[TeacherAiReviewOptionPayload]
     return result
 
 
+def _is_allowed_active_doc_topic(item: dict, allowed_subject_ids: set[int]) -> bool:
+    topic = item.get("topics") or {}
+    class_subject = topic.get("class_subjects") or {}
+    subject = class_subject.get("subjects") or {}
+    subject_id = int(class_subject.get("subject_id") or 0)
+    return subject_id in allowed_subject_ids and subject.get("status") == "active" and subject.get("deleted_at") is None
+
+
 async def get_teacher_ai_generator_options(current_user: CurrentUser) -> dict:
     rows = await list_teacher_document_topic_rows(current_user.user_id)
     allowed_subject_ids = set(await list_assigned_subject_ids_by_teacher(current_user.user_id))
     filtered = []
     for row in rows:
         topic = row.get("topics") or {}
-        subject = topic.get("subjects") or {}
-        subject_id = topic.get("subject_id")
+        class_subject = topic.get("class_subjects") or {}
+        subject = class_subject.get("subjects") or {}
+        subject_id = class_subject.get("subject_id")
         if subject_id is None:
             continue
         if int(subject_id) not in allowed_subject_ids:
@@ -215,9 +230,7 @@ async def list_teacher_ai_requests(current_user: CurrentUser, page: int, limit: 
     serialized_doc_topics = [
         _serialize_document_topic_row(item)
         for item in doc_topic_rows
-        if int((item.get("topics") or {}).get("subject_id") or 0) in allowed_subject_ids
-        and ((item.get("topics") or {}).get("subjects") or {}).get("status") == "active"
-        and ((item.get("topics") or {}).get("subjects") or {}).get("deleted_at") is None
+        if _is_allowed_active_doc_topic(item, allowed_subject_ids)
     ]
     doc_topic_ids = [int(item["document_topic_id"]) for item in serialized_doc_topics]
 

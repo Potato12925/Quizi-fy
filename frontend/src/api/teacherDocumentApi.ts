@@ -10,6 +10,7 @@ export interface ApiEnvelope<T> {
 export interface TeacherDocument {
   document_id: number;
   teacher_id: number;
+  class_subject_id: number | null;
   subject_id: number | null;
   title: string;
   description?: string;
@@ -30,6 +31,7 @@ export interface TeacherDocumentListParams {
   page?: number;
   limit?: number;
   search?: string;
+  class_subject_id?: number;
   subject_id?: number;
   topic_id?: number;
   uploaded_from?: string;
@@ -58,6 +60,7 @@ export const getTeacherDocuments = async (params: TeacherDocumentListParams = {}
     limit: String(params.limit ?? 20),
   };
   if (params.search) query.search = params.search;
+  if (params.class_subject_id) query.class_subject_id = String(params.class_subject_id);
   if (params.subject_id) query.subject_id = String(params.subject_id);
   if (params.topic_id) query.topic_id = String(params.topic_id);
   if (params.uploaded_from) query.uploaded_from = params.uploaded_from;

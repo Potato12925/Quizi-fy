@@ -22,9 +22,9 @@ async def get_random_question_ids(subject_id: int, document_topic_id: int | None
     supabase = SupabaseManager.get_client()
     query = (
         supabase.table("questions")
-        .select("question_id, document_topics!inner(topics!inner(subject_id))")
+        .select("question_id, document_topics!inner(topics!inner(class_subjects!inner(subject_id)))")
         .eq("status", "approved")
-        .eq("document_topics.topics.subject_id", subject_id)
+        .eq("document_topics.topics.class_subjects.subject_id", subject_id)
     )
     if document_topic_id:
         query = query.eq("document_topic_id", document_topic_id)

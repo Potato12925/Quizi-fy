@@ -38,8 +38,8 @@ async def count_active_topics_by_subject_ids(subject_ids: list[int]) -> int:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("topics")
-        .select("topic_id", count="exact")
-        .in_("subject_id", subject_ids)
+        .select("topic_id,class_subjects!inner(subject_id)", count="exact")
+        .in_("class_subjects.subject_id", subject_ids)
         .is_("deleted_at", None)
         .execute()
     )
@@ -52,8 +52,8 @@ async def list_active_topics_by_subject_ids(subject_ids: list[int]) -> list[dict
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("topics")
-        .select("topic_id,subject_id,topic_name")
-        .in_("subject_id", subject_ids)
+        .select("topic_id,topic_name,class_subject_id,class_subjects!inner(subject_id)")
+        .in_("class_subjects.subject_id", subject_ids)
         .is_("deleted_at", None)
         .order("topic_id")
         .execute()
@@ -81,14 +81,17 @@ async def list_teacher_document_topic_context(teacher_id: int) -> list[dict]:
         .select(
             "document_topic_id,document_id,topic_id,"
             "documents!inner(document_id,teacher_id,title,status,created_at,updated_at,deleted_at,file_type,file_size),"
-            "topics!inner(topic_id,topic_name,subject_id,deleted_at,subjects!inner(subject_id,subject_name,status,deleted_at))"
+            "topics!inner(topic_id,topic_name,class_subject_id,deleted_at,"
+            "class_subjects!inner(class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
+            "classes!inner(class_id,class_name,status,deleted_at),"
+            "subjects!inner(subject_id,subject_name,status,deleted_at)))"
         )
         .eq("documents.teacher_id", teacher_id)
         .eq("documents.status", "active")
         .is_("documents.deleted_at", None)
         .is_("topics.deleted_at", None)
-        .eq("topics.subjects.status", "active")
-        .is_("topics.subjects.deleted_at", None)
+        .eq("topics.class_subjects.subjects.status", "active")
+        .is_("topics.class_subjects.subjects.deleted_at", None)
         .order("document_topic_id", desc=True)
         .execute()
     )

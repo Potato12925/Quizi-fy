@@ -23,7 +23,11 @@ async def list_document_topics_with_topic(document_ids: list[int]) -> list[dict]
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("document_topics")
-        .select("document_topic_id,document_id,topic_id,topics(topic_id,topic_name,subject_id,subjects(subject_id,subject_name))")
+        .select(
+            "document_topic_id,document_id,topic_id,"
+            "topics(topic_id,topic_name,class_subject_id,"
+            "class_subjects(class_subject_id,class_id,subject_id,assigned_teacher_id,classes(class_id,class_name),subjects(subject_id,subject_name)))"
+        )
         .in_("document_id", document_ids)
         .order("document_topic_id")
         .execute()
@@ -46,25 +50,27 @@ async def find_teacher_document(document_id: int, teacher_id: int) -> dict | Non
     return rows[0] if rows else None
 
 
-async def get_subject_ids_of_document(document_id: int) -> list[int]:
+async def get_class_subject_ids_of_document(document_id: int) -> list[int]:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("document_topics")
-        .select("topics!inner(subject_id)")
+        .select("topics!inner(class_subject_id)")
         .eq("document_id", document_id)
         .execute()
     )
     rows = response.data or []
-    return sorted({int(row["topics"]["subject_id"]) for row in rows if row.get("topics") and row["topics"].get("subject_id") is not None})
+    return sorted(
+        {int(row["topics"]["class_subject_id"]) for row in rows if row.get("topics") and row["topics"].get("class_subject_id") is not None}
+    )
 
 
-async def find_topic_by_name_and_subject(topic_name: str, subject_id: int) -> dict | None:
+async def find_topic_by_name_and_class_subject(topic_name: str, class_subject_id: int) -> dict | None:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("topics")
-        .select("topic_id,topic_name,subject_id,updated_at")
+        .select("topic_id,topic_name,class_subject_id,updated_at")
         .eq("topic_name", topic_name)
-        .eq("subject_id", subject_id)
+        .eq("class_subject_id", class_subject_id)
         .limit(1)
         .execute()
     )
@@ -72,11 +78,11 @@ async def find_topic_by_name_and_subject(topic_name: str, subject_id: int) -> di
     return rows[0] if rows else None
 
 
-async def create_topic(topic_name: str, subject_id: int) -> dict:
+async def create_topic(topic_name: str, class_subject_id: int) -> dict:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("topics")
-        .insert({"topic_name": topic_name, "subject_id": subject_id})
+        .insert({"topic_name": topic_name, "class_subject_id": class_subject_id})
         .execute()
     )
     rows = response.data or []
@@ -131,7 +137,7 @@ async def find_topic_by_id(topic_id: int) -> dict | None:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("topics")
-        .select("topic_id,topic_name,subject_id,updated_at")
+        .select("topic_id,topic_name,class_subject_id,updated_at")
         .eq("topic_id", topic_id)
         .limit(1)
         .execute()

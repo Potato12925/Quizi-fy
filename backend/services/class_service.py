@@ -301,6 +301,14 @@ async def assign_subject_to_class(class_id: int, payload: AssignSubjectToClassRe
     if teacher_mapping is None:
         await _sync_owner_teacher_mapping(class_id=class_id, teacher_id=payload.assigned_teacher_id)
 
+    active_existing = await find_class_subject_mapping(
+        class_id=class_id,
+        subject_id=payload.subject_id,
+        include_deleted=False,
+    )
+    if active_existing is not None:
+        raise ValueError("Subject already assigned to class")
+
     existing = await find_class_subject_mapping(
         class_id=class_id,
         subject_id=payload.subject_id,
@@ -356,7 +364,11 @@ async def update_class_subject(class_id: int, class_subject_id: int, payload: Up
     if not class_subject:
         raise ValueError("Class subject assignment not found")
 
-    update_payload: dict = {}
+    if payload.assigned_teacher_id is None and payload.status is None:
+        raise ValueError("No fields to update")
+
+    next_status = payload.status if payload.status is not None else str(class_subject.get("status") or "active")
+
     if payload.assigned_teacher_id is not None:
         await _ensure_teacher_exists(payload.assigned_teacher_id)
         teacher_mapping = await find_class_teacher_mapping(
@@ -366,6 +378,29 @@ async def update_class_subject(class_id: int, class_subject_id: int, payload: Up
         )
         if teacher_mapping is None:
             await _sync_owner_teacher_mapping(class_id=class_id, teacher_id=payload.assigned_teacher_id)
+
+        current_assigned_teacher_id = int(class_subject["assigned_teacher_id"]) if class_subject.get("assigned_teacher_id") is not None else None
+        if current_assigned_teacher_id != payload.assigned_teacher_id:
+            deleted = await soft_delete_class_subject_mapping_by_record_id(class_id=class_id, class_subject_id=class_subject_id)
+            if not deleted:
+                raise ValueError("Class subject assignment not found")
+
+            created = await create_class_subject_mapping(
+                {
+                    "class_id": class_id,
+                    "subject_id": int(class_subject["subject_id"]),
+                    "assigned_teacher_id": payload.assigned_teacher_id,
+                    "status": next_status,
+                }
+            )
+            rows = await get_class_subjects(class_id)
+            for row in rows:
+                if int(row["class_subject_id"]) == int(created["class_subject_id"]):
+                    return row
+            raise ValueError("Class subject assignment not found")
+
+    update_payload: dict = {}
+    if payload.assigned_teacher_id is not None:
         update_payload["assigned_teacher_id"] = payload.assigned_teacher_id
     if payload.status is not None:
         update_payload["status"] = payload.status

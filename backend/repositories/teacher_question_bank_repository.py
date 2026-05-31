@@ -7,24 +7,30 @@ from core.supabase import SupabaseManager
 QUESTION_SELECT = "question_id,teacher_id,document_topic_id,content,difficulty,source,status,explanation,created_at,updated_at,question_options(option_id,option_label,option_text,is_correct,order_num)"
 
 
-async def list_teacher_document_topic_options(teacher_id: int, subject_id: int | None = None, topic_id: int | None = None) -> list[dict]:
+async def list_teacher_document_topic_options(
+    teacher_id: int, class_subject_id: int | None = None, subject_id: int | None = None, topic_id: int | None = None
+) -> list[dict]:
     supabase = SupabaseManager.get_client()
     query = (
         supabase.table("document_topics")
         .select(
             "document_topic_id,document_id,topic_id,"
             "documents!inner(document_id,title,file_type,file_size,status,created_at,teacher_id,deleted_at),"
-            "topics!inner(topic_id,topic_name,subject_id,deleted_at,subjects(subject_id,subject_name,status,deleted_at))"
+            "topics!inner(topic_id,topic_name,class_subject_id,deleted_at,"
+            "class_subjects!inner(class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
+            "classes!inner(class_id,class_name,status,deleted_at),subjects!inner(subject_id,subject_name,status,deleted_at)))"
         )
         .eq("documents.teacher_id", teacher_id)
         .eq("documents.status", "active")
         .is_("documents.deleted_at", None)
         .is_("topics.deleted_at", None)
-        .eq("topics.subjects.status", "active")
-        .is_("topics.subjects.deleted_at", None)
+        .eq("topics.class_subjects.subjects.status", "active")
+        .is_("topics.class_subjects.subjects.deleted_at", None)
     )
+    if class_subject_id is not None:
+        query = query.eq("topics.class_subject_id", class_subject_id)
     if subject_id is not None:
-        query = query.eq("topics.subject_id", subject_id)
+        query = query.eq("topics.class_subjects.subject_id", subject_id)
     if topic_id is not None:
         query = query.eq("topic_id", topic_id)
     response = await asyncio.to_thread(lambda: query.order("document_topic_id", desc=True).execute())

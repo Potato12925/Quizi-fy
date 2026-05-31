@@ -17,7 +17,7 @@ from services.document_service import (
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 
-@router.post("/upload", summary="Upload document for assigned subject")
+@router.post("/upload", summary="Upload document for assigned class subject")
 async def upload_document_route(
     topic_ids: list[int] = Form(default=[]),
     title: str = Form(..., min_length=1, max_length=500),
@@ -67,7 +67,7 @@ async def get_document_list(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
     search: str | None = Query(default=None),
-    subject_id: int | None = Query(default=None, ge=1),
+    class_subject_id: int | None = Query(default=None, ge=1),
     topic_id: int | None = Query(default=None, ge=1),
     uploaded_from: str | None = Query(default=None),
     uploaded_to: str | None = Query(default=None),
@@ -79,7 +79,7 @@ async def get_document_list(
             page=page,
             limit=limit,
             search=search,
-            subject_id=subject_id,
+            class_subject_id=class_subject_id,
             topic_id=topic_id,
             uploaded_from=uploaded_from,
             uploaded_to=uploaded_to,

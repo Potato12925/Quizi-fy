@@ -54,11 +54,13 @@ def _build_scope_context(rows: list[dict]) -> dict[int, dict]:
     context: dict[int, dict] = {}
     for row in rows:
         topic = row.get("topics") or {}
+        class_subject = topic.get("class_subjects") or {}
         context[_safe_int(row.get("document_topic_id"))] = {
             "document_topic_id": _safe_int(row.get("document_topic_id")),
             "topic_id": _safe_int(row.get("topic_id")),
             "topic_name": topic.get("topic_name") or "Unknown topic",
-            "subject_id": _safe_int(topic.get("subject_id")),
+            "class_subject_id": _safe_int(topic.get("class_subject_id")),
+            "subject_id": _safe_int(class_subject.get("subject_id")),
         }
     return context
 

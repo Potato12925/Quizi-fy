@@ -5,13 +5,13 @@ from repositories.document_repository import (
     count_ai_requests_by_document,
     count_questions_by_document,
     create_document_record,
-    find_active_document_by_hash_in_subject,
-    find_active_document_by_title_in_subject,
+    find_active_document_by_hash_in_class_subject,
+    find_active_document_by_title_in_class_subject,
+    find_class_subject_by_id,
     find_document_by_id,
     find_document_enriched_by_id,
-    find_subject_by_id,
     find_topics_by_ids,
-    is_teacher_assigned_to_subject,
+    is_teacher_assigned_to_class_subject,
     list_documents,
     soft_delete_document_by_id,
     update_document_by_id,
@@ -44,30 +44,30 @@ def _ensure_document_access(document: dict, current_user: CurrentUser) -> None:
         raise DocumentAuthorizationError("You can only access your own documents")
 
 
-async def _validate_subject_access(subject_id: int, current_user: CurrentUser) -> None:
-    subject = await find_subject_by_id(subject_id)
-    if not subject:
-        raise DocumentValidationError("Subject not found")
+async def _validate_class_subject_access(class_subject_id: int, current_user: CurrentUser) -> None:
+    class_subject = await find_class_subject_by_id(class_subject_id)
+    if not class_subject:
+        raise DocumentValidationError("Class subject not found")
     if not _is_admin(current_user):
-        is_assigned = await is_teacher_assigned_to_subject(
+        is_assigned = await is_teacher_assigned_to_class_subject(
             teacher_id=current_user.user_id,
-            subject_id=subject_id,
+            class_subject_id=class_subject_id,
         )
         if not is_assigned:
-            raise DocumentAuthorizationError("Teacher is not assigned to this subject")
+            raise DocumentAuthorizationError("Teacher is not assigned to this class subject")
 
 
-async def _validate_subject_access_by_teacher(subject_id: int, teacher_id: int, is_admin: bool = False) -> None:
-    subject = await find_subject_by_id(subject_id)
-    if not subject:
-        raise DocumentValidationError("Subject not found")
+async def _validate_class_subject_access_by_teacher(class_subject_id: int, teacher_id: int, is_admin: bool = False) -> None:
+    class_subject = await find_class_subject_by_id(class_subject_id)
+    if not class_subject:
+        raise DocumentValidationError("Class subject not found")
     if not is_admin:
-        is_assigned = await is_teacher_assigned_to_subject(
+        is_assigned = await is_teacher_assigned_to_class_subject(
             teacher_id=teacher_id,
-            subject_id=subject_id,
+            class_subject_id=class_subject_id,
         )
         if not is_assigned:
-            raise DocumentAuthorizationError("Teacher is not assigned to this subject")
+            raise DocumentAuthorizationError("Teacher is not assigned to this class subject")
 
 
 async def _validate_topic_ids(topic_ids: list[int]) -> tuple[list[dict], int]:
@@ -77,24 +77,28 @@ async def _validate_topic_ids(topic_ids: list[int]) -> tuple[list[dict], int]:
     topics = await find_topics_by_ids(unique_ids)
     if len(topics) != len(unique_ids):
         raise DocumentValidationError("One or more topic_ids are invalid")
-    subject_ids = {int(topic["subject_id"]) for topic in topics}
-    if len(subject_ids) != 1:
-        raise DocumentValidationError("All topic_ids must belong to the same subject")
-    return topics, subject_ids.pop()
+    class_subject_ids = {int(topic["class_subject_id"]) for topic in topics}
+    if len(class_subject_ids) != 1:
+        raise DocumentValidationError("All topic_ids must belong to the same class subject")
+    return topics, class_subject_ids.pop()
 
 
 async def _serialize_document(document: dict) -> dict:
     document_id = int(document["document_id"])
     topic_rows = await list_by_document_id(document_id)
     topics = []
+    class_subject_id: int | None = None
     subject_id: int | None = None
     subject_name = "Unknown"
 
     for row in topic_rows:
         topic = row.get("topics") or {}
-        if subject_id is None and topic.get("subject_id"):
-            subject_id = int(topic["subject_id"])
-        subject_ref = topic.get("subjects") or {}
+        if class_subject_id is None and topic.get("class_subject_id"):
+            class_subject_id = int(topic["class_subject_id"])
+        class_subject = topic.get("class_subjects") or {}
+        subject_ref = class_subject.get("subjects") or {}
+        if subject_id is None and class_subject.get("subject_id") is not None:
+            subject_id = int(class_subject["subject_id"])
         if subject_ref.get("subject_name"):
             subject_name = subject_ref["subject_name"]
         topics.append({
@@ -107,6 +111,7 @@ async def _serialize_document(document: dict) -> dict:
     return {
         "document_id": document_id,
         "teacher_id": int(document["teacher_id"]),
+        "class_subject_id": class_subject_id,
         "subject_id": subject_id,
         "subject": {
             "subject_id": subject_id,
@@ -136,8 +141,8 @@ async def create_document(payload: DocumentCreateRequest, current_user: CurrentU
     teacher_id = payload.teacher_id
     if not _is_admin(current_user):
         teacher_id = current_user.user_id
-    _, subject_id = await _validate_topic_ids(payload.topic_ids)
-    await _validate_subject_access_by_teacher(subject_id, teacher_id=teacher_id, is_admin=_is_admin(current_user))
+    _, class_subject_id = await _validate_topic_ids(payload.topic_ids)
+    await _validate_class_subject_access_by_teacher(class_subject_id, teacher_id=teacher_id, is_admin=_is_admin(current_user))
     created = await create_document_record(
         {
             "teacher_id": teacher_id,
@@ -168,7 +173,7 @@ async def get_documents(
     limit: int,
     current_user: CurrentUser,
     search: str | None = None,
-    subject_id: int | None = None,
+    class_subject_id: int | None = None,
     topic_id: int | None = None,
     uploaded_from: str | None = None,
     uploaded_to: str | None = None,
@@ -180,7 +185,7 @@ async def get_documents(
         limit=limit,
         teacher_id=teacher_id,
         search=search,
-        subject_id=subject_id,
+        class_subject_id=class_subject_id,
         topic_id=topic_id,
         uploaded_from=uploaded_from,
         uploaded_to=uploaded_to,
@@ -212,18 +217,18 @@ async def update_document(
     if topic_ids is None:
         raise DocumentValidationError("topic_ids must not be empty")
 
-    _, target_subject_id = await _validate_topic_ids(topic_ids)
-    await _validate_subject_access(target_subject_id, current_user)
+    _, target_class_subject_id = await _validate_topic_ids(topic_ids)
+    await _validate_class_subject_access(target_class_subject_id, current_user)
 
     title_for_dup_check = str(update_payload.get("title") or existing["title"])
-    existing_title = await find_active_document_by_title_in_subject(
-        subject_id=target_subject_id,
+    existing_title = await find_active_document_by_title_in_class_subject(
+        class_subject_id=target_class_subject_id,
         title=title_for_dup_check,
         teacher_id=existing["teacher_id"],
         exclude_document_id=record_id,
     )
     if existing_title:
-        raise DocumentValidationError("Duplicate title in this subject is not allowed")
+        raise DocumentValidationError("Duplicate title in this class subject is not allowed")
 
     if file_bytes is not None:
         file_type, file_size, file_hash = _validate_and_build_file_metadata(
@@ -231,18 +236,18 @@ async def update_document(
             file_content_type=file_content_type or "",
             file_bytes=file_bytes,
         )
-        existing_hash = await find_active_document_by_hash_in_subject(
-            subject_id=target_subject_id,
+        existing_hash = await find_active_document_by_hash_in_class_subject(
+            class_subject_id=target_class_subject_id,
             file_hash=file_hash,
             teacher_id=existing["teacher_id"],
             exclude_document_id=record_id,
         )
         if existing_hash:
-            raise DocumentValidationError("Duplicate file content detected in this subject")
+            raise DocumentValidationError("Duplicate file content detected in this class subject")
 
         file_url = await upload_document_file(
             teacher_id=int(existing["teacher_id"]),
-            subject_id=target_subject_id,
+            subject_id=target_class_subject_id,
             file_name=file_name or "document.txt",
             file_bytes=file_bytes,
         )
@@ -327,28 +332,28 @@ async def upload_teacher_document(
         file_bytes=file_bytes,
     )
 
-    _, subject_id = await _validate_topic_ids(payload.topic_ids)
-    await _validate_subject_access_by_teacher(subject_id, teacher_id=teacher_id, is_admin=False)
+    _, class_subject_id = await _validate_topic_ids(payload.topic_ids)
+    await _validate_class_subject_access_by_teacher(class_subject_id, teacher_id=teacher_id, is_admin=False)
 
-    existing_title = await find_active_document_by_title_in_subject(
-        subject_id=subject_id,
+    existing_title = await find_active_document_by_title_in_class_subject(
+        class_subject_id=class_subject_id,
         title=payload.title,
         teacher_id=teacher_id,
     )
     if existing_title:
-        raise DocumentValidationError("Duplicate title in this subject is not allowed")
+        raise DocumentValidationError("Duplicate title in this class subject is not allowed")
 
-    existing_hash = await find_active_document_by_hash_in_subject(
-        subject_id=subject_id,
+    existing_hash = await find_active_document_by_hash_in_class_subject(
+        class_subject_id=class_subject_id,
         file_hash=file_hash,
         teacher_id=teacher_id,
     )
     if existing_hash:
-        raise DocumentValidationError("Duplicate file content detected in this subject")
+        raise DocumentValidationError("Duplicate file content detected in this class subject")
 
     file_url = await upload_document_file(
         teacher_id=teacher_id,
-        subject_id=subject_id,
+        subject_id=class_subject_id,
         file_name=file_name,
         file_bytes=file_bytes,
     )

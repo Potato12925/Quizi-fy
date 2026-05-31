@@ -22,8 +22,10 @@ async def list_teacher_document_topic_rows(teacher_id: int) -> list[dict]:
         .select(
             "document_topic_id,document_id,topic_id,"
             "documents!inner(document_id,teacher_id,title,file_url,file_type,status,deleted_at),"
-            "topics!inner(topic_id,topic_name,subject_id,deleted_at,"
-            "subjects!inner(subject_id,subject_name,status,deleted_at))"
+            "topics!inner(topic_id,topic_name,class_subject_id,deleted_at,"
+            "class_subjects!inner(class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
+            "classes!inner(class_id,class_name,status,deleted_at),"
+            "subjects!inner(subject_id,subject_name,status,deleted_at)))"
         )
         .eq("documents.teacher_id", teacher_id)
         .eq("documents.status", "active")
@@ -42,8 +44,10 @@ async def find_teacher_document_topic_row(teacher_id: int, document_topic_id: in
         .select(
             "document_topic_id,document_id,topic_id,"
             "documents!inner(document_id,teacher_id,title,file_url,file_type,status,deleted_at),"
-            "topics!inner(topic_id,topic_name,subject_id,deleted_at,"
-            "subjects!inner(subject_id,subject_name,status,deleted_at))"
+            "topics!inner(topic_id,topic_name,class_subject_id,deleted_at,"
+            "class_subjects!inner(class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
+            "classes!inner(class_id,class_name,status,deleted_at),"
+            "subjects!inner(subject_id,subject_name,status,deleted_at)))"
         )
         .eq("document_topic_id", document_topic_id)
         .eq("documents.teacher_id", teacher_id)

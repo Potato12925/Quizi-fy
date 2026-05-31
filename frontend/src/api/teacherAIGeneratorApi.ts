@@ -19,6 +19,7 @@ export interface TeacherAssignedSubject {
 
 export interface TeacherTopicItem {
   topic_id: number;
+  class_subject_id: number;
   subject_id: number;
   topic_name: string;
 }
@@ -33,6 +34,7 @@ export interface TeacherDocumentTopicOption {
   status?: string | null;
   topic_id: number;
   topic_name: string;
+  class_subject_id: number;
   subject_id: number;
   subject_name: string;
 }
@@ -77,6 +79,7 @@ export interface TeacherAiQuestionItem {
   document_title: string;
   topic_id: number;
   topic_name: string;
+  class_subject_id: number;
   subject_id: number;
   subject_name: string;
   options: TeacherAiQuestionOption[];
@@ -125,18 +128,18 @@ export const getTeacherAssignedSubjects = async (): Promise<TeacherAssignedSubje
   return res.data || [];
 };
 
-export const getTeacherTopicsBySubjectId = async (subjectId: number): Promise<TeacherTopicItem[]> => {
+export const getTeacherTopicsBySubjectId = async (classSubjectId: number): Promise<TeacherTopicItem[]> => {
   const res = await api.get<ApiEnvelope<TeacherTopicItem[]>>('/topics', {
-    params: { page: '1', limit: '200', subject_id: String(subjectId) },
+    params: { page: '1', limit: '200', class_subject_id: String(classSubjectId) },
   });
   return res.data || [];
 };
 
 export const getTeacherDocumentsBySubjectTopic = async (
-  subjectId: number,
+  classSubjectId: number,
   topicId?: number,
 ): Promise<TeacherDocumentTopicOption[]> => {
-  const params: Record<string, string> = { subject_id: String(subjectId) };
+  const params: Record<string, string> = { class_subject_id: String(classSubjectId) };
   if (topicId) params.topic_id = String(topicId);
   const res = await api.get<ApiEnvelope<TeacherDocumentTopicOption[]>>('/teacher/question-bank/document-topic-options', {
     params,

@@ -33,11 +33,11 @@ async def post_topic(payload: TopicCreateRequest, current_user: CurrentUser = De
 async def get_topic_list(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=200),
-    subject_id: int | None = Query(default=None, ge=1),
+    class_subject_id: int | None = Query(default=None, ge=1),
     current_user: CurrentUser = Depends(require_roles("admin", "teacher")),
 ):
     try:
-        result = await get_topics(page=page, limit=limit, current_user=current_user, subject_id=subject_id)
+        result = await get_topics(page=page, limit=limit, current_user=current_user, class_subject_id=class_subject_id)
         return success_response(data=result["items"], meta=result["pagination"], message="Topic loaded successfully", status_code=200)
     except TopicAuthorizationError as exc:
         return error_response(message=str(exc), status_code=403, error_code="TOPIC_LIST_FORBIDDEN")

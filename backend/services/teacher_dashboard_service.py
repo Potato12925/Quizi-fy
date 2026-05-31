@@ -37,7 +37,9 @@ def _build_document_topic_context_map(rows: list[dict]) -> dict[int, dict]:
     context_map: dict[int, dict] = {}
     for row in rows:
         topic = row.get("topics") or {}
-        subject = topic.get("subjects") or {}
+        class_subject = topic.get("class_subjects") or {}
+        subject = class_subject.get("subjects") or {}
+        class_ref = class_subject.get("classes") or {}
         document = row.get("documents") or {}
         document_topic_id = _safe_int(row.get("document_topic_id"))
         context_map[document_topic_id] = {
@@ -46,7 +48,10 @@ def _build_document_topic_context_map(rows: list[dict]) -> dict[int, dict]:
             "document_title": document.get("title"),
             "topic_id": _safe_int(row.get("topic_id")) or None,
             "topic_name": topic.get("topic_name"),
-            "subject_id": _safe_int(topic.get("subject_id")) or None,
+            "class_subject_id": _safe_int(topic.get("class_subject_id")) or None,
+            "class_id": _safe_int(class_subject.get("class_id")) or None,
+            "class_name": class_ref.get("class_name"),
+            "subject_id": _safe_int(class_subject.get("subject_id")) or None,
             "subject_name": subject.get("subject_name"),
         }
     return context_map
@@ -62,6 +67,9 @@ def _serialize_recent_ai_request(item: dict, context_by_document_topic_id: dict[
         "document_title": context.get("document_title"),
         "topic_id": context.get("topic_id"),
         "topic_name": context.get("topic_name"),
+        "class_subject_id": context.get("class_subject_id"),
+        "class_id": context.get("class_id"),
+        "class_name": context.get("class_name"),
         "subject_id": context.get("subject_id"),
         "subject_name": context.get("subject_name"),
         "num_questions": _safe_int(item.get("num_questions")),
@@ -89,6 +97,9 @@ def _serialize_recent_approved_question(item: dict, context_by_document_topic_id
         "document_title": context.get("document_title"),
         "topic_id": context.get("topic_id"),
         "topic_name": context.get("topic_name"),
+        "class_subject_id": context.get("class_subject_id"),
+        "class_id": context.get("class_id"),
+        "class_name": context.get("class_name"),
         "subject_id": context.get("subject_id"),
         "subject_name": context.get("subject_name"),
         "created_at": item.get("created_at"),
@@ -216,7 +227,7 @@ async def get_teacher_dashboard_stats(current_user: CurrentUser, recent_limit: i
 
     topic_name_by_subject: dict[int, dict[int, str]] = {}
     for topic in upload_topics:
-        subject_id = _safe_int(topic.get("subject_id"))
+        subject_id = _safe_int((topic.get("class_subjects") or {}).get("subject_id"))
         topic_id = _safe_int(topic.get("topic_id"))
         if subject_id <= 0 or topic_id <= 0:
             continue

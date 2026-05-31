@@ -41,7 +41,9 @@ def _serialize_question(item: dict, document_topic_by_id: dict[int, dict]) -> di
     dt_id = int(item["document_topic_id"])
     dt = document_topic_by_id.get(dt_id, {})
     topic = dt.get("topics") or {}
-    subject = topic.get("subjects") or {}
+    class_subject = topic.get("class_subjects") or {}
+    subject = class_subject.get("subjects") or {}
+    class_ref = class_subject.get("classes") or {}
     document = dt.get("documents") or {}
     options = sorted(item.get("question_options") or [], key=lambda x: int(x.get("order_num") or 0))
 
@@ -57,7 +59,10 @@ def _serialize_question(item: dict, document_topic_by_id: dict[int, dict]) -> di
         "document_topic_id": dt_id,
         "topic_id": topic.get("topic_id"),
         "topic_name": topic.get("topic_name"),
-        "subject_id": topic.get("subject_id"),
+        "class_subject_id": topic.get("class_subject_id"),
+        "class_id": class_subject.get("class_id"),
+        "class_name": class_ref.get("class_name"),
+        "subject_id": class_subject.get("subject_id"),
         "subject_name": subject.get("subject_name"),
         "document_id": document.get("document_id"),
         "document_title": document.get("title"),
@@ -69,6 +74,7 @@ async def get_teacher_question_bank(
     current_user: CurrentUser,
     page: int,
     limit: int,
+    class_subject_id: int | None = None,
     subject_id: int | None = None,
     topic_id: int | None = None,
     difficulty: str | None = None,
@@ -78,6 +84,7 @@ async def get_teacher_question_bank(
 ) -> dict:
     document_topics = await list_teacher_document_topic_options(
         teacher_id=current_user.user_id,
+        class_subject_id=class_subject_id,
         subject_id=subject_id,
         topic_id=topic_id,
     )
@@ -109,16 +116,21 @@ async def get_teacher_question_bank(
     }
 
 
-async def get_teacher_document_topic_options(current_user: CurrentUser, subject_id: int, topic_id: int | None = None) -> list[dict]:
+async def get_teacher_document_topic_options(
+    current_user: CurrentUser, class_subject_id: int | None = None, subject_id: int | None = None, topic_id: int | None = None
+) -> list[dict]:
     rows = await list_teacher_document_topic_options(
         teacher_id=current_user.user_id,
+        class_subject_id=class_subject_id,
         subject_id=subject_id,
         topic_id=topic_id,
     )
     result = []
     for row in rows:
         topic = row.get("topics") or {}
-        subject = topic.get("subjects") or {}
+        class_subject = topic.get("class_subjects") or {}
+        subject = class_subject.get("subjects") or {}
+        class_ref = class_subject.get("classes") or {}
         document = row.get("documents") or {}
         result.append(
             {
@@ -131,7 +143,10 @@ async def get_teacher_document_topic_options(current_user: CurrentUser, subject_
                 "status": document.get("status"),
                 "topic_id": topic.get("topic_id"),
                 "topic_name": topic.get("topic_name"),
-                "subject_id": topic.get("subject_id"),
+                "class_subject_id": topic.get("class_subject_id"),
+                "class_id": class_subject.get("class_id"),
+                "class_name": class_ref.get("class_name"),
+                "subject_id": class_subject.get("subject_id"),
                 "subject_name": subject.get("subject_name"),
             }
         )

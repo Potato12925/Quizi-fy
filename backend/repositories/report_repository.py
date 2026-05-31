@@ -87,14 +87,14 @@ async def list_active_topics(subject_ids: list[int] | None = None, topic_ids: li
     supabase = SupabaseManager.get_client()
     query = (
         supabase.table("topics")
-        .select("topic_id,subject_id,topic_name,created_at,updated_at,deleted_at")
+        .select("topic_id,topic_name,class_subject_id,created_at,updated_at,deleted_at,class_subjects!inner(subject_id,class_id)")
         .is_("deleted_at", None)
     )
 
     if subject_ids is not None:
         if not subject_ids:
             return []
-        query = query.in_("subject_id", subject_ids)
+        query = query.in_("class_subjects.subject_id", subject_ids)
 
     if topic_ids is not None:
         if not topic_ids:
@@ -102,7 +102,17 @@ async def list_active_topics(subject_ids: list[int] | None = None, topic_ids: li
         query = query.in_("topic_id", topic_ids)
 
     response = await asyncio.to_thread(lambda: query.order("topic_id").execute())
-    return response.data or []
+    rows = response.data or []
+    normalized: list[dict] = []
+    for item in rows:
+        next_item = dict(item)
+        class_subject = item.get("class_subjects") or {}
+        if next_item.get("subject_id") is None and class_subject.get("subject_id") is not None:
+            next_item["subject_id"] = class_subject.get("subject_id")
+        if next_item.get("class_id") is None and class_subject.get("class_id") is not None:
+            next_item["class_id"] = class_subject.get("class_id")
+        normalized.append(next_item)
+    return normalized
 
 
 async def list_teacher_assigned_subject_ids(teacher_id: int) -> list[int]:

@@ -6,8 +6,8 @@ from repositories.teacher_topic_management_repository import (
     find_document_topic_relation,
     find_teacher_document,
     find_topic_by_id,
-    find_topic_by_name_and_subject,
-    get_subject_ids_of_document,
+    find_topic_by_name_and_class_subject,
+    get_class_subject_ids_of_document,
     list_document_topics_with_topic,
     list_teacher_documents_with_subjects,
     teacher_has_topic,
@@ -38,11 +38,12 @@ async def get_teacher_subject_documents_topics(current_user: CurrentUser) -> lis
     for relation in relations:
         document_id = int(relation["document_id"])
         topic = relation.get("topics") or {}
-        subject = topic.get("subjects") or {}
+        class_subject = topic.get("class_subjects") or {}
+        subject = class_subject.get("subjects") or {}
 
-        if topic.get("subject_id") is not None:
+        if class_subject.get("subject_id") is not None:
             subject_by_document[document_id] = (
-                int(topic["subject_id"]),
+                int(class_subject["subject_id"]),
                 subject.get("subject_name") or "Unknown subject",
             )
 
@@ -84,16 +85,16 @@ async def add_topic_to_teacher_document(document_id: int, payload: TeacherAddDoc
     if not teacher_document:
         raise TeacherTopicAuthorizationError("You can only manage topics for your own documents")
 
-    subject_ids = await get_subject_ids_of_document(document_id)
-    if not subject_ids:
-        raise TeacherTopicValidationError("Document has no subject context; update document topics first")
-    if len(subject_ids) > 1:
-        raise TeacherTopicValidationError("Document has inconsistent subjects across topics")
+    class_subject_ids = await get_class_subject_ids_of_document(document_id)
+    if not class_subject_ids:
+        raise TeacherTopicValidationError("Document has no class subject context; update document topics first")
+    if len(class_subject_ids) > 1:
+        raise TeacherTopicValidationError("Document has inconsistent class subjects across topics")
 
-    subject_id = subject_ids[0]
-    topic = await find_topic_by_name_and_subject(payload.topic_name, subject_id)
+    class_subject_id = class_subject_ids[0]
+    topic = await find_topic_by_name_and_class_subject(payload.topic_name, class_subject_id)
     if not topic:
-        topic = await create_topic(payload.topic_name, subject_id)
+        topic = await create_topic(payload.topic_name, class_subject_id)
 
     relation = await find_document_topic_relation(document_id=document_id, topic_id=int(topic["topic_id"]))
     if relation:
@@ -119,9 +120,9 @@ async def update_teacher_topic(topic_id: int, payload: TeacherUpdateTopicRequest
     if not has_access:
         raise TeacherTopicAuthorizationError("You can only update topics linked to your own documents")
 
-    existing = await find_topic_by_name_and_subject(payload.topic_name, int(topic["subject_id"]))
+    existing = await find_topic_by_name_and_class_subject(payload.topic_name, int(topic["class_subject_id"]))
     if existing and int(existing["topic_id"]) != topic_id:
-        raise TeacherTopicValidationError("Topic name already exists in this subject")
+        raise TeacherTopicValidationError("Topic name already exists in this class subject")
 
     updated = await update_topic_name(topic_id=topic_id, topic_name=payload.topic_name)
     if not updated:

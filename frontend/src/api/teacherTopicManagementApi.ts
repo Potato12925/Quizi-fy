@@ -8,6 +8,7 @@ export interface TeacherSubjectItem {
 
 export interface TeacherTopicItem {
   topic_id: number;
+  class_subject_id: number;
   subject_id: number;
   topic_name: string;
   description?: string | null;
@@ -53,12 +54,12 @@ const fetchTeacherSubjects = async (): Promise<TeacherSubjectItem[]> => {
   return response.data || [];
 };
 
-const fetchTopicsBySubject = async (subjectId: number): Promise<TeacherTopicItem[]> => {
+const fetchTopicsBySubject = async (classSubjectId: number): Promise<TeacherTopicItem[]> => {
   const response = await api.get<ApiEnvelope<TeacherTopicItem[]>>('/topics', {
     params: {
       page: '1',
       limit: '200',
-      subject_id: String(subjectId),
+      class_subject_id: String(classSubjectId),
     },
   });
   return response.data || [];
@@ -81,11 +82,11 @@ export const getTeacherSubjectsWithTopics = async (): Promise<SubjectWithTopicsV
 };
 
 export const createTopicForTeacherSubject = async (
-  subjectId: number,
+  classSubjectId: number,
   payload: CreateTeacherSubjectTopicRequest,
 ): Promise<TeacherTopicItem> => {
   const response = await api.post<ApiEnvelope<TeacherTopicItem>>('/topics', {
-    subject_id: subjectId,
+    class_subject_id: classSubjectId,
     topic_name: payload.topic_name,
     description: payload.description,
   });
@@ -105,13 +106,13 @@ export const softDeleteTeacherSubjectTopic = async (topicId: number): Promise<vo
 };
 
 export const getTeacherTopicsBySubject = async (
-  subjectId: number,
+  classSubjectId: number,
 ): Promise<{ items: TeacherTopicItem[]; meta: TopicPaginationMeta | null }> => {
   const response = await api.get<ApiEnvelope<TeacherTopicItem[]>>('/topics', {
     params: {
       page: '1',
       limit: '200',
-      subject_id: String(subjectId),
+      class_subject_id: String(classSubjectId),
     },
   });
   return {

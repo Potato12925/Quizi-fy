@@ -34,7 +34,7 @@ def _serialize_topic(item: dict) -> dict:
         "topic_id": int(item["topic_id"]),
         "topic_name": item.get("topic_name"),
         "description": item.get("description"),
-        "class_subject_id": int(item["class_subject_id"]),
+        "class_subject_id": int(item["class_subject_id"]) if item.get("class_subject_id") is not None else None,
         "class_id": int(class_subject["class_id"]) if class_subject.get("class_id") is not None else None,
         "class_name": class_ref.get("class_name"),
         "subject_id": int(class_subject["subject_id"]) if class_subject.get("subject_id") is not None else None,

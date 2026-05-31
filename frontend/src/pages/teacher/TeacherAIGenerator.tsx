@@ -76,6 +76,51 @@ const getQuestionStatusBadge = (status: QuestionStatus) => {
   return { label: 'Bản nháp', cls: 'bg-amber-50 text-amber-600' };
 };
 
+const getProgressPercent = (generated: number, total: number) => {
+  if (total <= 0) return 0;
+  const raw = Math.round((generated / total) * 100);
+  return Math.max(0, Math.min(raw, 100));
+};
+
+const getRequestProgressDetail = (request: TeacherAiRequestItem) => {
+  const generated = Math.max(0, request.generated_question_count || 0);
+  const target = Math.max(0, request.num_questions || 0);
+  const progressPercent =
+    request.status === 'completed'
+      ? 100
+      : getProgressPercent(generated, target);
+
+  if (request.status === 'pending') {
+    return {
+      stepLabel: 'Bước 1/3: Đang xếp hàng xử lý',
+      detail: 'Yêu cầu đã được ghi nhận và đang chờ hệ thống AI tiếp nhận.',
+      progressPercent: Math.min(progressPercent, 10),
+    };
+  }
+
+  if (request.status === 'processing') {
+    return {
+      stepLabel: 'Bước 2/3: AI đang tạo câu hỏi',
+      detail: `Đã tạo ${generated}/${target} câu hỏi.`,
+      progressPercent: Math.max(progressPercent, 10),
+    };
+  }
+
+  if (request.status === 'completed') {
+    return {
+      stepLabel: 'Bước 3/3: Hoàn tất tạo câu hỏi',
+      detail: `Đã tạo thành công ${generated}/${target} câu hỏi.`,
+      progressPercent: 100,
+    };
+  }
+
+  return {
+    stepLabel: 'Quy trình kết thúc',
+    detail: request.error_message || 'Yêu cầu đã dừng xử lý.',
+    progressPercent,
+  };
+};
+
 const mapQuestionToEditable = (question: TeacherAiQuestionItem, readOnly: boolean): EditableQuestion => {
   const normalizedStatus = !readOnly && question.status === 'inactive' ? 'draft' : question.status;
   const sortedOptions = [...question.options]
@@ -143,6 +188,7 @@ export default function TeacherAIGeneratorPage() {
     () => requests.filter((item) => item.status === 'pending' || item.status === 'processing'),
     [requests],
   );
+  const hasGeneratingRequest = activeRequests.length > 0;
 
   const contextHasActiveRequest = useMemo(() => {
     if (!selectedDocumentTopic) return false;
@@ -159,7 +205,8 @@ export default function TeacherAIGeneratorPage() {
     || !topicId
     || hasInvalidQuestionCount
     || submittingRequest
-    || contextHasActiveRequest;
+    || contextHasActiveRequest
+    || hasGeneratingRequest;
 
   const clearMessages = () => {
     setError('');
@@ -362,8 +409,8 @@ export default function TeacherAIGeneratorPage() {
       return;
     }
 
-    if (contextHasActiveRequest) {
-      setError('Ngữ cảnh này đang có job pending/processing. Vui lòng đợi xử lý xong.');
+    if (hasGeneratingRequest) {
+      setError('Đang có job AI pending/processing. Vui lòng chờ hoàn tất trước khi tạo job mới.');
       return;
     }
 
@@ -527,7 +574,7 @@ export default function TeacherAIGeneratorPage() {
     return (
       <div className="min-h-[55vh] flex items-center justify-center">
         <div className="w-full max-w-2xl p-12 text-center bg-white border border-slate-100 shadow-sm rounded-[2.5rem]">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mb-5">
+          <div className="flex items-center justify-center w-16 h-16 mx-auto mb-5 rounded-2xl bg-slate-100 text-slate-500">
             <span className="material-symbols-outlined animate-spin">sync</span>
           </div>
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Teacher AI Generator</p>
@@ -538,7 +585,7 @@ export default function TeacherAIGeneratorPage() {
   }
 
   return (
-    <div className="pb-20 space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
+    <div className="pb-20 space-y-10 duration-700 animate-in fade-in slide-in-from-bottom-8">
       <section className="flex flex-col items-start justify-between gap-6 pt-2 xl:flex-row xl:items-end">
         <div>
           <p className="mb-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Teacher AI Generator</p>
@@ -556,7 +603,7 @@ export default function TeacherAIGeneratorPage() {
         </div>
       )}
       {success && (
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-700">
+        <div className="px-5 py-4 text-sm font-bold border rounded-2xl border-emerald-100 bg-emerald-50 text-emerald-700">
           {success}
         </div>
       )}
@@ -578,13 +625,14 @@ export default function TeacherAIGeneratorPage() {
 
             {!requests.length ? (
               <div className="border-4 border-dashed border-slate-100 rounded-[2rem] p-10 text-center">
-                <p className="text-sm font-black uppercase tracking-widest text-slate-400">Chưa có job AI nào</p>
+                <p className="text-sm font-black tracking-widest uppercase text-slate-400">Chưa có job AI nào</p>
                 <p className="mt-2 text-xs font-bold text-slate-400">Tạo yêu cầu ở cột bên phải để bắt đầu.</p>
               </div>
             ) : (
               <div className="max-h-[820px] space-y-3 overflow-auto pr-1">
                 {requests.map((item) => {
                   const badge = getRequestStatusBadge(item.status);
+                  const progress = getRequestProgressDetail(item);
                   const isSelected = selectedRequestId === item.request_id;
                   return (
                     <article
@@ -607,6 +655,21 @@ export default function TeacherAIGeneratorPage() {
                       <p className="mt-2 text-[11px] font-bold text-slate-500">
                         {item.num_questions} câu | {getDifficultyLabel(item.difficulty)} | Sinh được: {item.generated_question_count}
                       </p>
+                      {(item.status === 'pending' || item.status === 'processing' || item.status === 'completed') && (
+                        <div className="px-3 py-2 mt-2 bg-white border rounded-xl border-slate-200">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{progress.stepLabel}</p>
+                          <p className="mt-1 text-xs font-bold text-slate-500">{progress.detail}</p>
+                          <div className="w-full h-2 mt-2 rounded-full bg-slate-100">
+                            <div
+                              className="h-full rounded-full bg-[var(--color-primary)] transition-all"
+                              style={{ width: `${progress.progressPercent}%` }}
+                            />
+                          </div>
+                          <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            Tiến độ: {progress.progressPercent}%
+                          </p>
+                        </div>
+                      )}
                       <p className="mt-1 text-[11px] font-bold text-slate-400">Tạo lúc: {formatDateTime(item.created_at)}</p>
                       {item.is_reviewed && <p className="mt-1 text-[11px] font-bold text-emerald-600">Đã rà soát</p>}
                       {item.error_message && <p className="mt-2 text-xs font-black text-[var(--color-primary)]">Lỗi: {item.error_message}</p>}
@@ -660,7 +723,7 @@ export default function TeacherAIGeneratorPage() {
                     className={inputClass}
                     value={subjectId ?? ''}
                     onChange={(event) => handleSubjectChange(Number(event.target.value))}
-                    disabled={!subjects.length}
+                    disabled={!subjects.length || hasGeneratingRequest}
                   >
                     {!subjects.length && <option value="">Không có môn học được phân công</option>}
                     {subjects.map((item) => (
@@ -677,7 +740,7 @@ export default function TeacherAIGeneratorPage() {
                     className={inputClass}
                     value={topicId ?? ''}
                     onChange={(event) => handleTopicChange(Number(event.target.value))}
-                    disabled={!subjectId || loadingTopics || !topics.length}
+                    disabled={!subjectId || loadingTopics || !topics.length || hasGeneratingRequest}
                   >
                     {!subjectId && <option value="">Vui lòng chọn môn học trước</option>}
                     {subjectId && !topics.length && <option value="">Không có chủ đề cho môn học này</option>}
@@ -696,7 +759,7 @@ export default function TeacherAIGeneratorPage() {
                     className={inputClass}
                     value={documentId ?? ''}
                     onChange={(event) => setDocumentId(Number(event.target.value))}
-                    disabled={!topicId || loadingDocuments || !documents.length}
+                    disabled={!topicId || loadingDocuments || !documents.length || hasGeneratingRequest}
                   >
                     {!topicId && <option value="">Vui lòng chọn chủ đề trước</option>}
                     {topicId && !documents.length && <option value="">Không có tài liệu phù hợp</option>}
@@ -720,6 +783,7 @@ export default function TeacherAIGeneratorPage() {
                     value={numQuestions}
                     onChange={(event) => setNumQuestions(Number(event.target.value))}
                     className={inputClass}
+                    disabled={hasGeneratingRequest}
                   />
                 </div>
 
@@ -729,6 +793,7 @@ export default function TeacherAIGeneratorPage() {
                     className={inputClass}
                     value={difficulty}
                     onChange={(event) => setDifficulty(event.target.value as Difficulty)}
+                    disabled={hasGeneratingRequest}
                   >
                     <option value="easy">Dễ</option>
                     <option value="medium">Trung bình</option>
@@ -744,12 +809,13 @@ export default function TeacherAIGeneratorPage() {
                   className={inputClass}
                   value={contentScope}
                   onChange={(event) => setContentScope(event.target.value)}
+                  disabled={hasGeneratingRequest}
                   placeholder="Ví dụ: Chỉ chương 2 và chương 3, tập trung phần định nghĩa và công thức quan trọng"
                 />
               </div>
 
               {selectedDocumentTopic && (
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-5 py-4 text-xs font-bold text-slate-600">
+                <div className="px-5 py-4 text-xs font-bold border rounded-2xl border-slate-100 bg-slate-50 text-slate-600">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Tài liệu đã chọn</p>
                   <p className="mt-3 text-sm font-black text-slate-800">{selectedDocumentTopic.document_title}</p>
                   <p className="mt-2">{selectedDocumentTopic.topic_name} | {selectedDocumentTopic.subject_name}</p>
@@ -760,9 +826,9 @@ export default function TeacherAIGeneratorPage() {
                 </div>
               )}
 
-              {contextHasActiveRequest && (
+              {hasGeneratingRequest && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-amber-700">
-                  Ngữ cảnh này đang có job pending/processing. Vui lòng đợi xử lý xong.
+                  Đang có job AI pending/processing. Tạm khóa tạo mới cho tới khi job hiện tại hoàn tất.
                 </div>
               )}
 
@@ -784,9 +850,9 @@ export default function TeacherAIGeneratorPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-8">
           <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => !submittingReview && closeReviewModal()} />
           <div className="relative z-10 w-full max-w-6xl max-h-[92vh] overflow-hidden rounded-[2.5rem] border border-slate-100 bg-white shadow-2xl">
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-8 py-6 bg-slate-50/70">
+            <div className="flex flex-wrap items-start justify-between gap-4 px-8 py-6 border-b border-slate-100 bg-slate-50/70">
               <div>
-                <h3 className="text-2xl font-black uppercase tracking-tight text-slate-900">Rà soát câu hỏi AI đã sinh</h3>
+                <h3 className="text-2xl font-black tracking-tight uppercase text-slate-900">Rà soát câu hỏi AI đã sinh</h3>
                 {reviewRequest && (
                   <p className="mt-2 text-[11px] font-black uppercase tracking-widest text-slate-400">
                     Job #{reviewRequest.request_id} {reviewReadOnly ? '| Chế độ chỉ xem' : '| Chế độ chỉnh sửa'}
@@ -797,7 +863,7 @@ export default function TeacherAIGeneratorPage() {
                 type="button"
                 onClick={closeReviewModal}
                 disabled={submittingReview}
-                className="h-11 w-11 rounded-2xl bg-slate-100 text-slate-500 transition-all hover:bg-slate-200 disabled:opacity-50"
+                className="transition-all h-11 w-11 rounded-2xl bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-50"
               >
                 ✕
               </button>
@@ -812,11 +878,11 @@ export default function TeacherAIGeneratorPage() {
 
               {loadingReviewQuestions ? (
                 <div className="border-4 border-dashed border-slate-100 rounded-[2rem] p-12 text-center">
-                  <p className="text-sm font-black uppercase tracking-widest text-slate-400">Đang tải câu hỏi...</p>
+                  <p className="text-sm font-black tracking-widest uppercase text-slate-400">Đang tải câu hỏi...</p>
                 </div>
               ) : reviewQuestions.length === 0 ? (
                 <div className="border-4 border-dashed border-slate-100 rounded-[2rem] p-12 text-center">
-                  <p className="text-sm font-black uppercase tracking-widest text-slate-400">Job này chưa có câu hỏi khả dụng.</p>
+                  <p className="text-sm font-black tracking-widest uppercase text-slate-400">Job này chưa có câu hỏi khả dụng.</p>
                 </div>
               ) : (
                 reviewQuestions.map((question, questionIndex) => {
@@ -901,7 +967,7 @@ export default function TeacherAIGeneratorPage() {
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Đáp án</label>
                         {question.options.map((option, optionIndex) => (
-                          <div key={`${question.question_id}-${option.order_num}`} className="rounded-xl border border-slate-200 bg-white p-3">
+                          <div key={`${question.question_id}-${option.order_num}`} className="p-3 bg-white border rounded-xl border-slate-200">
                             <div className="flex flex-wrap items-center gap-2">
                               <button
                                 type="button"
@@ -926,7 +992,7 @@ export default function TeacherAIGeneratorPage() {
                                   type="button"
                                   disabled={reviewReadOnly || optionIndex === 0}
                                   onClick={() => moveOption(question.question_id, optionIndex, -1)}
-                                  className="h-8 w-8 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40"
+                                  className="w-8 h-8 border rounded-lg border-slate-200 text-slate-600 disabled:opacity-40"
                                 >
                                   ↑
                                 </button>
@@ -934,7 +1000,7 @@ export default function TeacherAIGeneratorPage() {
                                   type="button"
                                   disabled={reviewReadOnly || optionIndex === question.options.length - 1}
                                   onClick={() => moveOption(question.question_id, optionIndex, 1)}
-                                  className="h-8 w-8 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40"
+                                  className="w-8 h-8 border rounded-lg border-slate-200 text-slate-600 disabled:opacity-40"
                                 >
                                   ↓
                                 </button>
@@ -949,7 +1015,7 @@ export default function TeacherAIGeneratorPage() {
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 px-8 py-5 bg-white">
+            <div className="flex flex-wrap items-center justify-end gap-3 px-8 py-5 bg-white border-t border-slate-100">
               <button
                 type="button"
                 onClick={closeReviewModal}

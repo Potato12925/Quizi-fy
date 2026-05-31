@@ -11,7 +11,16 @@ from schemas.question_schema import QuestionCreateRequest, QuestionUpdateRequest
 
 
 async def create_question(payload: QuestionCreateRequest) -> dict:
-    return await create_question_record({ "teacher_id": payload.teacher_id, "subject_id": payload.subject_id, "topic_id": payload.topic_id, "content": payload.content, "difficulty": payload.difficulty, "source": payload.source, "status": payload.status })
+    return await create_question_record(
+        {
+            "teacher_id": payload.teacher_id,
+            "document_topic_id": payload.document_topic_id,
+            "content": payload.content,
+            "difficulty": payload.difficulty,
+            "source": payload.source,
+            "status": payload.status,
+        }
+    )
 
 
 async def get_question_by_id(record_id: int) -> dict:

@@ -1,20 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import type { UserRole } from '@/api/authApi';
 import { useAuth } from '@/contexts/AuthContext';
-
-const getDashboardByRoles = (roles: UserRole[]): string => {
-  if (roles.includes('admin')) {
-    return '/admin/dashboard';
-  }
-
-  if (roles.includes('teacher')) {
-    return '/teacher/dashboard';
-  }
-
-  return '/student/dashboard';
-};
+import { getPostLoginPath } from '@/utils/authRouting';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -26,7 +14,7 @@ export default function LoginPage() {
 
   React.useEffect(() => {
     if (isAuthenticated && user) {
-      navigate(getDashboardByRoles(user.roles), { replace: true });
+      navigate(getPostLoginPath(user), { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
 
@@ -40,7 +28,7 @@ export default function LoginPage() {
         password,
       });
 
-      navigate(getDashboardByRoles(loggedInUser.roles), { replace: true });
+      navigate(getPostLoginPath(loggedInUser), { replace: true });
     } catch (err: any) {
       setError(err?.message || 'Dang nhap that bai. Vui long thu lai.');
     }

@@ -16,7 +16,7 @@ export default function DashboardSidebar({ role }: { role?: 'student' | 'teacher
 
   const teacherMenu = [
     { name: 'Tổng quan', icon: 'dashboard', path: '/teacher/dashboard' },
-    { name: 'Quản lý chương', icon: 'menu_book', path: '/teacher/subjects' },
+    { name: 'Quản lý chủ đề', icon: 'menu_book', path: '/teacher/subjects' },
     { name: 'Kho tài liệu', icon: 'folder_open', path: '/teacher/resources' },
     { name: 'Tạo câu hỏi AI', icon: 'auto_awesome', path: '/teacher/ai-generator' },
     { name: 'Ngân hàng câu hỏi', icon: 'database', path: '/teacher/question-bank' },
@@ -37,16 +37,16 @@ export default function DashboardSidebar({ role }: { role?: 'student' | 'teacher
       <div className="p-10">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 bg-[#b20112] rounded-xl flex items-center justify-center shadow-lg shadow-red-900/20">
-            <span className="material-symbols-outlined text-white text-2xl">school</span>
+            <span className="text-2xl text-white material-symbols-outlined">school</span>
           </div>
-          <span className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic">Quizify<span className="text-[#b20112]">AI</span></span>
+          <span className="text-2xl italic font-black tracking-tighter uppercase text-slate-900">Quizify<span className="text-[#b20112]">AI</span></span>
         </div>
         <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] ml-1">
           {isStudent ? 'Giao diện học sinh' : isTeacher ? 'Giao diện giáo viên' : 'Hệ thống quản trị'}
         </p>
       </div>
 
-      <nav className="flex-1 px-6 space-y-2 mt-4">
+      <nav className="flex-1 px-6 mt-4 space-y-2">
         {currentMenu.map((item) => {
           const isActive = pathname === item.path;
           return (
@@ -61,7 +61,7 @@ export default function DashboardSidebar({ role }: { role?: 'student' | 'teacher
               <span className={`material-symbols-outlined text-2xl ${isActive ? 'text-white' : 'text-slate-300 group-hover:text-[#b20112]'} transition-colors`}>
                 {item.icon}
               </span>
-              <span className="text-sm font-black uppercase tracking-widest italic">{item.name}</span>
+              <span className="text-sm italic font-black tracking-widest uppercase">{item.name}</span>
               {isActive && (
                 <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white animate-pulse"></div>
               )}

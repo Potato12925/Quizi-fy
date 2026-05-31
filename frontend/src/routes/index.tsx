@@ -24,6 +24,7 @@ import TeacherResources from '@/pages/teacher/TeacherResources';
 import TeacherSubjects from '@/pages/teacher/TeacherSubjects';
 import TeacherStats from '@/pages/teacher/TeacherStats';
 import TeacherSettings from '@/pages/teacher/TeacherSettings';
+import SharedChangePasswordPage from '@/pages/shared/SharedChangePasswordPage';
 
 // Student Pages
 import StudentDashboard from '@/pages/student/StudentDashboard';
@@ -73,6 +74,10 @@ export const router = createBrowserRouter([
             path: 'subjects',
             element: <AdminSubjects />,
           },
+          {
+            path: 'change-password',
+            element: <SharedChangePasswordPage />,
+          },
         ]
       }
     ],
@@ -117,6 +122,10 @@ export const router = createBrowserRouter([
           {
             path: 'settings',
             element: <TeacherSettings />,
+          },
+          {
+            path: 'change-password',
+            element: <SharedChangePasswordPage />,
           },
         ]
       }
@@ -170,6 +179,10 @@ export const router = createBrowserRouter([
           {
             path: 'settings',
             element: <StudentSettings />,
+          },
+          {
+            path: 'change-password',
+            element: <SharedChangePasswordPage />,
           },
         ]
       }

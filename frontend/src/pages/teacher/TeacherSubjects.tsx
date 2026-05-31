@@ -184,7 +184,7 @@ export default function TeacherSubjectsPage() {
             Quản lý <br />
             <span className="text-[#b20112]">chủ đề theo môn học</span>
           </h1>
-          <p className="mt-4 font-medium text-slate-500">Tạo chủ đề cho từng môn học bạn đang phụ trách. Chủ đề có thể được dùng ở các luồng khác.</p>
+          <p className="mt-4 font-medium text-slate-500">Tạo chủ đề cho từng môn học bạn đang phụ trách</p>
         </div>
         <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
           {totalTopics} chủ đề

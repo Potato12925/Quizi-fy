@@ -271,7 +271,7 @@ export default function TeacherResourcesPage() {
           placeholder="Tìm kiếm tài liệu..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full md:flex-1 py-3 px-4 text-xs font-bold transition-all border-none rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500/20"
+          className="w-full px-4 py-3 text-xs font-bold transition-all border-none md:flex-1 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500/20"
         />
         <select value={filterSubject} onChange={(e) => setFilterSubject(e.target.value)} className="px-6 py-3 rounded-xl bg-slate-50 border-none text-[10px] font-black uppercase tracking-widest text-slate-500">
           <option value="all">Tất cả môn học</option>
@@ -289,14 +289,14 @@ export default function TeacherResourcesPage() {
             <div className="flex items-start justify-between mb-6">
               <div>
                 <h4 className="mb-2 text-base font-black leading-none tracking-tight text-slate-800">{resource.title}</h4>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex flex-wrap gap-2">
                   <span className="bg-slate-50 text-slate-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">{resource.subject?.subject_name}</span>
                   <span className="bg-slate-50 text-slate-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">{fmtFileSize(resource.file_size)}</span>
                   <span className="bg-slate-50 text-slate-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">{resource.file_type.toUpperCase()}</span>
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => handleOpenEdit(resource)} className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white flex items-center justify-center">
+                <button onClick={() => handleOpenEdit(resource)} className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white">
                   <span className="text-xl material-symbols-outlined">edit</span>
                 </button>
                 <button onClick={() => handleDelete(resource)} className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-[#b20112] hover:text-white flex items-center justify-center">
@@ -304,8 +304,8 @@ export default function TeacherResourcesPage() {
                 </button>
               </div>
             </div>
-            <div className="text-xs text-slate-500 mb-4">{resource.description || 'Không có mô tả'}</div>
-            <div className="mb-4 flex flex-wrap gap-2">
+            <div className="mb-4 text-xs text-slate-500">{resource.description || 'Không có mô tả'}</div>
+            <div className="flex flex-wrap gap-2 mb-4">
               {resource.topics.map((topic) => (
                 <span key={`${resource.document_id}-${topic.topic_id}`} className="bg-red-50 text-[#b20112] px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">
                   {topic.topic_name}
@@ -341,7 +341,7 @@ export default function TeacherResourcesPage() {
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => !isSubmitting && setIsModalOpen(false)} />
           <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl relative z-10 overflow-hidden">
             <div className="p-10 sm:p-12">
-              <h2 className="text-3xl italic font-black tracking-tighter uppercase text-slate-900 mb-8">{modalMode === 'upload' ? 'Upload' : 'Chỉnh sửa'} <span className="text-[#b20112]">Tài liệu</span></h2>
+              <h2 className="mb-8 text-3xl italic font-black tracking-tighter uppercase text-slate-900">{modalMode === 'upload' ? 'Tải lên' : 'Chỉnh sửa'} <span className="text-[#b20112]">Tài liệu</span></h2>
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed rounded-3xl p-6 text-center cursor-pointer border-slate-100 hover:border-[#b20112]">
@@ -364,13 +364,13 @@ export default function TeacherResourcesPage() {
                   ))}
                 </select>
 
-                <div className="w-full p-4 rounded-2xl bg-slate-50 border border-slate-100 min-h-28">
+                <div className="w-full p-4 border rounded-2xl bg-slate-50 border-slate-100 min-h-28">
                   {!formData.subjectId ? (
                     <p className="text-xs font-bold text-slate-400">Vui lòng chọn môn học trước</p>
                   ) : modalTopics.length === 0 ? (
                     <p className="text-xs font-bold text-slate-400">Không có topic</p>
                   ) : (
-                    <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                    <div className="pr-1 space-y-2 overflow-y-auto max-h-44">
                       {modalTopics.map((topic) => {
                         const checked = formData.topicIds.includes(topic.topic_id);
                         return (

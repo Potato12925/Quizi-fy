@@ -327,7 +327,6 @@ export default function QuestionBankPage() {
               <button key={s.subject_id} onClick={() => setActiveSubject(String(s.subject_id))} className={`w-full p-6 rounded-3xl border-2 transition-all text-left flex justify-between items-center group ${activeSubject === String(s.subject_id) ? 'border-[#b20112] bg-red-50/20 shadow-lg shadow-red-900/5' : 'border-slate-50 bg-white hover:border-slate-200'}`}>
                 <div>
                   <p className={`text-sm font-black transition-colors ${activeSubject === String(s.subject_id) ? 'text-[#b20112]' : 'text-slate-600'}`}>{s.subject_name}</p>
-                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mt-1">{subjectCountMap.get(s.subject_id) || 0} câu hỏi</p>
                 </div>
                 <span className={`material-symbols-outlined text-xl transition-all ${activeSubject === String(s.subject_id) ? 'text-[#b20112] translate-x-1' : 'text-slate-200 opacity-0 group-hover:opacity-100'}`}>chevron_right</span>
               </button>

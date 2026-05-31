@@ -1,9 +1,18 @@
 from fastapi import APIRouter, Depends, Query
 
 from core.responses import error_response, success_response
-from middlewares.auth_middleware import CurrentUser, require_roles
+from middlewares.auth_middleware import CurrentUser, require_authenticated_user, require_roles
 from schemas.notification_schema import NotificationCreateRequest, NotificationUpdateRequest
-from services.notification_service import create_notification, delete_notification, get_notification_by_id, get_notifications, update_notification
+from services.notification_service import (
+    create_notification,
+    delete_notification,
+    get_my_notifications,
+    get_notification_by_id,
+    get_notifications,
+    mark_all_my_notifications_as_read,
+    mark_my_notification_as_read,
+    update_notification,
+)
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
@@ -20,6 +29,44 @@ async def post_notification(payload: NotificationCreateRequest, _: CurrentUser =
 
 
 @router.get("", summary="List notifications")
+async def get_my_notification_list(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: CurrentUser = Depends(require_authenticated_user),
+):
+    try:
+        result = await get_my_notifications(user_id=current_user.user_id, page=page, limit=limit)
+        return success_response(data=result["items"], meta=result["pagination"], message="Notification loaded successfully", status_code=200)
+    except Exception:
+        return error_response(message="Unable to load notifications", status_code=500, error_code="NOTIFICATION_LIST_FAILED")
+
+
+@router.patch("/{notification_id}/read", summary="Mark my notification as read")
+async def patch_my_notification_read(
+    notification_id: int,
+    current_user: CurrentUser = Depends(require_authenticated_user),
+):
+    try:
+        result = await mark_my_notification_as_read(user_id=current_user.user_id, notification_id=notification_id)
+        return success_response(data=result, message="Notification marked as read", status_code=200)
+    except ValueError as exc:
+        return error_response(message=str(exc), status_code=404, error_code="NOTIFICATION_NOT_FOUND")
+    except Exception:
+        return error_response(message="Unable to update notification", status_code=500, error_code="NOTIFICATION_UPDATE_FAILED")
+
+
+@router.patch("/read-all", summary="Mark all my notifications as read")
+async def patch_read_all_notifications(
+    current_user: CurrentUser = Depends(require_authenticated_user),
+):
+    try:
+        result = await mark_all_my_notifications_as_read(user_id=current_user.user_id)
+        return success_response(data=result, message="All notifications marked as read", status_code=200)
+    except Exception:
+        return error_response(message="Unable to update notifications", status_code=500, error_code="NOTIFICATION_UPDATE_FAILED")
+
+
+@router.get("/admin", summary="List notifications (admin legacy)")
 async def get_notification_list(page: int = Query(default=1, ge=1), limit: int = Query(default=20, ge=1, le=100), _: CurrentUser = Depends(require_roles("admin"))):
     try:
         result = await get_notifications(page=page, limit=limit)

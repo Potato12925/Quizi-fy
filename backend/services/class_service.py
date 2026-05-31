@@ -32,6 +32,7 @@ from repositories.class_repository import (
     update_class_subject_mapping,
     update_class_teacher_mapping,
 )
+from services.notification_service import create_notification_for_user
 from repositories.subject_repository import find_subject_by_id
 from repositories.user_repository import find_role_codes_by_user_id, find_user_by_id
 from schemas.class_schema import (
@@ -333,6 +334,12 @@ async def assign_subject_to_class(class_id: int, payload: AssignSubjectToClassRe
             },
         )
 
+    await create_notification_for_user(
+        user_id=payload.assigned_teacher_id,
+        title="Bạn được phân công môn học",
+        content=f"Bạn đã được phân công phụ trách môn {subject.get('subject_name')} trong lớp {class_data.get('class_name')}.",
+    )
+
     rows = await get_class_subjects(class_id)
     for row in rows:
         if int(row["subject_id"]) == payload.subject_id:
@@ -392,6 +399,13 @@ async def update_class_subject(class_id: int, class_subject_id: int, payload: Up
                     "assigned_teacher_id": payload.assigned_teacher_id,
                     "status": next_status,
                 }
+            )
+            subject = await find_subject_by_id(int(class_subject["subject_id"]))
+            subject_name = subject.get("subject_name") if subject else f"#{int(class_subject['subject_id'])}"
+            await create_notification_for_user(
+                user_id=payload.assigned_teacher_id,
+                title="Bạn được phân công môn học",
+                content=f"Bạn đã được phân công phụ trách môn {subject_name} trong lớp {class_data.get('class_name')}.",
             )
             rows = await get_class_subjects(class_id)
             for row in rows:
@@ -482,6 +496,12 @@ async def assign_student_to_class(class_id: int, payload: AssignStudentToClassRe
         await update_class_student_mapping(int(existing["class_student_id"]), {"deleted_at": None})
     else:
         raise ValueError("Student already assigned to class")
+
+    await create_notification_for_user(
+        user_id=payload.student_id,
+        title="Bạn đã được thêm vào lớp học",
+        content=f"Bạn đã được thêm vào lớp {class_data.get('class_name')}.",
+    )
 
     rows = await get_class_students(class_id)
     for row in rows:

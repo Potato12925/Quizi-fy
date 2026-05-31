@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import DashboardSidebar from '@/components/layout/DashboardSidebar';
 import LogoutButton from '@/components/auth/LogoutButton';
 import { useAuth } from '@/contexts/AuthContext';
+import NotificationBell from '@/layouts/NotificationBell';
 
 export default function TeacherLayout() {
   const { user } = useAuth();
@@ -25,9 +26,7 @@ export default function TeacherLayout() {
              </div>
           </div>
           <div className="flex items-center gap-6">
-            <div className="w-10 h-10 bg-white rounded-2xl flex items-center justify-center text-slate-400 hover:text-[#b20112] transition-colors cursor-pointer border border-slate-100 shadow-sm">
-               <span className="text-lg material-symbols-outlined">notifications</span>
-            </div>
+            <NotificationBell />
             <div className="w-px h-8 bg-slate-200"></div>
             <div className="flex items-center gap-4">
               <div className="hidden text-right sm:block">

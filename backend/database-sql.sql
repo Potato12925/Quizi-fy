@@ -161,6 +161,7 @@ CREATE TABLE document_topics (
     document_id BIGINT NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
     topic_id BIGINT NOT NULL REFERENCES topics(topic_id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP,
     CONSTRAINT uq_document_topic UNIQUE(document_id, topic_id)
 );
 
@@ -232,7 +233,8 @@ CREATE TABLE practice_sets (
     num_questions_actual INT,
     time_limit_minutes INT,
     prioritize_unanswered BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
 );
 
 CREATE TABLE practice_set_questions (
@@ -252,7 +254,8 @@ CREATE TABLE practice_attempts (
     score DECIMAL(5,2),
     total_correct INT DEFAULT 0,
     total_wrong INT DEFAULT 0,
-    status practice_attempt_status DEFAULT 'in_progress'
+    status practice_attempt_status DEFAULT 'in_progress',
+    deleted_at TIMESTAMP
 );
 
 CREATE TABLE student_answers (
@@ -262,6 +265,7 @@ CREATE TABLE student_answers (
     selected_option_id BIGINT REFERENCES question_options(option_id) ON DELETE SET NULL,
     is_correct BOOLEAN,
     answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP,
     CONSTRAINT uq_attempt_question UNIQUE(attempt_id, question_id)
 );
 

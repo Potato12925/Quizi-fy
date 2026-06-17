@@ -54,7 +54,13 @@ async def autosave_answers(attempt_id: int, payload: StudentAnswerSaveRequest) -
 
 async def submit_attempt(attempt_id: int) -> dict:
     supabase = SupabaseManager.get_client()
-    answers_resp = await asyncio.to_thread(lambda: supabase.table("student_answers").select("*").eq("attempt_id", attempt_id).execute())
+    answers_resp = await asyncio.to_thread(
+        lambda: supabase.table("student_answers")
+        .select("*")
+        .eq("attempt_id", attempt_id)
+        .is_("deleted_at", None)
+        .execute()
+    )
     answers = answers_resp.data or []
     
     question_ids = [a["question_id"] for a in answers]
@@ -82,13 +88,23 @@ async def submit_attempt(attempt_id: int) -> dict:
         })
     
     if updates:
-        await asyncio.to_thread(lambda: supabase.table("student_answers").upsert(updates).execute())
+        await asyncio.to_thread(
+            lambda: supabase.table("student_answers")
+            .upsert(updates, on_conflict="attempt_id,question_id")
+            .execute()
+        )
         
     attempt = await find_practice_attempt_by_id(attempt_id)
     if not attempt:
         raise ValueError("PracticeAttempt not found")
         
-    ps_resp = await asyncio.to_thread(lambda: supabase.table("practice_sets").select("num_questions_actual").eq("practice_set_id", attempt["practice_set_id"]).execute())
+    ps_resp = await asyncio.to_thread(
+        lambda: supabase.table("practice_sets")
+        .select("num_questions_actual")
+        .eq("practice_set_id", attempt["practice_set_id"])
+        .is_("deleted_at", None)
+        .execute()
+    )
     num_q = None
     if ps_resp.data and "num_questions_actual" in ps_resp.data[0]:
         num_q = ps_resp.data[0]["num_questions_actual"]
@@ -162,7 +178,13 @@ async def get_attempt_questions(attempt_id: int) -> dict:
     )
     questions_data = psq_resp.data or []
     
-    answers_resp = await asyncio.to_thread(lambda: supabase.table("student_answers").select("question_id, selected_option_id").eq("attempt_id", attempt_id).execute())
+    answers_resp = await asyncio.to_thread(
+        lambda: supabase.table("student_answers")
+        .select("question_id, selected_option_id")
+        .eq("attempt_id", attempt_id)
+        .is_("deleted_at", None)
+        .execute()
+    )
     answers = {a["question_id"]: a["selected_option_id"] for a in (answers_resp.data or [])}
     
     formatted_questions = []

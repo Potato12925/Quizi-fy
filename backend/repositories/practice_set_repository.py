@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from core.supabase import SupabaseManager
 
 
-SELECT_FIELDS = "practice_set_id,student_id,subject_id,document_topic_id,difficulty,num_questions_requested,num_questions_actual,time_limit_minutes,prioritize_unanswered,created_at"
-HAS_DELETED = False
+SELECT_FIELDS = "practice_set_id,student_id,subject_id,document_topic_id,difficulty,num_questions_requested,num_questions_actual,time_limit_minutes,prioritize_unanswered,created_at,deleted_at"
+HAS_DELETED = True
 
 
 async def find_practice_set_by_id(record_id: int) -> dict | None:
@@ -50,7 +50,11 @@ async def update_practice_set_by_id(record_id: int, payload: dict) -> dict | Non
 
 async def soft_delete_practice_set_by_id(record_id: int) -> bool:
     supabase = SupabaseManager.get_client()
-    query = supabase.table("practice_sets").delete().eq("practice_set_id", record_id)
+    query = (
+        supabase.table("practice_sets")
+        .update({"deleted_at": datetime.now(timezone.utc).isoformat()})
+        .eq("practice_set_id", record_id)
+    )
     if HAS_DELETED:
         query = query.is_("deleted_at", None)
     response = await asyncio.to_thread(lambda: query.execute())
@@ -64,6 +68,7 @@ async def find_practice_sets_with_subjects_by_student(student_id: int) -> list[d
         lambda: supabase.table("practice_sets")
         .select("practice_set_id, subjects(subject_name)")
         .eq("student_id", student_id)
+        .is_("deleted_at", None)
         .execute()
     )
     return response.data or []

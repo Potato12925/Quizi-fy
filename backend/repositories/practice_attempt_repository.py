@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from core.supabase import SupabaseManager
 
 
-SELECT_FIELDS = "attempt_id,practice_set_id,started_at,submitted_at,score,total_correct,total_wrong,status"
-HAS_DELETED = False
+SELECT_FIELDS = "attempt_id,practice_set_id,started_at,submitted_at,score,total_correct,total_wrong,status,deleted_at"
+HAS_DELETED = True
 
 
 async def find_practice_attempt_by_id(record_id: int) -> dict | None:
@@ -29,12 +29,25 @@ async def create_practice_attempt_record(payload: dict) -> dict:
 
 async def get_attempt_result_details(attempt_id: int) -> dict | None:
     supabase = SupabaseManager.get_client()
-    attempt_resp = await asyncio.to_thread(lambda: supabase.table("practice_attempts").select("*, practice_sets(*)").eq("attempt_id", attempt_id).limit(1).execute())
+    attempt_resp = await asyncio.to_thread(
+        lambda: supabase.table("practice_attempts")
+        .select("*, practice_sets(*)")
+        .eq("attempt_id", attempt_id)
+        .is_("deleted_at", None)
+        .limit(1)
+        .execute()
+    )
     if not attempt_resp.data:
         return None
     attempt = attempt_resp.data[0]
     
-    answers_resp = await asyncio.to_thread(lambda: supabase.table("student_answers").select("*, questions(*, question_options(*))").eq("attempt_id", attempt_id).execute())
+    answers_resp = await asyncio.to_thread(
+        lambda: supabase.table("student_answers")
+        .select("*, questions(*, question_options(*))")
+        .eq("attempt_id", attempt_id)
+        .is_("deleted_at", None)
+        .execute()
+    )
     
     return {
         "attempt": attempt,
@@ -64,7 +77,11 @@ async def update_practice_attempt_by_id(record_id: int, payload: dict) -> dict |
 
 async def soft_delete_practice_attempt_by_id(record_id: int) -> bool:
     supabase = SupabaseManager.get_client()
-    query = supabase.table("practice_attempts").update({"status": "inactive"}).eq("attempt_id", record_id)
+    query = (
+        supabase.table("practice_attempts")
+        .update({"deleted_at": datetime.now(timezone.utc).isoformat()})
+        .eq("attempt_id", record_id)
+    )
     if HAS_DELETED:
         query = query.is_("deleted_at", None)
     response = await asyncio.to_thread(lambda: query.execute())
@@ -81,6 +98,7 @@ async def find_submitted_attempts_by_practice_set_ids(ps_ids: list[int]) -> list
         .select("attempt_id, practice_set_id, started_at, submitted_at, total_correct, total_wrong, score")
         .in_("practice_set_id", ps_ids)
         .eq("status", "submitted")
+        .is_("deleted_at", None)
         .execute()
     )
     return response.data or []
@@ -88,7 +106,14 @@ async def find_submitted_attempts_by_practice_set_ids(ps_ids: list[int]) -> list
 async def find_all_student_history(student_id: int) -> list[dict]:
     supabase = SupabaseManager.get_client()
     
-    ps_resp = await asyncio.to_thread(lambda: supabase.table("practice_sets").select("practice_set_id, subjects(subject_name)").eq("student_id", student_id).execute())
+    ps_resp = await asyncio.to_thread(
+        lambda: supabase.table("practice_sets")
+        .select("practice_set_id, subjects(subject_name)")
+        .eq("student_id", student_id)
+        .is_("deleted_at", None)
+        .execute()
+    )
+    
     ps_data = ps_resp.data or []
     if not ps_data:
         return []
@@ -96,7 +121,14 @@ async def find_all_student_history(student_id: int) -> list[dict]:
     ps_ids = [ps["practice_set_id"] for ps in ps_data]
     ps_map = {ps["practice_set_id"]: ps["subjects"]["subject_name"] if ps.get("subjects") else "Unknown" for ps in ps_data}
     
-    attempts_resp = await asyncio.to_thread(lambda: supabase.table("practice_attempts").select("*").in_("practice_set_id", ps_ids).order("started_at", desc=True).execute())
+    attempts_resp = await asyncio.to_thread(
+        lambda: supabase.table("practice_attempts")
+        .select("*")
+        .in_("practice_set_id", ps_ids)
+        .is_("deleted_at", None)
+        .order("started_at", desc=True)
+        .execute()
+    )
     attempts = attempts_resp.data or []
     
     for attempt in attempts:

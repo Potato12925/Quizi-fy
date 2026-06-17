@@ -142,6 +142,7 @@ document_topic_id bigint [pk]
 document_id bigint [not null]
 topic_id bigint [not null]
 created_at timestamp
+deleted_at timestamp
 }
 
 Table ai_requests {
@@ -204,6 +205,7 @@ num_questions_actual int
 time_limit_minutes int
 prioritize_unanswered boolean
 created_at timestamp
+deleted_at timestamp
 }
 
 Table practice_set_questions {
@@ -222,6 +224,7 @@ score numeric
 total_correct int
 total_wrong int
 status practice_attempt_status
+deleted_at timestamp
 }
 
 Table student_answers {
@@ -231,6 +234,7 @@ question_id bigint [not null]
 selected_option_id bigint
 is_correct boolean
 answered_at timestamp
+deleted_at timestamp
 }
 
 Table notifications {

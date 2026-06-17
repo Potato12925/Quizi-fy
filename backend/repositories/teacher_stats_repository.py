@@ -40,6 +40,7 @@ async def list_teacher_document_topics_scope(teacher_id: int) -> list[dict]:
             "subjects!inner(subject_id,subject_name,status,deleted_at)))"
         )
         .eq("topics.class_subjects.assigned_teacher_id", teacher_id)
+        .is_("deleted_at", None)
         .eq("documents.status", "active")
         .is_("documents.deleted_at", None)
         .is_("topics.deleted_at", None)
@@ -67,6 +68,7 @@ async def list_scoped_practice_sets(
         lambda: supabase.table("practice_sets")
         .select("practice_set_id,student_id,subject_id,document_topic_id")
         .in_("subject_id", assigned_subject_ids)
+        .is_("deleted_at", None)
         .execute()
     )
     base_rows = base_rows_response.data or []
@@ -96,6 +98,7 @@ async def list_practice_attempts_by_practice_set_ids(practice_set_ids: list[int]
         lambda: supabase.table("practice_attempts")
         .select("attempt_id,practice_set_id,started_at,submitted_at,score,status")
         .in_("practice_set_id", practice_set_ids)
+        .is_("deleted_at", None)
         .execute()
     )
     return response.data or []
@@ -109,6 +112,7 @@ async def list_student_answers_by_attempt_ids(attempt_ids: list[int]) -> list[di
         lambda: supabase.table("student_answers")
         .select("attempt_id,question_id,selected_option_id,is_correct")
         .in_("attempt_id", attempt_ids)
+        .is_("deleted_at", None)
         .execute()
     )
     return response.data or []

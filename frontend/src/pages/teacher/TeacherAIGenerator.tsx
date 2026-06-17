@@ -577,7 +577,7 @@ export default function TeacherAIGeneratorPage() {
           <div className="flex items-center justify-center w-16 h-16 mx-auto mb-5 rounded-2xl bg-slate-100 text-slate-500">
             <span className="material-symbols-outlined animate-spin">sync</span>
           </div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Teacher AI Generator</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Tạo câu hỏi bằng AI</p>
           <p className="mt-3 text-sm font-bold text-slate-600">Đang tải dữ liệu, vui lòng chờ trong giây lát...</p>
         </div>
       </div>
@@ -588,12 +588,12 @@ export default function TeacherAIGeneratorPage() {
     <div className="pb-20 space-y-10 duration-700 animate-in fade-in slide-in-from-bottom-8">
       <section className="flex flex-col items-start justify-between gap-6 pt-2 xl:flex-row xl:items-end">
         <div>
-          <p className="mb-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Teacher AI Generator</p>
+          <p className="mb-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Tạo câu hỏi bằng AI</p>
           <h1 className="text-5xl italic font-black leading-none tracking-tighter uppercase text-slate-900 lg:text-6xl">
             Tạo bộ <br />
             <span className="text-[var(--color-primary)]">câu hỏi bằng AI</span>
           </h1>
-          <p className="mt-4 font-medium text-slate-500">Quản lý job AI và rà soát câu hỏi sinh tự động theo quy trình một lần xác nhận.</p>
+          <p className="mt-4 font-medium text-slate-500">Quản lý quá trình và rà soát câu hỏi sinh tự động.</p>
         </div>
       </section>
 
@@ -612,7 +612,7 @@ export default function TeacherAIGeneratorPage() {
         <div className="space-y-6 xl:col-span-7">
           <div className={`${pageCardClass} p-8`}>
             <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-              <h3 className="text-xl font-black tracking-tight uppercase text-slate-900">Danh sách job tạo câu hỏi AI</h3>
+              <h3 className="text-xl font-black tracking-tight uppercase text-slate-900">Danh sách việc tạo câu hỏi AI</h3>
               <button
                 type="button"
                 onClick={() => loadRequests(false).catch(() => undefined)}
@@ -625,8 +625,8 @@ export default function TeacherAIGeneratorPage() {
 
             {!requests.length ? (
               <div className="border-4 border-dashed border-slate-100 rounded-[2rem] p-10 text-center">
-                <p className="text-sm font-black tracking-widest uppercase text-slate-400">Chưa có job AI nào</p>
-                <p className="mt-2 text-xs font-bold text-slate-400">Tạo yêu cầu ở cột bên phải để bắt đầu.</p>
+                <p className="text-sm font-black tracking-widest uppercase text-slate-400">Chưa có việc tạo câu hỏi AI nào</p>
+                <p className="mt-2 text-xs font-bold text-slate-400">Tạo yêu cầu để bắt đầu.</p>
               </div>
             ) : (
               <div className="max-h-[820px] space-y-3 overflow-auto pr-1">

@@ -29,6 +29,7 @@ async def list_document_topics_with_topic(document_ids: list[int]) -> list[dict]
             "class_subjects(class_subject_id,class_id,subject_id,assigned_teacher_id,classes(class_id,class_name),subjects(subject_id,subject_name)))"
         )
         .in_("document_id", document_ids)
+        .is_("deleted_at", None)
         .order("document_topic_id")
         .execute()
     )
@@ -56,6 +57,7 @@ async def get_class_subject_ids_of_document(document_id: int) -> list[int]:
         lambda: supabase.table("document_topics")
         .select("topics!inner(class_subject_id)")
         .eq("document_id", document_id)
+        .is_("deleted_at", None)
         .execute()
     )
     rows = response.data or []
@@ -95,9 +97,10 @@ async def find_document_topic_relation(document_id: int, topic_id: int) -> dict 
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("document_topics")
-        .select("document_topic_id,document_id,topic_id")
+        .select("document_topic_id,document_id,topic_id,deleted_at")
         .eq("document_id", document_id)
         .eq("topic_id", topic_id)
+        .is_("deleted_at", None)
         .limit(1)
         .execute()
     )
@@ -107,6 +110,16 @@ async def find_document_topic_relation(document_id: int, topic_id: int) -> dict 
 
 async def create_document_topic_relation(document_id: int, topic_id: int) -> dict:
     supabase = SupabaseManager.get_client()
+    existing_soft_deleted = await asyncio.to_thread(
+        lambda: supabase.table("document_topics")
+        .update({"deleted_at": None})
+        .eq("document_id", document_id)
+        .eq("topic_id", topic_id)
+        .execute()
+    )
+    restored_rows = existing_soft_deleted.data or []
+    if restored_rows:
+        return restored_rows[0]
     response = await asyncio.to_thread(
         lambda: supabase.table("document_topics")
         .insert({"document_id": document_id, "topic_id": topic_id})
@@ -125,6 +138,7 @@ async def teacher_has_topic(topic_id: int, teacher_id: int) -> bool:
         .select("document_topic_id,documents!inner(document_id,teacher_id,deleted_at)")
         .eq("topic_id", topic_id)
         .eq("documents.teacher_id", teacher_id)
+        .is_("deleted_at", None)
         .is_("documents.deleted_at", None)
         .limit(1)
         .execute()
@@ -162,9 +176,10 @@ async def delete_document_topic_relation(document_id: int, topic_id: int) -> boo
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("document_topics")
-        .delete()
+        .update({"deleted_at": datetime.now(timezone.utc).isoformat()})
         .eq("document_id", document_id)
         .eq("topic_id", topic_id)
+        .is_("deleted_at", None)
         .execute()
     )
     rows = response.data or []

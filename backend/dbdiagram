@@ -12,9 +12,10 @@ cancelled
 }
 
 Enum difficulty_level {
-easy
-medium
-hard
+recognition
+comprehension
+application
+advanced
 }
 
 Enum practice_attempt_status {
@@ -149,7 +150,6 @@ Table ai_requests {
 request_id bigint [pk]
 document_topic_id bigint [not null]
 num_questions int [not null]
-difficulty difficulty_level [not null]
 content_scope text
 status ai_request_status
 generated_question_count int
@@ -158,6 +158,19 @@ error_message text
 is_reviewed boolean [default: false]
 created_at timestamp
 updated_at timestamp
+}
+
+Table ai_request_difficulty_distribution {
+distribution_id bigint [pk]
+request_id bigint [not null]
+difficulty difficulty_level [not null]
+percentage int
+question_count int [not null]
+created_at timestamp
+
+indexes {
+  (request_id, difficulty) [unique]
+}
 }
 
 Table questions {
@@ -269,6 +282,7 @@ Ref: document_topics.document_id > documents.document_id
 Ref: document_topics.topic_id > topics.topic_id
 
 Ref: ai_requests.document_topic_id > document_topics.document_topic_id
+Ref: ai_request_difficulty_distribution.request_id > ai_requests.request_id
 
 Ref: questions.teacher_id > users.user_id
 Ref: questions.document_topic_id > document_topics.document_topic_id

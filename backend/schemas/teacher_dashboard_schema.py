@@ -2,10 +2,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from schemas.difficulty_schema import QuestionDifficulty
 
 AiRequestStatus = Literal["pending", "processing", "completed", "failed", "cancelled"]
 QuestionStatus = Literal["draft", "approved", "rejected", "inactive"]
-QuestionDifficulty = Literal["easy", "medium", "hard"]
 
 
 class TeacherDashboardQueryParams(BaseModel):
@@ -48,9 +48,16 @@ class TeacherDashboardQuestionStatusCounts(BaseModel):
 
 
 class TeacherDashboardQuestionDifficultyCounts(BaseModel):
-    easy: int = 0
-    medium: int = 0
-    hard: int = 0
+    recognition: int = 0
+    comprehension: int = 0
+    application: int = 0
+    advanced: int = 0
+
+
+class TeacherDashboardDifficultyDistributionItem(BaseModel):
+    difficulty: QuestionDifficulty
+    percentage: int | None = None
+    question_count: int
 
 
 class TeacherDashboardTopicOption(BaseModel):
@@ -74,7 +81,7 @@ class TeacherDashboardRecentAiRequest(BaseModel):
     subject_id: int | None = None
     subject_name: str | None = None
     num_questions: int
-    difficulty: QuestionDifficulty | str
+    difficulty_distribution: list[TeacherDashboardDifficultyDistributionItem] = Field(default_factory=list)
     status: AiRequestStatus | str
     generated_question_count: int
     is_reviewed: bool

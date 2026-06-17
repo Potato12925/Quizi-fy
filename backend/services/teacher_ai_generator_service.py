@@ -3,6 +3,7 @@ from math import ceil
 from middlewares.auth_middleware import CurrentUser
 from repositories.subject_repository import list_assigned_subject_ids_by_teacher
 from repositories.teacher_ai_generator_repository import (
+    bulk_create_ai_request_difficulty_distribution,
     bulk_update_question_status,
     create_ai_request_record,
     create_question_history_record,
@@ -23,6 +24,7 @@ from repositories.teacher_ai_generator_repository import (
     update_teacher_question_by_id,
 )
 from schemas.teacher_ai_generator_schema import (
+    TeacherAiDifficultyDistributionPayload,
     TeacherAiRequestConfirmReviewPayload,
     TeacherAiRequestCreatePayload,
     TeacherAiReviewOptionPayload,
@@ -44,6 +46,36 @@ class TeacherAiValidationError(ValueError):
 
 def _normalize_question_content(value: str) -> str:
     return " ".join((value or "").strip().lower().split())
+
+
+def _serialize_difficulty_distribution(items: list[dict] | None) -> list[dict]:
+    rows = items or []
+    sorted_rows = sorted(
+        rows,
+        key=lambda item: (int(item.get("created_at") is None), int(item.get("distribution_id") or 0)),
+    )
+    return [
+        {
+            "distribution_id": int(item["distribution_id"]) if item.get("distribution_id") is not None else None,
+            "request_id": int(item["request_id"]) if item.get("request_id") is not None else None,
+            "difficulty": item.get("difficulty"),
+            "percentage": int(item["percentage"]) if item.get("percentage") is not None else None,
+            "question_count": int(item["question_count"]) if item.get("question_count") is not None else 0,
+            "created_at": item.get("created_at"),
+        }
+        for item in sorted_rows
+    ]
+
+
+def _serialize_ai_request_item(item: dict) -> dict:
+    payload = dict(item)
+    payload.pop("ai_request_difficulty_distribution", None)
+    return {
+        **payload,
+        "difficulty_distribution": _serialize_difficulty_distribution(
+            item.get("ai_request_difficulty_distribution")
+        ),
+    }
 
 
 def _serialize_document_topic_row(row: dict) -> dict:
@@ -199,13 +231,24 @@ async def create_teacher_ai_request(current_user: CurrentUser, payload: TeacherA
         {
             "document_topic_id": payload.document_topic_id,
             "num_questions": payload.num_questions,
-            "difficulty": payload.difficulty,
             "content_scope": payload.content_scope,
             "status": "pending",
         }
     )
+    await bulk_create_ai_request_difficulty_distribution(
+        [
+            {
+                "request_id": created["request_id"],
+                "difficulty": item.difficulty,
+                "percentage": item.percentage,
+                "question_count": item.question_count,
+            }
+            for item in payload.difficulty_distribution
+        ]
+    )
 
     request_id = int(created["request_id"])
+    created = await find_ai_request_by_id(request_id) or created
     try:
         from workers.ai_generation_worker import process_ai_request_task
 
@@ -221,7 +264,7 @@ async def create_teacher_ai_request(current_user: CurrentUser, payload: TeacherA
         )
         raise TeacherAiValidationError("Unable to queue AI generation request")
 
-    return created
+    return _serialize_ai_request_item(created)
 
 
 async def list_teacher_ai_requests(current_user: CurrentUser, page: int, limit: int) -> dict:
@@ -246,7 +289,7 @@ async def list_teacher_ai_requests(current_user: CurrentUser, page: int, limit: 
         dt = doc_topic_map.get(dt_id) or {}
         serialized_items.append(
             {
-                **item,
+                **_serialize_ai_request_item(item),
                 "document_topic": dt,
             }
         )
@@ -270,7 +313,10 @@ async def get_teacher_ai_request_detail(current_user: CurrentUser, request_id: i
     doc_topic = await find_teacher_document_topic_row(current_user.user_id, int(request["document_topic_id"]))
     if not doc_topic:
         raise TeacherAiAuthorizationError("You do not have permission to access this AI request")
-    return {**request, "document_topic": _serialize_document_topic_row(doc_topic)}
+    return {
+        **_serialize_ai_request_item(request),
+        "document_topic": _serialize_document_topic_row(doc_topic),
+    }
 
 
 async def list_teacher_ai_request_questions(current_user: CurrentUser, request_id: int) -> list[dict]:
@@ -408,7 +454,7 @@ async def confirm_teacher_ai_request_review(
     )
 
     return {
-        "request": locked_request or {**request, "is_reviewed": True},
+        "request": _serialize_ai_request_item(locked_request or {**request, "is_reviewed": True}),
         "updated_question_ids": sorted(updated_question_ids),
         "updated_count": len(updated_question_ids),
     }
@@ -447,7 +493,7 @@ async def retry_teacher_ai_request(current_user: CurrentUser, request_id: int) -
             },
         )
         raise TeacherAiValidationError("Unable to queue AI retry request")
-    return updated or request
+    return _serialize_ai_request_item(updated or request)
 
 
 async def update_teacher_question(
@@ -638,47 +684,71 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
         )
 
         existing_contents = await list_existing_question_contents(int(request["document_topic_id"]))
-        generated_items = generate_mcq_questions_with_openai(
-            document_text=document_text,
-            difficulty=request["difficulty"],
-            num_questions=int(request["num_questions"]),
-            content_scope=request.get("content_scope"),
-            existing_question_contents=existing_contents,
+        difficulty_distribution = _serialize_difficulty_distribution(
+            request.get("ai_request_difficulty_distribution")
         )
+        if not difficulty_distribution:
+            raise TeacherAiValidationError("AI request is missing difficulty distribution")
 
         existing_norms = {_normalize_question_content(item) for item in existing_contents}
         inserted_count = 0
         batch_norms: set[str] = set()
+        batch_contents: list[str] = []
 
-        for item in generated_items:
-            normalized = _normalize_question_content(item["content"])
-            if not normalized:
-                continue
-            if normalized in batch_norms:
-                continue
-            if normalized in existing_norms:
-                continue
-            batch_norms.add(normalized)
-            existing_norms.add(normalized)
+        for distribution_item in difficulty_distribution:
+            expected_difficulty = distribution_item["difficulty"]
+            expected_question_count = int(distribution_item["question_count"])
+            generated_items = generate_mcq_questions_with_openai(
+                document_text=document_text,
+                difficulty=expected_difficulty,
+                num_questions=expected_question_count,
+                content_scope=request.get("content_scope"),
+                existing_question_contents=existing_contents + batch_contents,
+            )
+            if len(generated_items) != expected_question_count:
+                raise TeacherAiValidationError(
+                    f"AI returned {len(generated_items)} questions for {expected_difficulty}, expected {expected_question_count}"
+                )
 
-            created_question = await create_question_record(
-                {
-                    "teacher_id": teacher_id,
-                    "document_topic_id": int(request["document_topic_id"]),
-                    "ai_request_id": request_id,
-                    "content": item["content"],
-                    "difficulty": item["difficulty"],
-                    "source": "ai",
-                    "status": "draft",
-                    "explanation": item["explanation"],
-                }
+            for item in generated_items:
+                if item["difficulty"] != expected_difficulty:
+                    raise TeacherAiValidationError(
+                        f"AI returned difficulty {item['difficulty']} but expected {expected_difficulty}"
+                    )
+                normalized = _normalize_question_content(item["content"])
+                if not normalized:
+                    continue
+                if normalized in batch_norms:
+                    continue
+                if normalized in existing_norms:
+                    continue
+                batch_norms.add(normalized)
+                existing_norms.add(normalized)
+                batch_contents.append(item["content"])
+
+                created_question = await create_question_record(
+                    {
+                        "teacher_id": teacher_id,
+                        "document_topic_id": int(request["document_topic_id"]),
+                        "ai_request_id": request_id,
+                        "content": item["content"],
+                        "difficulty": item["difficulty"],
+                        "source": "ai",
+                        "status": "draft",
+                        "explanation": item["explanation"],
+                    }
+                )
+                await create_question_options(
+                    question_id=int(created_question["question_id"]),
+                    options=item["options"],
+                    correct_option_index=int(item["correct_option_index"]),
+                )
+                inserted_count += 1
+
+        if inserted_count != int(request["num_questions"]):
+            raise TeacherAiValidationError(
+                f"Generated {inserted_count} questions but expected {int(request['num_questions'])}"
             )
-            await create_question_options(
-                question_id=int(created_question["question_id"]),
-                options=item["options"],
-                correct_option_index=int(item["correct_option_index"]),
-            )
-            inserted_count += 1
 
         await update_ai_request_by_id(
             request_id=request_id,

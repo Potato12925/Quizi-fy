@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query
-
+import traceback
 from core.responses import error_response, success_response
 from middlewares.auth_middleware import CurrentUser, require_roles
 from services.teacher_dashboard_service import get_teacher_dashboard_stats
@@ -22,9 +22,10 @@ async def get_teacher_dashboard_stats_route(
             message="Teacher dashboard loaded successfully",
             status_code=200,
         )
-    except Exception:
+    except Exception as exc:
+        traceback.print_exc()
         return error_response(
-            message="Unable to load teacher dashboard",
+            message=str(exc),
             status_code=500,
             error_code="TEACHER_DASHBOARD_LOAD_FAILED",
         )

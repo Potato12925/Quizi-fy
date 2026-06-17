@@ -21,7 +21,7 @@ This directory contains table-level documentation generated from `backend/dbdiag
 
 - `active_status`: `active`, `inactive`
 - `ai_request_status`: `pending`, `processing`, `completed`, `failed`, `cancelled`
-- `difficulty_level`: `easy`, `medium`, `hard`
+- `difficulty_level`: `recognition`, `comprehension`, `application`, `advanced`
 - `practice_attempt_status`: `in_progress`, `submitted`, `timeout`
 - `question_source`: `ai`, `manual`
 - `question_status`: `draft`, `approved`, `inactive`, `rejected`

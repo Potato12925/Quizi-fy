@@ -11,6 +11,7 @@ DROP TABLE IF EXISTS practice_sets CASCADE;
 DROP TABLE IF EXISTS question_options CASCADE;
 DROP TABLE IF EXISTS question_history CASCADE;
 DROP TABLE IF EXISTS questions CASCADE;
+DROP TABLE IF EXISTS ai_request_difficulty_distribution CASCADE;
 DROP TABLE IF EXISTS ai_requests CASCADE;
 DROP TABLE IF EXISTS document_topics CASCADE;
 DROP TABLE IF EXISTS documents CASCADE;
@@ -35,7 +36,7 @@ DROP TYPE IF EXISTS practice_attempt_status CASCADE;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TYPE active_status AS ENUM ('active', 'inactive');
-CREATE TYPE difficulty_level AS ENUM ('easy', 'medium', 'hard');
+CREATE TYPE difficulty_level AS ENUM ('recognition', 'comprehension', 'application', 'advanced');
 CREATE TYPE ai_request_status AS ENUM ('pending', 'processing', 'completed', 'failed', 'cancelled');
 CREATE TYPE question_source AS ENUM ('ai', 'manual');
 CREATE TYPE question_status AS ENUM ('draft', 'approved', 'inactive', 'rejected');
@@ -172,7 +173,6 @@ CREATE TABLE ai_requests (
     request_id BIGSERIAL PRIMARY KEY,
     document_topic_id BIGINT NOT NULL REFERENCES document_topics(document_topic_id) ON DELETE CASCADE,
     num_questions INT NOT NULL,
-    difficulty difficulty_level NOT NULL,
     content_scope TEXT,
     status ai_request_status DEFAULT 'pending',
     generated_question_count INT DEFAULT 0,
@@ -182,6 +182,20 @@ CREATE TABLE ai_requests (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_reviewed BOOLEAN NOT NULL DEFAULT FALSE
 );
+
+CREATE TABLE ai_request_difficulty_distribution (
+    distribution_id BIGSERIAL PRIMARY KEY,
+    request_id BIGINT NOT NULL REFERENCES ai_requests(request_id) ON DELETE CASCADE,
+    difficulty difficulty_level NOT NULL,
+    percentage INT,
+    question_count INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_ai_request_distribution UNIQUE(request_id, difficulty),
+    CONSTRAINT chk_ai_request_distribution_question_count CHECK (question_count > 0),
+    CONSTRAINT chk_ai_request_distribution_percentage CHECK (percentage IS NULL OR (percentage >= 0 AND percentage <= 100))
+);
+
+CREATE INDEX idx_ai_request_distribution_request_id ON ai_request_difficulty_distribution(request_id);
 
 CREATE TABLE questions (
     question_id BIGSERIAL PRIMARY KEY,
@@ -288,6 +302,7 @@ CREATE TABLE notifications (
 -- users 1---n documents
 -- documents 1---n document_topics n---1 topics
 -- document_topics 1---n ai_requests
+-- ai_requests 1---n ai_request_difficulty_distribution
 -- users 1---n questions
 -- document_topics 1---n questions
 -- ai_requests 1---n questions

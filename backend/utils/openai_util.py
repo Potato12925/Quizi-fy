@@ -115,6 +115,12 @@ def _build_prompt(
         Difficulty must be "{difficulty}" for every question.
         Content scope: {scope_text}
 
+        Difficulty definitions (Vietnamese high-school standard):
+        - recognition (Nhận biết): kiểm tra nhớ khái niệm, định nghĩa, công thức, sự kiện
+        - comprehension (Thông hiểu): giải thích, so sánh, diễn giải bản chất
+        - application (Vận dụng): áp dụng kiến thức vào bài tập hoặc tình huống quen thuộc
+        - advanced (Vận dụng cao): tổng hợp, suy luận nhiều bước, phân hóa học sinh
+
         Avoid generating questions that are duplicates or very similar to existing questions:
         {existing_text}
 
@@ -126,7 +132,7 @@ def _build_prompt(
           "questions": [
             {{
               "content": "question text",
-              "difficulty": "easy|medium|hard",
+              "difficulty": "recognition|comprehension|application|advanced",
               "explanation": "brief explanation",
               "options": ["option A", "option B", "option C", "option D"],
               "correct_option": "A|B|C|D"
@@ -137,6 +143,8 @@ def _build_prompt(
         Rules:
         - Exactly 4 options.
         - Exactly 1 correct option.
+        - Every question must have difficulty "{difficulty}" exactly.
+        - Return exactly {num_questions} questions.
         - No markdown.
         - Output JSON only.
         """

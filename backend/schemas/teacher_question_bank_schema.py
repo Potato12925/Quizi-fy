@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 
+from schemas.difficulty_schema import QUESTION_DIFFICULTIES, QuestionDifficulty
 
-QUESTION_DIFFICULTIES = {"easy", "medium", "hard"}
 QUESTION_STATUSES = {"draft", "approved", "inactive", "rejected"}
 
 
@@ -9,7 +9,7 @@ class ManualQuestionPayload(BaseModel):
     document_topic_id: int | None = Field(default=None, ge=1)
     topic_id: int | None = Field(default=None, ge=1)
     content: str = Field(min_length=1)
-    difficulty: str = Field(min_length=1)
+    difficulty: QuestionDifficulty
     status: str = Field(default="draft")
     explanation: str | None = None
     options: list[str] = Field(min_length=2)
@@ -21,14 +21,6 @@ class ManualQuestionPayload(BaseModel):
         normalized = value.strip()
         if not normalized:
             raise ValueError("content is required")
-        return normalized
-
-    @field_validator("difficulty")
-    @classmethod
-    def validate_difficulty(cls, value: str) -> str:
-        normalized = value.strip().lower()
-        if normalized not in QUESTION_DIFFICULTIES:
-            raise ValueError("difficulty must be one of easy, medium, hard")
         return normalized
 
     @field_validator("status")

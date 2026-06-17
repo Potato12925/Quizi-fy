@@ -4,6 +4,7 @@ export interface TeacherSubjectItem {
   subject_id: number;
   subject_name: string;
   subject_code?: string;
+  class_subject_id?: number | null;
 }
 
 export interface TeacherTopicItem {
@@ -17,6 +18,7 @@ export interface TeacherTopicItem {
 export interface SubjectWithTopicsViewModel {
   subject_id: number;
   subject_name: string;
+  class_subject_id: number | null;
   topics: TeacherTopicItem[];
 }
 
@@ -78,6 +80,7 @@ export const getTeacherSubjectsWithTopics = async (): Promise<SubjectWithTopicsV
   return subjects.map((subject) => ({
     subject_id: subject.subject_id,
     subject_name: subject.subject_name,
+    class_subject_id: subject.class_subject_id ?? null,
     topics: topicsBySubjectId.get(subject.subject_id) || [],
   }));
 };

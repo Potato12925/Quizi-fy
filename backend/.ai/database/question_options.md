@@ -1,38 +1,26 @@
-﻿# Table: `question_options`
+# question_options
 
 ## Purpose
 
-Documentation for `question_options` table.
+Stores answer options for multiple-choice questions.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `option_id` | `bigint [pk, increment]` |
-| `question_id` | `bigint [not null]` |
-| `option_label` | `varchar(5) [not null]` |
-| `option_text` | `text [not null]` |
-| `is_correct` | `boolean [default: false]` |
-| `order_num` | `int [not null]` |
-
-## Indexes
-
-- `(question_id, order_num) [unique]`
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `option_id` | bigint | PK | Option identifier |
+| `question_id` | bigint | not null, FK | Parent question |
+| `option_label` | varchar | not null | Label such as A, B, C, D |
+| `option_text` | text | not null | Option content |
+| `is_correct` | boolean |  | Correctness flag |
+| `order_num` | int | not null | Display order |
 
 ## Relationships
 
-- question_options.question_id -> questions.question_id
-- student_answers.selected_option_id -> question_options.option_id
+- `question_id -> questions.question_id`
+- `student_answers.selected_option_id -> question_options.option_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select * from question_options limit 20;
-```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
-
+- One question has many options.
+- A selected student answer points to one option row.

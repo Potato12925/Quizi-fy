@@ -1,51 +1,37 @@
-﻿# Table: `questions`
+# questions
 
 ## Purpose
 
-Documentation for `questions` table.
+Stores the question bank, including AI-generated and manually created questions.
 
 ## Columns
 
-| Column              | Definition                           |
-| ------------------- | ------------------------------------ |
-| `question_id`       | `bigint [pk, increment]`             |
-| `teacher_id`        | `bigint [not null]`                  |
-| `document_topic_id` | `bigint`                             |
-| `ai_request_id`     | `bigint`                             |
-| `content`           | `text [not null]`                    |
-| `difficulty`        | `difficulty_level [not null]`        |
-| `source`            | `question_source [not null]`         |
-| `status`            | `question_status [default: 'draft']` |
-| `explanation`       | `text`                               |
-| `created_at`        | `timestamp`                          |
-| `updated_at`        | `timestamp`                          |
-| `deleted_at`        | `timestamp`                          |
-
-## Indexes
-
-- `(document_topic_id)`
-- `(document_topic_id, difficulty, status)`
-- `(status)`
-- `(teacher_id, created_at)`
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `question_id` | bigint | PK | Question identifier |
+| `teacher_id` | bigint | not null, FK | Question owner |
+| `document_topic_id` | bigint | FK | Source document-topic scope |
+| `ai_request_id` | bigint | FK | AI job that generated the question |
+| `content` | text | not null | Question body |
+| `difficulty` | `difficulty_level` | not null | Difficulty level |
+| `source` | `question_source` | not null | `ai` or `manual` |
+| `status` | `question_status` |  | Workflow status |
+| `explanation` | text |  | Answer explanation |
+| `created_at` | timestamp |  | Creation time |
+| `updated_at` | timestamp |  | Last update time |
+| `deleted_at` | timestamp |  | Soft delete marker |
 
 ## Relationships
 
-- questions.teacher_id -> users.user_id
-- questions.document_topic_id -> document_topics.document_topic_id
-- questions.ai_request_id -> ai_requests.request_id
-- question_options.question_id -> questions.question_id
-- question_history.question_id -> questions.question_id
-- practice_set_questions.question_id -> questions.question_id
-- student_answers.question_id -> questions.question_id
+- `teacher_id -> users.user_id`
+- `document_topic_id -> document_topics.document_topic_id`
+- `ai_request_id -> ai_requests.request_id`
+- `question_options.question_id -> questions.question_id`
+- `question_history.question_id -> questions.question_id`
+- `practice_set_questions.question_id -> questions.question_id`
+- `student_answers.question_id -> questions.question_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select * from questions limit 20;
-```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
+- This is a soft-delete table.
+- Supports both AI and manual authorship.

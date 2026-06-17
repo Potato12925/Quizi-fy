@@ -1,241 +1,348 @@
--- WARNING: This schema is for context only and is not meant to be run.
--- Table order and constraints may not be valid for execution.
+-- =========================================================
+-- BKP SYSTEM DATABASE
+-- PostgreSQL / Supabase
+-- Fixed: topics -> class_subjects via class_subject_id
+-- =========================================================
 
-CREATE TABLE public.ai_requests (
-  request_id bigint NOT NULL DEFAULT nextval('ai_requests_request_id_seq'::regclass),
-  document_topic_id bigint NOT NULL,
-  num_questions integer NOT NULL,
-  difficulty USER-DEFINED NOT NULL,
-  content_scope text,
-  status USER-DEFINED DEFAULT 'pending'::ai_request_status,
-  generated_question_count integer DEFAULT 0,
-  retry_count integer DEFAULT 0,
-  error_message text,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  is_reviewed boolean NOT NULL DEFAULT false,
-  CONSTRAINT ai_requests_pkey PRIMARY KEY (request_id),
-  CONSTRAINT ai_requests_document_topic_id_fkey FOREIGN KEY (document_topic_id) REFERENCES public.document_topics(document_topic_id)
+DROP TABLE IF EXISTS student_answers CASCADE;
+DROP TABLE IF EXISTS practice_attempts CASCADE;
+DROP TABLE IF EXISTS practice_set_questions CASCADE;
+DROP TABLE IF EXISTS practice_sets CASCADE;
+DROP TABLE IF EXISTS question_options CASCADE;
+DROP TABLE IF EXISTS question_history CASCADE;
+DROP TABLE IF EXISTS questions CASCADE;
+DROP TABLE IF EXISTS ai_requests CASCADE;
+DROP TABLE IF EXISTS document_topics CASCADE;
+DROP TABLE IF EXISTS documents CASCADE;
+DROP TABLE IF EXISTS topics CASCADE;
+DROP TABLE IF EXISTS class_students CASCADE;
+DROP TABLE IF EXISTS class_subjects CASCADE;
+DROP TABLE IF EXISTS class_teachers CASCADE;
+DROP TABLE IF EXISTS subjects CASCADE;
+DROP TABLE IF EXISTS classes CASCADE;
+DROP TABLE IF EXISTS user_roles CASCADE;
+DROP TABLE IF EXISTS roles CASCADE;
+DROP TABLE IF EXISTS notifications CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
+DROP TYPE IF EXISTS active_status CASCADE;
+DROP TYPE IF EXISTS difficulty_level CASCADE;
+DROP TYPE IF EXISTS ai_request_status CASCADE;
+DROP TYPE IF EXISTS question_source CASCADE;
+DROP TYPE IF EXISTS question_status CASCADE;
+DROP TYPE IF EXISTS practice_attempt_status CASCADE;
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TYPE active_status AS ENUM ('active', 'inactive');
+CREATE TYPE difficulty_level AS ENUM ('easy', 'medium', 'hard');
+CREATE TYPE ai_request_status AS ENUM ('pending', 'processing', 'completed', 'failed', 'cancelled');
+CREATE TYPE question_source AS ENUM ('ai', 'manual');
+CREATE TYPE question_status AS ENUM ('draft', 'approved', 'inactive', 'rejected');
+CREATE TYPE practice_attempt_status AS ENUM ('in_progress', 'submitted', 'timeout');
+
+CREATE TABLE users (
+    user_id BIGSERIAL PRIMARY KEY,
+    username VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    must_change_password BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
 );
-CREATE TABLE public.class_students (
-  class_student_id bigint NOT NULL DEFAULT nextval('class_students_class_student_id_seq'::regclass),
-  class_id bigint NOT NULL,
-  student_id bigint NOT NULL,
-  joined_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  deleted_at timestamp without time zone,
-  CONSTRAINT class_students_pkey PRIMARY KEY (class_student_id),
-  CONSTRAINT class_students_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(class_id),
-  CONSTRAINT class_students_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(user_id)
+
+CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX idx_users_is_active ON users(is_active);
+
+CREATE TABLE roles (
+    role_id BIGSERIAL PRIMARY KEY,
+    role_code VARCHAR(50) UNIQUE NOT NULL,
+    role_name VARCHAR(100) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE public.class_subjects (
-  class_subject_id bigint NOT NULL DEFAULT nextval('class_subjects_class_subject_id_seq'::regclass),
-  class_id bigint NOT NULL,
-  subject_id bigint NOT NULL,
-  assigned_teacher_id bigint,
-  status USER-DEFINED DEFAULT 'active'::active_status,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  deleted_at timestamp without time zone,
-  CONSTRAINT class_subjects_pkey PRIMARY KEY (class_subject_id),
-  CONSTRAINT class_subjects_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(class_id),
-  CONSTRAINT class_subjects_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.subjects(subject_id),
-  CONSTRAINT class_subjects_assigned_teacher_id_fkey FOREIGN KEY (assigned_teacher_id) REFERENCES public.users(user_id)
+
+CREATE TABLE user_roles (
+    user_role_id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    role_id BIGINT NOT NULL REFERENCES roles(role_id) ON DELETE CASCADE,
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_user_role UNIQUE(user_id, role_id)
 );
-CREATE TABLE public.class_teachers (
-  class_teacher_id bigint NOT NULL DEFAULT nextval('class_teachers_class_teacher_id_seq'::regclass),
-  class_id bigint NOT NULL,
-  teacher_id bigint NOT NULL,
-  joined_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  deleted_at timestamp without time zone,
-  CONSTRAINT class_teachers_pkey PRIMARY KEY (class_teacher_id),
-  CONSTRAINT class_teachers_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(class_id),
-  CONSTRAINT class_teachers_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.users(user_id)
+
+CREATE TABLE classes (
+    class_id BIGSERIAL PRIMARY KEY,
+    class_code VARCHAR(50) UNIQUE NOT NULL,
+    class_name VARCHAR(255) NOT NULL,
+    description TEXT,
+    teacher_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    status active_status DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
 );
-CREATE TABLE public.classes (
-  class_id bigint NOT NULL DEFAULT nextval('classes_class_id_seq'::regclass),
-  class_code character varying NOT NULL UNIQUE,
-  class_name character varying NOT NULL,
-  description text,
-  teacher_id bigint NOT NULL,
-  status USER-DEFINED DEFAULT 'active'::active_status,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  deleted_at timestamp without time zone,
-  CONSTRAINT classes_pkey PRIMARY KEY (class_id),
-  CONSTRAINT classes_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.users(user_id)
+
+CREATE TABLE subjects (
+    subject_id BIGSERIAL PRIMARY KEY,
+    subject_code VARCHAR(50) UNIQUE NOT NULL,
+    subject_name VARCHAR(255) NOT NULL,
+    description TEXT,
+    status active_status DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
 );
-CREATE TABLE public.document_topics (
-  document_topic_id bigint NOT NULL DEFAULT nextval('document_topics_document_topic_id_seq'::regclass),
-  document_id bigint NOT NULL,
-  topic_id bigint NOT NULL,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT document_topics_pkey PRIMARY KEY (document_topic_id),
-  CONSTRAINT document_topics_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(document_id),
-  CONSTRAINT document_topics_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.topics(topic_id)
+
+CREATE TABLE class_teachers (
+    class_teacher_id BIGSERIAL PRIMARY KEY,
+    class_id BIGINT NOT NULL REFERENCES classes(class_id) ON DELETE CASCADE,
+    teacher_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP,
+    CONSTRAINT uq_class_teacher UNIQUE(class_id, teacher_id)
 );
-CREATE TABLE public.documents (
-  document_id bigint NOT NULL DEFAULT nextval('documents_document_id_seq'::regclass),
-  teacher_id bigint NOT NULL,
-  title character varying NOT NULL,
-  description text,
-  file_url text NOT NULL,
-  file_hash character varying,
-  file_type character varying NOT NULL,
-  file_size bigint NOT NULL,
-  status USER-DEFINED DEFAULT 'active'::active_status,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  deleted_at timestamp without time zone,
-  CONSTRAINT documents_pkey PRIMARY KEY (document_id),
-  CONSTRAINT documents_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.users(user_id)
+
+CREATE TABLE class_subjects (
+    class_subject_id BIGSERIAL PRIMARY KEY,
+    class_id BIGINT NOT NULL REFERENCES classes(class_id) ON DELETE CASCADE,
+    subject_id BIGINT NOT NULL REFERENCES subjects(subject_id) ON DELETE CASCADE,
+    assigned_teacher_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+    status active_status DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP,
+    CONSTRAINT uq_class_subject UNIQUE(class_id, subject_id)
 );
-CREATE TABLE public.notifications (
-  notification_id bigint NOT NULL DEFAULT nextval('notifications_notification_id_seq'::regclass),
-  user_id bigint NOT NULL,
-  title character varying,
-  content text,
-  is_read boolean DEFAULT false,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT notifications_pkey PRIMARY KEY (notification_id),
-  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id)
+
+CREATE TABLE topics (
+    topic_id BIGSERIAL PRIMARY KEY,
+    topic_name VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP,
+    class_subject_id BIGINT REFERENCES class_subjects(class_subject_id) ON DELETE CASCADE,
+    CONSTRAINT uq_topic_class_subject UNIQUE(class_subject_id, topic_name)
 );
-CREATE TABLE public.practice_attempts (
-  attempt_id bigint NOT NULL DEFAULT nextval('practice_attempts_attempt_id_seq'::regclass),
-  practice_set_id bigint NOT NULL,
-  started_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  submitted_at timestamp without time zone,
-  score numeric,
-  total_correct integer DEFAULT 0,
-  total_wrong integer DEFAULT 0,
-  status USER-DEFINED DEFAULT 'in_progress'::practice_attempt_status,
-  CONSTRAINT practice_attempts_pkey PRIMARY KEY (attempt_id),
-  CONSTRAINT practice_attempts_practice_set_id_fkey FOREIGN KEY (practice_set_id) REFERENCES public.practice_sets(practice_set_id)
+
+CREATE INDEX idx_topics_class_subject ON topics(class_subject_id);
+
+CREATE TABLE class_students (
+    class_student_id BIGSERIAL PRIMARY KEY,
+    class_id BIGINT NOT NULL REFERENCES classes(class_id) ON DELETE CASCADE,
+    student_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP,
+    CONSTRAINT uq_class_student UNIQUE(class_id, student_id)
 );
-CREATE TABLE public.practice_set_questions (
-  practice_set_question_id bigint NOT NULL DEFAULT nextval('practice_set_questions_practice_set_question_id_seq'::regclass),
-  practice_set_id bigint NOT NULL,
-  question_id bigint NOT NULL,
-  order_num integer NOT NULL,
-  CONSTRAINT practice_set_questions_pkey PRIMARY KEY (practice_set_question_id),
-  CONSTRAINT practice_set_questions_practice_set_id_fkey FOREIGN KEY (practice_set_id) REFERENCES public.practice_sets(practice_set_id),
-  CONSTRAINT practice_set_questions_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.questions(question_id)
+
+CREATE TABLE documents (
+    document_id BIGSERIAL PRIMARY KEY,
+    teacher_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    title VARCHAR(500) NOT NULL,
+    description TEXT,
+    file_url TEXT NOT NULL,
+    file_hash VARCHAR(255),
+    file_type VARCHAR(20) NOT NULL,
+    file_size BIGINT NOT NULL,
+    status active_status DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
 );
-CREATE TABLE public.practice_sets (
-  practice_set_id bigint NOT NULL DEFAULT nextval('practice_sets_practice_set_id_seq'::regclass),
-  student_id bigint NOT NULL,
-  subject_id bigint NOT NULL,
-  document_topic_id bigint,
-  difficulty USER-DEFINED,
-  num_questions_requested integer NOT NULL,
-  num_questions_actual integer,
-  time_limit_minutes integer,
-  prioritize_unanswered boolean DEFAULT false,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT practice_sets_pkey PRIMARY KEY (practice_set_id),
-  CONSTRAINT practice_sets_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(user_id),
-  CONSTRAINT practice_sets_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.subjects(subject_id),
-  CONSTRAINT practice_sets_document_topic_id_fkey FOREIGN KEY (document_topic_id) REFERENCES public.document_topics(document_topic_id)
+
+CREATE INDEX idx_documents_teacher_created ON documents(teacher_id, created_at);
+CREATE INDEX idx_documents_status ON documents(status);
+
+CREATE TABLE document_topics (
+    document_topic_id BIGSERIAL PRIMARY KEY,
+    document_id BIGINT NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+    topic_id BIGINT NOT NULL REFERENCES topics(topic_id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_document_topic UNIQUE(document_id, topic_id)
 );
-CREATE TABLE public.question_history (
-  history_id bigint NOT NULL DEFAULT nextval('question_history_history_id_seq'::regclass),
-  question_id bigint NOT NULL,
-  changed_by bigint NOT NULL,
-  old_data jsonb,
-  new_data jsonb,
-  change_type character varying,
-  changed_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT question_history_pkey PRIMARY KEY (history_id),
-  CONSTRAINT question_history_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.questions(question_id),
-  CONSTRAINT question_history_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.users(user_id)
+
+CREATE INDEX idx_document_topics_document ON document_topics(document_id);
+CREATE INDEX idx_document_topics_topic ON document_topics(topic_id);
+
+CREATE TABLE ai_requests (
+    request_id BIGSERIAL PRIMARY KEY,
+    document_topic_id BIGINT NOT NULL REFERENCES document_topics(document_topic_id) ON DELETE CASCADE,
+    num_questions INT NOT NULL,
+    difficulty difficulty_level NOT NULL,
+    content_scope TEXT,
+    status ai_request_status DEFAULT 'pending',
+    generated_question_count INT DEFAULT 0,
+    retry_count INT DEFAULT 0,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_reviewed BOOLEAN NOT NULL DEFAULT FALSE
 );
-CREATE TABLE public.question_options (
-  option_id bigint NOT NULL DEFAULT nextval('question_options_option_id_seq'::regclass),
-  question_id bigint NOT NULL,
-  option_label character varying NOT NULL,
-  option_text text NOT NULL,
-  is_correct boolean DEFAULT false,
-  order_num integer NOT NULL,
-  CONSTRAINT question_options_pkey PRIMARY KEY (option_id),
-  CONSTRAINT question_options_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.questions(question_id)
+
+CREATE TABLE questions (
+    question_id BIGSERIAL PRIMARY KEY,
+    teacher_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    document_topic_id BIGINT REFERENCES document_topics(document_topic_id) ON DELETE SET NULL,
+    ai_request_id BIGINT REFERENCES ai_requests(request_id) ON DELETE SET NULL,
+    content TEXT NOT NULL,
+    difficulty difficulty_level NOT NULL,
+    source question_source NOT NULL,
+    status question_status DEFAULT 'draft',
+    explanation TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
 );
-CREATE TABLE public.questions (
-  question_id bigint NOT NULL DEFAULT nextval('questions_question_id_seq'::regclass),
-  teacher_id bigint NOT NULL,
-  document_topic_id bigint,
-  ai_request_id bigint,
-  content text NOT NULL,
-  difficulty USER-DEFINED NOT NULL,
-  source USER-DEFINED NOT NULL,
-  status USER-DEFINED DEFAULT 'draft'::question_status,
-  explanation text,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  deleted_at timestamp without time zone,
-  CONSTRAINT questions_pkey PRIMARY KEY (question_id),
-  CONSTRAINT questions_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.users(user_id),
-  CONSTRAINT questions_document_topic_id_fkey FOREIGN KEY (document_topic_id) REFERENCES public.document_topics(document_topic_id),
-  CONSTRAINT questions_ai_request_id_fkey FOREIGN KEY (ai_request_id) REFERENCES public.ai_requests(request_id)
+
+CREATE INDEX idx_questions_document_topic ON questions(document_topic_id);
+CREATE INDEX idx_questions_topic_difficulty_status ON questions(document_topic_id, difficulty, status);
+CREATE INDEX idx_questions_status ON questions(status);
+CREATE INDEX idx_questions_teacher_created ON questions(teacher_id, created_at);
+
+CREATE TABLE question_options (
+    option_id BIGSERIAL PRIMARY KEY,
+    question_id BIGINT NOT NULL REFERENCES questions(question_id) ON DELETE CASCADE,
+    option_label VARCHAR(5) NOT NULL,
+    option_text TEXT NOT NULL,
+    is_correct BOOLEAN DEFAULT FALSE,
+    order_num INT NOT NULL,
+    CONSTRAINT uq_question_option_order UNIQUE(question_id, order_num)
 );
-CREATE TABLE public.roles (
-  role_id bigint NOT NULL DEFAULT nextval('roles_role_id_seq'::regclass),
-  role_code character varying NOT NULL UNIQUE,
-  role_name character varying NOT NULL,
-  description text,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT roles_pkey PRIMARY KEY (role_id)
+
+CREATE TABLE question_history (
+    history_id BIGSERIAL PRIMARY KEY,
+    question_id BIGINT NOT NULL REFERENCES questions(question_id) ON DELETE CASCADE,
+    changed_by BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    old_data JSONB,
+    new_data JSONB,
+    change_type VARCHAR(100),
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE public.student_answers (
-  answer_id bigint NOT NULL DEFAULT nextval('student_answers_answer_id_seq'::regclass),
-  attempt_id bigint NOT NULL,
-  question_id bigint NOT NULL,
-  selected_option_id bigint,
-  is_correct boolean,
-  answered_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT student_answers_pkey PRIMARY KEY (answer_id),
-  CONSTRAINT student_answers_attempt_id_fkey FOREIGN KEY (attempt_id) REFERENCES public.practice_attempts(attempt_id),
-  CONSTRAINT student_answers_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.questions(question_id),
-  CONSTRAINT student_answers_selected_option_id_fkey FOREIGN KEY (selected_option_id) REFERENCES public.question_options(option_id)
+
+CREATE TABLE practice_sets (
+    practice_set_id BIGSERIAL PRIMARY KEY,
+    student_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    subject_id BIGINT NOT NULL REFERENCES subjects(subject_id) ON DELETE CASCADE,
+    document_topic_id BIGINT REFERENCES document_topics(document_topic_id) ON DELETE SET NULL,
+    difficulty difficulty_level,
+    num_questions_requested INT NOT NULL,
+    num_questions_actual INT,
+    time_limit_minutes INT,
+    prioritize_unanswered BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE public.subjects (
-  subject_id bigint NOT NULL DEFAULT nextval('subjects_subject_id_seq'::regclass),
-  subject_code character varying NOT NULL UNIQUE,
-  subject_name character varying NOT NULL,
-  description text,
-  status USER-DEFINED DEFAULT 'active'::active_status,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  deleted_at timestamp without time zone,
-  CONSTRAINT subjects_pkey PRIMARY KEY (subject_id)
+
+CREATE TABLE practice_set_questions (
+    practice_set_question_id BIGSERIAL PRIMARY KEY,
+    practice_set_id BIGINT NOT NULL REFERENCES practice_sets(practice_set_id) ON DELETE CASCADE,
+    question_id BIGINT NOT NULL REFERENCES questions(question_id) ON DELETE CASCADE,
+    order_num INT NOT NULL,
+    CONSTRAINT uq_psq_question UNIQUE(practice_set_id, question_id),
+    CONSTRAINT uq_psq_order UNIQUE(practice_set_id, order_num)
 );
-CREATE TABLE public.topics (
-  topic_id bigint NOT NULL DEFAULT nextval('topics_topic_id_seq'::regclass),
-  topic_name character varying NOT NULL,
-  description text,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  deleted_at timestamp without time zone,
-  class_subject_id bigint NOT NULL,
-  CONSTRAINT topics_pkey PRIMARY KEY (topic_id),
-  CONSTRAINT topics_class_subject_id_fkey FOREIGN KEY (class_subject_id) REFERENCES public.class_subjects(class_subject_id)
+
+CREATE TABLE practice_attempts (
+    attempt_id BIGSERIAL PRIMARY KEY,
+    practice_set_id BIGINT NOT NULL REFERENCES practice_sets(practice_set_id) ON DELETE CASCADE,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    submitted_at TIMESTAMP,
+    score DECIMAL(5,2),
+    total_correct INT DEFAULT 0,
+    total_wrong INT DEFAULT 0,
+    status practice_attempt_status DEFAULT 'in_progress'
 );
-CREATE TABLE public.user_roles (
-  user_role_id bigint NOT NULL DEFAULT nextval('user_roles_user_role_id_seq'::regclass),
-  user_id bigint NOT NULL,
-  role_id bigint NOT NULL,
-  assigned_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT user_roles_pkey PRIMARY KEY (user_role_id),
-  CONSTRAINT user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id),
-  CONSTRAINT user_roles_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(role_id)
+
+CREATE TABLE student_answers (
+    answer_id BIGSERIAL PRIMARY KEY,
+    attempt_id BIGINT NOT NULL REFERENCES practice_attempts(attempt_id) ON DELETE CASCADE,
+    question_id BIGINT NOT NULL REFERENCES questions(question_id) ON DELETE CASCADE,
+    selected_option_id BIGINT REFERENCES question_options(option_id) ON DELETE SET NULL,
+    is_correct BOOLEAN,
+    answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_attempt_question UNIQUE(attempt_id, question_id)
 );
-CREATE TABLE public.users (
-  user_id bigint NOT NULL DEFAULT nextval('users_user_id_seq'::regclass),
-  username character varying NOT NULL UNIQUE,
-  password_hash character varying NOT NULL,
-  full_name character varying NOT NULL,
-  is_active boolean DEFAULT true,
-  must_change_password boolean DEFAULT true,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  deleted_at timestamp without time zone,
-  CONSTRAINT users_pkey PRIMARY KEY (user_id)
+
+CREATE TABLE notifications (
+    notification_id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    title VARCHAR(255),
+    content TEXT,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ================= RELATIONSHIP SUMMARY =================
+-- users 1---n user_roles n---1 roles
+-- users 1---n classes (teacher_id)
+-- classes 1---n class_teachers n---1 users
+-- classes 1---n class_subjects n---1 subjects
+-- class_subjects 1---n topics
+-- classes 1---n class_students n---1 users
+-- users 1---n documents
+-- documents 1---n document_topics n---1 topics
+-- document_topics 1---n ai_requests
+-- users 1---n questions
+-- document_topics 1---n questions
+-- ai_requests 1---n questions
+-- questions 1---n question_options
+-- questions 1---n question_history
+-- users 1---n question_history
+-- users 1---n practice_sets
+-- subjects 1---n practice_sets
+-- document_topics 1---n practice_sets
+-- practice_sets 1---n practice_set_questions n---1 questions
+-- practice_sets 1---n practice_attempts
+-- practice_attempts 1---n student_answers n---1 questions
+-- question_options 1---n student_answers
+-- users 1---n notifications
+
+-- ================= SEED DATA =================
+-- Seed data is generated separately by:
+-- python database/generate_seed_sql.py
+-- Output file:
+-- database/seed_data.sql
+
+-- ================= UPDATED_AT TRIGGERS =================
+
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.updated_at = CURRENT_TIMESTAMP;
+   RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_users_updated_at
+BEFORE UPDATE ON users
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_classes_updated_at
+BEFORE UPDATE ON classes
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_subjects_updated_at
+BEFORE UPDATE ON subjects
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_class_subjects_updated_at
+BEFORE UPDATE ON class_subjects
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_topics_updated_at
+BEFORE UPDATE ON topics
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_documents_updated_at
+BEFORE UPDATE ON documents
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_ai_requests_updated_at
+BEFORE UPDATE ON ai_requests
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_questions_updated_at
+BEFORE UPDATE ON questions
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

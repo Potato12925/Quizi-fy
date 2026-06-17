@@ -22,7 +22,7 @@ export default function TeacherLayout() {
         <header className="h-20 flex items-center justify-between px-10 sticky top-0 z-40 bg-[#f9f9f9]/80 backdrop-blur-md">
           <div className="flex items-center gap-3">
              <div className="px-3 py-1 text-white bg-red-900 rounded-lg">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Educator Control Panel</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Bảng điều khiển học tập</p>
              </div>
           </div>
           <div className="flex items-center gap-6">

@@ -1,35 +1,26 @@
-﻿# Table: `question_history`
+# question_history
 
 ## Purpose
 
-Documentation for `question_history` table.
+Stores audit history for question changes.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `history_id` | `bigint [pk, increment]` |
-| `question_id` | `bigint [not null]` |
-| `changed_by` | `bigint [not null]` |
-| `old_data` | `jsonb` |
-| `new_data` | `jsonb` |
-| `change_type` | `varchar(100)` |
-| `changed_at` | `timestamp` |
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `history_id` | bigint | PK | History record identifier |
+| `question_id` | bigint | not null, FK | Changed question |
+| `changed_by` | bigint | not null, FK | User who made the change |
+| `old_data` | jsonb |  | Snapshot before change |
+| `new_data` | jsonb |  | Snapshot after change |
+| `change_type` | varchar |  | Change category |
+| `changed_at` | timestamp |  | Change time |
 
 ## Relationships
 
-- question_history.question_id -> questions.question_id
-- question_history.changed_by -> users.user_id
+- `question_id -> questions.question_id`
+- `changed_by -> users.user_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select * from question_history limit 20;
-```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
-
+- This table provides question-level auditability.

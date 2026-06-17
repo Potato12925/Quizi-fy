@@ -1,32 +1,23 @@
-﻿# Table: `roles`
+# roles
 
 ## Purpose
 
-Documentation for `roles` table.
+Defines RBAC roles available in the system.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `role_id` | `bigint [pk, increment]` |
-| `role_code` | `varchar(50) [unique, not null]` |
-| `role_name` | `varchar(100) [not null]` |
-| `description` | `text` |
-| `created_at` | `timestamp` |
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `role_id` | bigint | PK | Role identifier |
+| `role_code` | varchar | not null, unique | Stable machine-readable role |
+| `role_name` | varchar | not null | Human-readable name |
+| `description` | text |  | Role details |
+| `created_at` | timestamp |  | Creation time |
 
-## Relationships
+## Outgoing relationships
 
-- user_roles.role_id -> roles.role_id
+- `user_roles.role_id -> roles.role_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select * from roles limit 20;
-```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
-
+- Role assignment is handled through `user_roles`.

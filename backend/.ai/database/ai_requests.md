@@ -1,38 +1,32 @@
-# Table: `ai_requests`
+# ai_requests
 
 ## Purpose
 
-Tracks AI generation jobs per document-topic relation.
+Tracks AI generation jobs for a specific document-topic scope.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `request_id` | `bigint [pk, increment]` |
-| `document_topic_id` | `bigint [not null]` |
-| `num_questions` | `int [not null]` |
-| `difficulty` | `difficulty_level [not null]` |
-| `content_scope` | `text` |
-| `status` | `ai_request_status [default: 'pending']` |
-| `generated_question_count` | `int [default: 0]` |
-| `retry_count` | `int [default: 0]` |
-| `error_message` | `text` |
-| `is_reviewed` | `boolean [default: false]` |
-| `created_at` | `timestamp` |
-| `updated_at` | `timestamp` |
-
-## Indexes
-
-- `(document_topic_id)`
-- `(status, created_at)`
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `request_id` | bigint | PK | AI request identifier |
+| `document_topic_id` | bigint | not null, FK | Generation source scope |
+| `num_questions` | int | not null | Requested question count |
+| `difficulty` | `difficulty_level` | not null | Target difficulty |
+| `content_scope` | text |  | Optional content subset or prompt scope |
+| `status` | `ai_request_status` |  | Request lifecycle status |
+| `generated_question_count` | int |  | Actual generated count |
+| `retry_count` | int |  | Retry attempts |
+| `error_message` | text |  | Failure details |
+| `is_reviewed` | boolean | default `false` | Whether teacher reviewed output |
+| `created_at` | timestamp |  | Creation time |
+| `updated_at` | timestamp |  | Last update time |
 
 ## Relationships
 
-- ai_requests.document_topic_id -> document_topics.document_topic_id
-- questions.ai_request_id -> ai_requests.request_id
+- `document_topic_id -> document_topics.document_topic_id`
+- `questions.ai_request_id -> ai_requests.request_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select request_id, document_topic_id, status from ai_requests limit 20;
-```
+- This table captures job orchestration metadata, not the generated questions themselves.
+- One request can produce many questions.

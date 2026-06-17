@@ -1,328 +1,291 @@
 Enum active_status {
-  active
-  inactive
-}
-
-Enum difficulty_level {
-  easy
-  medium
-  hard
+active
+inactive
 }
 
 Enum ai_request_status {
-  pending
-  processing
-  completed
-  failed
-  cancelled
+pending
+processing
+completed
+failed
+cancelled
 }
 
-Enum question_source {
-  ai
-  manual
-}
-
-Enum question_status {
-  draft
-  approved
-  inactive
-  rejected
+Enum difficulty_level {
+easy
+medium
+hard
 }
 
 Enum practice_attempt_status {
-  in_progress
-  submitted
-  timeout
+in_progress
+submitted
+timeout
+}
+
+Enum question_source {
+ai
+manual
+}
+
+Enum question_status {
+draft
+approved
+inactive
+rejected
 }
 
 Table users {
-  user_id bigint [pk, increment]
-  username varchar(100) [unique, not null]
-  password_hash varchar(255) [not null]
-  full_name varchar(255) [not null]
-  is_active boolean [default: true]
-  must_change_password boolean [default: true]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
-  deleted_at timestamp
+user_id bigint [pk]
+username varchar [not null, unique]
+password_hash varchar [not null]
+full_name varchar [not null]
+is_active boolean [default: true]
+must_change_password boolean [default: true]
+created_at timestamp
+updated_at timestamp
+deleted_at timestamp
 }
 
 Table roles {
-  role_id bigint [pk, increment]
-  role_code varchar(50) [unique, not null]
-  role_name varchar(100) [not null]
-  description text
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+role_id bigint [pk]
+role_code varchar [not null, unique]
+role_name varchar [not null]
+description text
+created_at timestamp
 }
 
 Table user_roles {
-  user_role_id bigint [pk, increment]
-  user_id bigint [not null]
-  role_id bigint [not null]
-  assigned_at timestamp [default: `CURRENT_TIMESTAMP`]
-
-  indexes {
-    (user_id, role_id) [unique, name: "uq_user_role"]
-  }
+user_role_id bigint [pk]
+user_id bigint [not null]
+role_id bigint [not null]
+assigned_at timestamp
 }
 
 Table classes {
-  class_id bigint [pk, increment]
-  class_code varchar(50) [unique, not null]
-  class_name varchar(255) [not null]
-  description text
-  teacher_id bigint [not null]
-  status active_status [default: 'active']
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
-  deleted_at timestamp
+class_id bigint [pk]
+class_code varchar [not null, unique]
+class_name varchar [not null]
+description text
+teacher_id bigint [not null]
+status active_status
+created_at timestamp
+updated_at timestamp
+deleted_at timestamp
 }
 
 Table subjects {
-  subject_id bigint [pk, increment]
-  subject_code varchar(50) [unique, not null]
-  subject_name varchar(255) [not null]
-  description text
-  status active_status [default: 'active']
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
-  deleted_at timestamp
-}
-
-Table topics {
-  topic_id bigint [pk, increment]
-  subject_id bigint [not null]
-  topic_name varchar(255) [not null]
-  description text
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
-  deleted_at timestamp
-
-  indexes {
-    (subject_id, topic_name) [unique, name: "uq_topic_subject"]
-  }
+subject_id bigint [pk]
+subject_code varchar [not null, unique]
+subject_name varchar [not null]
+description text
+status active_status
+created_at timestamp
+updated_at timestamp
+deleted_at timestamp
 }
 
 Table class_teachers {
-  class_teacher_id bigint [pk, increment]
-  class_id bigint [not null]
-  teacher_id bigint [not null]
-  joined_at timestamp [default: `CURRENT_TIMESTAMP`]
-  deleted_at timestamp
-
-  indexes {
-    (class_id, teacher_id) [unique, name: "uq_class_teacher"]
-  }
-}
-
-Table class_subjects {
-  class_subject_id bigint [pk, increment]
-  class_id bigint [not null]
-  subject_id bigint [not null]
-  assigned_teacher_id bigint
-  status active_status [default: 'active']
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
-  deleted_at timestamp
-
-  indexes {
-    (class_id, subject_id) [unique, name: "uq_class_subject"]
-  }
+class_teacher_id bigint [pk]
+class_id bigint [not null]
+teacher_id bigint [not null]
+joined_at timestamp
+deleted_at timestamp
 }
 
 Table class_students {
-  class_student_id bigint [pk, increment]
-  class_id bigint [not null]
-  student_id bigint [not null]
-  joined_at timestamp [default: `CURRENT_TIMESTAMP`]
-  deleted_at timestamp
+class_student_id bigint [pk]
+class_id bigint [not null]
+student_id bigint [not null]
+joined_at timestamp
+deleted_at timestamp
+}
 
-  indexes {
-    (class_id, student_id) [unique, name: "uq_class_student"]
-  }
+Table class_subjects {
+class_subject_id bigint [pk]
+class_id bigint [not null]
+subject_id bigint [not null]
+assigned_teacher_id bigint
+status active_status
+created_at timestamp
+updated_at timestamp
+deleted_at timestamp
+}
+
+Table topics {
+topic_id bigint [pk]
+topic_name varchar [not null]
+description text
+class_subject_id bigint
+created_at timestamp
+updated_at timestamp
+deleted_at timestamp
 }
 
 Table documents {
-  document_id bigint [pk, increment]
-  teacher_id bigint [not null]
-  title varchar(500) [not null]
-  description text
-  file_url text [not null]
-  file_hash varchar(255)
-  file_type varchar(20) [not null]
-  file_size bigint [not null]
-  status active_status [default: 'active']
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
-  deleted_at timestamp
+document_id bigint [pk]
+teacher_id bigint [not null]
+title varchar [not null]
+description text
+file_url text [not null]
+file_hash varchar
+file_type varchar [not null]
+file_size bigint [not null]
+status active_status
+created_at timestamp
+updated_at timestamp
+deleted_at timestamp
 }
 
 Table document_topics {
-  document_topic_id bigint [pk, increment]
-  document_id bigint [not null]
-  topic_id bigint [not null]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-
-  indexes {
-    (document_id, topic_id) [unique, name: "uq_document_topic"]
-  }
+document_topic_id bigint [pk]
+document_id bigint [not null]
+topic_id bigint [not null]
+created_at timestamp
 }
 
 Table ai_requests {
-  request_id bigint [pk, increment]
-  document_topic_id bigint [not null]
-  num_questions int [not null]
-  difficulty difficulty_level [not null]
-  content_scope text
-  status ai_request_status [default: 'pending']
-  generated_question_count int [default: 0]
-  retry_count int [default: 0]
-  error_message text
-  is_reviewed boolean [default: false]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+request_id bigint [pk]
+document_topic_id bigint [not null]
+num_questions int [not null]
+difficulty difficulty_level [not null]
+content_scope text
+status ai_request_status
+generated_question_count int
+retry_count int
+error_message text
+is_reviewed boolean [default: false]
+created_at timestamp
+updated_at timestamp
 }
 
 Table questions {
-  question_id bigint [pk, increment]
-  teacher_id bigint [not null]
-  document_topic_id bigint [not null]
-  ai_request_id bigint
-  content text [not null]
-  difficulty difficulty_level [not null]
-  source question_source [not null]
-  status question_status [default: 'draft']
-  explanation text
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
-  deleted_at timestamp
+question_id bigint [pk]
+teacher_id bigint [not null]
+document_topic_id bigint
+ai_request_id bigint
+content text [not null]
+difficulty difficulty_level [not null]
+source question_source [not null]
+status question_status
+explanation text
+created_at timestamp
+updated_at timestamp
+deleted_at timestamp
 }
 
 Table question_options {
-  option_id bigint [pk, increment]
-  question_id bigint [not null]
-  option_label varchar(5) [not null]
-  option_text text [not null]
-  is_correct boolean [default: false]
-  order_num int [not null]
-
-  indexes {
-    (question_id, order_num) [unique, name: "uq_question_option_order"]
-  }
+option_id bigint [pk]
+question_id bigint [not null]
+option_label varchar [not null]
+option_text text [not null]
+is_correct boolean
+order_num int [not null]
 }
 
 Table question_history {
-  history_id bigint [pk, increment]
-  question_id bigint [not null]
-  changed_by bigint [not null]
-  old_data jsonb
-  new_data jsonb
-  change_type varchar(100)
-  changed_at timestamp [default: `CURRENT_TIMESTAMP`]
+history_id bigint [pk]
+question_id bigint [not null]
+changed_by bigint [not null]
+old_data jsonb
+new_data jsonb
+change_type varchar
+changed_at timestamp
 }
 
 Table practice_sets {
-  practice_set_id bigint [pk, increment]
-  student_id bigint [not null]
-  subject_id bigint [not null]
-  document_topic_id bigint
-  difficulty difficulty_level
-  num_questions_requested int [not null]
-  num_questions_actual int
-  time_limit_minutes int
-  prioritize_unanswered boolean [default: false]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+practice_set_id bigint [pk]
+student_id bigint [not null]
+subject_id bigint [not null]
+document_topic_id bigint
+difficulty difficulty_level
+num_questions_requested int [not null]
+num_questions_actual int
+time_limit_minutes int
+prioritize_unanswered boolean
+created_at timestamp
 }
 
 Table practice_set_questions {
-  practice_set_question_id bigint [pk, increment]
-  practice_set_id bigint [not null]
-  question_id bigint [not null]
-  order_num int [not null]
-
-  indexes {
-    (practice_set_id, question_id) [unique, name: "uq_psq_question"]
-    (practice_set_id, order_num) [unique, name: "uq_psq_order"]
-  }
+practice_set_question_id bigint [pk]
+practice_set_id bigint [not null]
+question_id bigint [not null]
+order_num int [not null]
 }
 
 Table practice_attempts {
-  attempt_id bigint [pk, increment]
-  practice_set_id bigint [not null]
-  started_at timestamp [default: `CURRENT_TIMESTAMP`]
-  submitted_at timestamp
-  score decimal(5,2)
-  total_correct int [default: 0]
-  total_wrong int [default: 0]
-  status practice_attempt_status [default: 'in_progress']
+attempt_id bigint [pk]
+practice_set_id bigint [not null]
+started_at timestamp
+submitted_at timestamp
+score numeric
+total_correct int
+total_wrong int
+status practice_attempt_status
 }
 
 Table student_answers {
-  answer_id bigint [pk, increment]
-  attempt_id bigint [not null]
-  question_id bigint [not null]
-  selected_option_id bigint
-  is_correct boolean
-  answered_at timestamp [default: `CURRENT_TIMESTAMP`]
-
-  indexes {
-    (attempt_id, question_id) [unique, name: "uq_attempt_question"]
-  }
+answer_id bigint [pk]
+attempt_id bigint [not null]
+question_id bigint [not null]
+selected_option_id bigint
+is_correct boolean
+answered_at timestamp
 }
 
 Table notifications {
-  notification_id bigint [pk, increment]
-  user_id bigint [not null]
-  title varchar(255)
-  content text
-  is_read boolean [default: false]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+notification_id bigint [pk]
+user_id bigint [not null]
+title varchar
+content text
+is_read boolean
+created_at timestamp
 }
 
-Ref: user_roles.user_id > users.user_id [delete: cascade]
-Ref: user_roles.role_id > roles.role_id [delete: cascade]
+Ref: user_roles.user_id > users.user_id
+Ref: user_roles.role_id > roles.role_id
 
-Ref: classes.teacher_id > users.user_id [delete: cascade]
+Ref: classes.teacher_id > users.user_id
 
-Ref: topics.subject_id > subjects.subject_id [delete: cascade]
+Ref: class_teachers.class_id > classes.class_id
+Ref: class_teachers.teacher_id > users.user_id
 
-Ref: class_teachers.class_id > classes.class_id [delete: cascade]
-Ref: class_teachers.teacher_id > users.user_id [delete: cascade]
+Ref: class_students.class_id > classes.class_id
+Ref: class_students.student_id > users.user_id
 
-Ref: class_subjects.class_id > classes.class_id [delete: cascade]
-Ref: class_subjects.subject_id > subjects.subject_id [delete: cascade]
-Ref: class_subjects.assigned_teacher_id > users.user_id [delete: set null]
+Ref: class_subjects.class_id > classes.class_id
+Ref: class_subjects.subject_id > subjects.subject_id
+Ref: class_subjects.assigned_teacher_id > users.user_id
 
-Ref: class_students.class_id > classes.class_id [delete: cascade]
-Ref: class_students.student_id > users.user_id [delete: cascade]
+Ref: topics.class_subject_id > class_subjects.class_subject_id
 
-Ref: documents.teacher_id > users.user_id [delete: cascade]
+Ref: documents.teacher_id > users.user_id
 
-Ref: document_topics.document_id > documents.document_id [delete: cascade]
-Ref: document_topics.topic_id > topics.topic_id [delete: cascade]
+Ref: document_topics.document_id > documents.document_id
+Ref: document_topics.topic_id > topics.topic_id
 
-Ref: ai_requests.document_topic_id > document_topics.document_topic_id [delete: cascade]
+Ref: ai_requests.document_topic_id > document_topics.document_topic_id
 
-Ref: questions.teacher_id > users.user_id [delete: cascade]
-Ref: questions.document_topic_id > document_topics.document_topic_id [delete: cascade]
-Ref: questions.ai_request_id > ai_requests.request_id [delete: set null]
+Ref: questions.teacher_id > users.user_id
+Ref: questions.document_topic_id > document_topics.document_topic_id
+Ref: questions.ai_request_id > ai_requests.request_id
 
-Ref: question_options.question_id > questions.question_id [delete: cascade]
+Ref: question_options.question_id > questions.question_id
 
-Ref: question_history.question_id > questions.question_id [delete: cascade]
-Ref: question_history.changed_by > users.user_id [delete: cascade]
+Ref: question_history.question_id > questions.question_id
+Ref: question_history.changed_by > users.user_id
 
-Ref: practice_sets.student_id > users.user_id [delete: cascade]
-Ref: practice_sets.subject_id > subjects.subject_id [delete: cascade]
-Ref: practice_sets.document_topic_id > document_topics.document_topic_id [delete: set null]
+Ref: practice_sets.student_id > users.user_id
+Ref: practice_sets.subject_id > subjects.subject_id
+Ref: practice_sets.document_topic_id > document_topics.document_topic_id
 
-Ref: practice_set_questions.practice_set_id > practice_sets.practice_set_id [delete: cascade]
-Ref: practice_set_questions.question_id > questions.question_id [delete: cascade]
+Ref: practice_set_questions.practice_set_id > practice_sets.practice_set_id
+Ref: practice_set_questions.question_id > questions.question_id
 
-Ref: practice_attempts.practice_set_id > practice_sets.practice_set_id [delete: cascade]
+Ref: practice_attempts.practice_set_id > practice_sets.practice_set_id
 
-Ref: student_answers.attempt_id > practice_attempts.attempt_id [delete: cascade]
-Ref: student_answers.question_id > questions.question_id [delete: cascade]
-Ref: student_answers.selected_option_id > question_options.option_id [delete: set null]
+Ref: student_answers.attempt_id > practice_attempts.attempt_id
+Ref: student_answers.question_id > questions.question_id
+Ref: student_answers.selected_option_id > question_options.option_id
 
-Ref: notifications.user_id > users.user_id [delete: cascade]
+Ref: notifications.user_id > users.user_id

@@ -1,37 +1,23 @@
-﻿# Table: `practice_set_questions`
+# practice_set_questions
 
 ## Purpose
 
-Documentation for `practice_set_questions` table.
+Join table defining which questions belong to a practice set and in what order.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `practice_set_question_id` | `bigint [pk, increment]` |
-| `practice_set_id` | `bigint [not null]` |
-| `question_id` | `bigint [not null]` |
-| `order_num` | `int [not null]` |
-
-## Indexes
-
-- `(practice_set_id, question_id) [unique]`
-- `(practice_set_id, order_num) [unique]`
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `practice_set_question_id` | bigint | PK | Join row identifier |
+| `practice_set_id` | bigint | not null, FK | References `practice_sets` |
+| `question_id` | bigint | not null, FK | References `questions` |
+| `order_num` | int | not null | Question order inside the set |
 
 ## Relationships
 
-- practice_set_questions.practice_set_id -> practice_sets.practice_set_id
-- practice_set_questions.question_id -> questions.question_id
+- `practice_set_id -> practice_sets.practice_set_id`
+- `question_id -> questions.question_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select * from practice_set_questions limit 20;
-```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
-
+- Represents a many-to-many relation between `practice_sets` and `questions`.

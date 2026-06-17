@@ -1,33 +1,27 @@
-# Table: `topics`
+# topics
 
 ## Purpose
 
-Subject-scoped topic catalog used for document mapping and question generation.
+Stores topic units under a specific class-subject context.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `topic_id` | `bigint [pk, increment]` |
-| `subject_id` | `bigint [not null]` |
-| `topic_name` | `varchar(255) [not null]` |
-| `description` | `text` |
-| `created_at` | `timestamp` |
-| `updated_at` | `timestamp` |
-| `deleted_at` | `timestamp` |
-
-## Indexes
-
-- `(subject_id, topic_name) [unique]`
-- `(subject_id)`
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `topic_id` | bigint | PK | Topic identifier |
+| `topic_name` | varchar | not null | Topic name |
+| `description` | text |  | Topic details |
+| `class_subject_id` | bigint | FK | References `class_subjects` |
+| `created_at` | timestamp |  | Creation time |
+| `updated_at` | timestamp |  | Last update time |
+| `deleted_at` | timestamp |  | Soft delete marker |
 
 ## Relationships
 
-- topics.subject_id -> subjects.subject_id
-- document_topics.topic_id -> topics.topic_id
+- `class_subject_id -> class_subjects.class_subject_id`
+- `document_topics.topic_id -> topics.topic_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select topic_id, subject_id, topic_name from topics limit 20;
-```
+- A topic may exist without a mandatory class-subject constraint in the diagram because `class_subject_id` is nullable.
+- Uses soft delete via `deleted_at`.

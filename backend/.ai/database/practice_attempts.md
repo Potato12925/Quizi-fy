@@ -1,36 +1,27 @@
-﻿# Table: `practice_attempts`
+# practice_attempts
 
 ## Purpose
 
-Documentation for `practice_attempts` table.
+Stores an execution attempt for a practice set.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `attempt_id` | `bigint [pk, increment]` |
-| `practice_set_id` | `bigint [not null]` |
-| `started_at` | `timestamp` |
-| `submitted_at` | `timestamp` |
-| `score` | `decimal(5,2)` |
-| `total_correct` | `int [default: 0]` |
-| `total_wrong` | `int [default: 0]` |
-| `status` | `practice_attempt_status [default: 'in_progress']` |
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `attempt_id` | bigint | PK | Attempt identifier |
+| `practice_set_id` | bigint | not null, FK | Parent practice set |
+| `started_at` | timestamp |  | Start time |
+| `submitted_at` | timestamp |  | Submit time |
+| `score` | numeric |  | Final score |
+| `total_correct` | int |  | Number of correct answers |
+| `total_wrong` | int |  | Number of wrong answers |
+| `status` | `practice_attempt_status` |  | Attempt lifecycle status |
 
 ## Relationships
 
-- practice_attempts.practice_set_id -> practice_sets.practice_set_id
-- student_answers.attempt_id -> practice_attempts.attempt_id
+- `practice_set_id -> practice_sets.practice_set_id`
+- `student_answers.attempt_id -> practice_attempts.attempt_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select * from practice_attempts limit 20;
-```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
-
+- One practice set can have multiple attempts unless restricted in application logic.

@@ -1,34 +1,26 @@
-# Table: `document_topics`
+# document_topics
 
 ## Purpose
 
-Join table between documents and topics. This is the path used to infer subject from a document.
+Join table linking a document to a topic. This is the core scope unit for AI generation.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `document_topic_id` | `bigint [pk, increment]` |
-| `document_id` | `bigint [not null]` |
-| `topic_id` | `bigint [not null]` |
-| `created_at` | `timestamp` |
-
-## Indexes
-
-- `(document_id, topic_id) [unique]`
-- `(document_id)`
-- `(topic_id)`
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `document_topic_id` | bigint | PK | Scoped document-topic identifier |
+| `document_id` | bigint | not null, FK | References `documents` |
+| `topic_id` | bigint | not null, FK | References `topics` |
+| `created_at` | timestamp |  | Link creation time |
 
 ## Relationships
 
-- document_topics.document_id -> documents.document_id
-- document_topics.topic_id -> topics.topic_id
-- ai_requests.document_topic_id -> document_topics.document_topic_id
-- questions.document_topic_id -> document_topics.document_topic_id
-- practice_sets.document_topic_id -> document_topics.document_topic_id
+- `document_id -> documents.document_id`
+- `topic_id -> topics.topic_id`
+- `ai_requests.document_topic_id -> document_topics.document_topic_id`
+- `questions.document_topic_id -> document_topics.document_topic_id`
+- `practice_sets.document_topic_id -> document_topics.document_topic_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select document_topic_id, document_id, topic_id from document_topics limit 20;
-```
+- This table is the main content scope boundary reused by AI requests, generated questions, and practice sets.

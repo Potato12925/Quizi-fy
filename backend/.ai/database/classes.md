@@ -1,38 +1,31 @@
-﻿# Table: `classes`
+# classes
 
 ## Purpose
 
-Documentation for `classes` table.
+Stores class groups managed by teachers.
 
 ## Columns
 
-| Column        | Definition                                |
-| ------------- | ----------------------------------------- |
-| `class_id`    | `bigint [pk, increment]`                  |
-| `teacher_id`  | `bigint [not null, ref: > users.user_id]` |
-| `class_code`  | `varchar(50) [unique, not null]`          |
-| `class_name`  | `varchar(255) [not null]`                 |
-| `description` | `text`                                    |
-| `status`      | `active_status [default: 'active']`       |
-| `created_at`  | `timestamp [default: CURRENT_TIMESTAMP]`  |
-| `updated_at`  | `timestamp [default: CURRENT_TIMESTAMP]`  |
-| `deleted_at`  | `timestamp`                               |
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `class_id` | bigint | PK | Class identifier |
+| `class_code` | varchar | not null, unique | Stable class code |
+| `class_name` | varchar | not null | Class display name |
+| `description` | text |  | Optional class description |
+| `teacher_id` | bigint | not null, FK | Owner or primary teacher |
+| `status` | `active_status` |  | Active or inactive |
+| `created_at` | timestamp |  | Creation time |
+| `updated_at` | timestamp |  | Last update time |
+| `deleted_at` | timestamp |  | Soft delete marker |
 
 ## Relationships
 
-- classes.owner_id -> users.user_id
-- class_subjects.class_id -> classes.class_id
-- class_students.class_id -> classes.class_id
-- class_teachers.class_id -> classes.class_id
+- `teacher_id -> users.user_id`
+- `class_teachers.class_id -> classes.class_id`
+- `class_students.class_id -> classes.class_id`
+- `class_subjects.class_id -> classes.class_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select * from classes limit 20;
-```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
+- This is a soft-delete table.
+- A class has one primary teacher through `teacher_id`, but can also have additional teachers through `class_teachers`.

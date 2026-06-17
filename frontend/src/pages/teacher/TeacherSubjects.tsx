@@ -77,7 +77,7 @@ export default function TeacherSubjectsPage() {
       setFormError('Vui lòng chọn môn học trước khi tạo chủ đề.');
       return;
     }
-    const classSubjectId = activeSubject.topics[0]?.class_subject_id;
+    const classSubjectId = activeSubject.class_subject_id ?? activeSubject.topics[0]?.class_subject_id;
     if (!classSubjectId) {
       setFormError('Không xác định được lớp-môn cho môn này. Vui lòng liên hệ admin để kiểm tra phân công.');
       return;

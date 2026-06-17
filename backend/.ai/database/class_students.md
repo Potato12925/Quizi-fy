@@ -1,37 +1,25 @@
-﻿# Table: `class_students`
+# class_students
 
 ## Purpose
 
-Documentation for `class_students` table.
+Join table linking students to classes.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `class_student_id` | `bigint [pk, increment]` |
-| `class_id` | `bigint [not null]` |
-| `student_id` | `bigint [not null]` |
-| `joined_at` | `timestamp` |
-| `deleted_at` | `timestamp` |
-
-## Indexes
-
-- `(class_id, student_id) [unique]`
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `class_student_id` | bigint | PK | Join row identifier |
+| `class_id` | bigint | not null, FK | References `classes` |
+| `student_id` | bigint | not null, FK | References `users` |
+| `joined_at` | timestamp |  | Enrollment time |
+| `deleted_at` | timestamp |  | Soft delete marker |
 
 ## Relationships
 
-- class_students.class_id -> classes.class_id
-- class_students.student_id -> users.user_id
+- `class_id -> classes.class_id`
+- `student_id -> users.user_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select * from class_students limit 20;
-```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
-
+- Supports many students per class.
+- Uses soft delete via `deleted_at`.

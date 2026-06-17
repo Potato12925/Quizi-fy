@@ -108,15 +108,28 @@ async def list_subjects_by_teacher(
 
     class_subjects_response = await asyncio.to_thread(
         lambda: supabase.table("class_subjects")
-        .select("subject_id")
+        .select("class_subject_id,subject_id")
         .eq("assigned_teacher_id", teacher_id)
         .eq("status", "active")
         .is_("deleted_at", None)
         .execute()
     )
-    subject_ids = sorted({item["subject_id"] for item in (class_subjects_response.data or [])})
+    class_subject_rows = class_subjects_response.data or []
+    subject_ids = sorted({item["subject_id"] for item in class_subject_rows})
     if not subject_ids:
         return [], 0
+
+    class_subject_by_subject_id: dict[int, int] = {}
+    for item in class_subject_rows:
+        subject_id = item.get("subject_id")
+        class_subject_id = item.get("class_subject_id")
+        if subject_id is None or class_subject_id is None:
+            continue
+        subject_id_int = int(subject_id)
+        class_subject_id_int = int(class_subject_id)
+        existing = class_subject_by_subject_id.get(subject_id_int)
+        if existing is None or class_subject_id_int < existing:
+            class_subject_by_subject_id[subject_id_int] = class_subject_id_int
 
     query = supabase.table("subjects").select(SUBJECT_SELECT_FIELDS, count="exact").in_("subject_id", subject_ids).is_(
         "deleted_at", None
@@ -125,7 +138,15 @@ async def list_subjects_by_teacher(
     response = await asyncio.to_thread(
         lambda: query.order(sort_by, desc=sort_order == "desc").range(start, end).execute()
     )
-    return response.data or [], int(response.count or 0)
+    items = response.data or []
+    for item in items:
+        subject_id = item.get("subject_id")
+        item["class_subject_id"] = (
+            class_subject_by_subject_id.get(int(subject_id))
+            if subject_id is not None
+            else None
+        )
+    return items, int(response.count or 0)
 
 
 async def is_teacher_assigned_to_subject(subject_id: int, teacher_id: int) -> bool:

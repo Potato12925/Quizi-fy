@@ -1,37 +1,59 @@
-# BKP System Database Documentation
+# Database Schema Reference
 
-## Database Stack
+This directory contains table-level documentation generated from `backend/dbdiagram`.
 
-- Database: Supabase PostgreSQL
-- Backend: Python (FastAPI)
-- ORM: None
-- Database Access: Supabase Python Client
-- Query Strategy: Supabase Query Builder
-- Schema Management: Supabase CLI migrations
-- Architecture Target: Production-ready multi-role learning platform
+## Source of truth
 
-## ARCHITECTURE_OVERVIEW
+- Schema source: `backend/dbdiagram`
+- SQL snapshot: `backend/database-sql.sql`
 
-- .ai/database/ARCHITECTURE_OVERVIEW.md
+## Shared conventions
 
-## Architecture Principles
-
-- Avoid ORM abstraction
-- Prefer Supabase query builder
-- Use lightweight service layers
-- Optimize queries for low token usage
-- Use pagination for large datasets
-
-## Naming Convention
-
-- PK: `<table>_id`
-- FK naming: `<entity>_id`
-- Soft delete: `deleted_at`
-- Audit timestamps:
+- Primary keys use bigint and the `<entity>_id` pattern.
+- Foreign keys use the `<related_entity>_id` pattern.
+- Soft delete is used on core business tables through `deleted_at`.
+- Common audit fields:
   - `created_at`
   - `updated_at`
-- Status fields use PostgreSQL ENUMs
+- Status fields are backed by enums in `dbdiagram`.
 
-## Token optimization
+## Enums used in schema
 
-- .ai/database/TOKEN_OPTIMIZATION_GUIDE.md
+- `active_status`: `active`, `inactive`
+- `ai_request_status`: `pending`, `processing`, `completed`, `failed`, `cancelled`
+- `difficulty_level`: `easy`, `medium`, `hard`
+- `practice_attempt_status`: `in_progress`, `submitted`, `timeout`
+- `question_source`: `ai`, `manual`
+- `question_status`: `draft`, `approved`, `inactive`, `rejected`
+
+## Table documents
+
+- [users](./users.md)
+- [roles](./roles.md)
+- [user_roles](./user_roles.md)
+- [classes](./classes.md)
+- [subjects](./subjects.md)
+- [class_teachers](./class_teachers.md)
+- [class_students](./class_students.md)
+- [class_subjects](./class_subjects.md)
+- [topics](./topics.md)
+- [documents](./documents.md)
+- [document_topics](./document_topics.md)
+- [ai_requests](./ai_requests.md)
+- [questions](./questions.md)
+- [question_options](./question_options.md)
+- [question_history](./question_history.md)
+- [practice_sets](./practice_sets.md)
+- [practice_set_questions](./practice_set_questions.md)
+- [practice_attempts](./practice_attempts.md)
+- [student_answers](./student_answers.md)
+- [notifications](./notifications.md)
+
+## High-level relationship flow
+
+1. `users` own roles through `user_roles`.
+2. Teachers manage `classes`, `subjects`, and assignments through `class_subjects`.
+3. `topics` belong to `class_subjects`.
+4. `documents` uploaded by teachers are linked to topics through `document_topics`.
+5. `ai_requests` generate `questions` from a specific `document_topic`.
+6. Students receive `practice_sets`, answer them through `practice_attempts` and `student_answers`.

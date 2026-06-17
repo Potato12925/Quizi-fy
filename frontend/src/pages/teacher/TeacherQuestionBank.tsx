@@ -215,7 +215,7 @@ export default function QuestionBankPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Bạn có chắc chắn muốn ẩn câu hỏi này khỏi ngân hàng không?')) return;
+    if (!window.confirm('Bạn có chắc chắn muốn xóa câu hỏi này khỏi ngân hàng không?')) return;
     setProcessingQuestionId(id);
     try {
       await softDeleteTeacherQuestion(id);
@@ -251,6 +251,16 @@ export default function QuestionBankPage() {
 
     setFormError('');
 
+    if (!formData.subjectId) {
+      setFormError('Vui lòng chọn môn học');
+      return;
+    }
+
+    if (!formData.topicId) {
+      setFormError('Vui lòng chọn chương học');
+      return;
+    }
+
     if (!formData.documentTopicId) {
       setFormError('Vui lòng chọn tài liệu nguồn');
       return;
@@ -261,14 +271,19 @@ export default function QuestionBankPage() {
       return;
     }
 
-    const trimmedOptions = formData.options.map((opt) => opt.trim()).filter(Boolean);
-    if (trimmedOptions.length < 2) {
-      setFormError('Cần tối thiểu 2 đáp án hợp lệ');
+    const trimmedOptions = formData.options.map((opt) => opt.trim());
+    if (trimmedOptions.some((opt) => !opt)) {
+      setFormError('Vui lòng nhập đầy đủ 4 đáp án');
       return;
     }
 
-    if (formData.correctOptionIndex >= trimmedOptions.length) {
+    if (formData.correctOptionIndex < 0 || formData.correctOptionIndex >= trimmedOptions.length) {
       setFormError('Đáp án đúng không hợp lệ');
+      return;
+    }
+
+    if (['create', 'edit'].includes(modalMode) && !['draft', 'approved'].includes(formData.status)) {
+      setFormError('Trạng thái chỉ được chọn Nháp hoặc Đã duyệt');
       return;
     }
 
@@ -449,7 +464,7 @@ export default function QuestionBankPage() {
             <div className="p-10 md:p-14">
               <div className="flex items-start justify-between mb-10">
                 <div>
-                  <h2 className="text-3xl italic font-black tracking-tighter uppercase text-slate-900">{modalMode === 'create' ? 'Tạo câu hỏi ' : modalMode === 'edit' ? 'Chỉnh sửa ' : 'Chi tiết '}<span className="text-[#b20112]">Câu hỏi</span></h2>
+                  <h2 className="text-3xl italic font-black tracking-tighter uppercase text-slate-900">{modalMode === 'create' ? 'Tạo ' : modalMode === 'edit' ? 'Chỉnh sửa ' : 'Chi tiết '}<span className="text-[#b20112]">Câu hỏi</span></h2>
                 </div>
                 <button onClick={() => setIsModalOpen(false)} className="flex items-center justify-center w-12 h-12 transition-all rounded-full bg-slate-100 text-slate-400 hover:bg-slate-900 hover:text-white"><span className="material-symbols-outlined">close</span></button>
               </div>
@@ -502,8 +517,8 @@ export default function QuestionBankPage() {
                     <select disabled={modalMode === 'view'} value={formData.status} onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value as FormState['status'] }))} className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50">
                       <option value="draft">Nháp</option>
                       <option value="approved">Đã duyệt</option>
-                      <option value="inactive">Ẩn</option>
-                      <option value="rejected">Từ chối</option>
+                      {modalMode === 'view' && <option value="inactive">Ẩn</option>}
+                      {modalMode === 'view' && <option value="rejected">Từ chối</option>}
                     </select>
                   </div>
                 </div>

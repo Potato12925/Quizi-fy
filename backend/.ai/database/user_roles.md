@@ -1,36 +1,23 @@
-﻿# Table: `user_roles`
+# user_roles
 
 ## Purpose
 
-Documentation for `user_roles` table.
+Join table mapping users to roles.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `user_role_id` | `bigint [pk, increment]` |
-| `user_id` | `bigint [not null]` |
-| `role_id` | `bigint [not null]` |
-| `assigned_at` | `timestamp` |
-
-## Indexes
-
-- `(user_id, role_id) [unique]`
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `user_role_id` | bigint | PK | Join row identifier |
+| `user_id` | bigint | not null, FK | References `users` |
+| `role_id` | bigint | not null, FK | References `roles` |
+| `assigned_at` | timestamp |  | Assignment time |
 
 ## Relationships
 
-- user_roles.user_id -> users.user_id
-- user_roles.role_id -> roles.role_id
+- `user_id -> users.user_id`
+- `role_id -> roles.role_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select * from user_roles limit 20;
-```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
-
+- Represents a many-to-many relation between `users` and `roles`.

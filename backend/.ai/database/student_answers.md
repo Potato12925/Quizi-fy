@@ -1,39 +1,26 @@
-﻿# Table: `student_answers`
+# student_answers
 
 ## Purpose
 
-Documentation for `student_answers` table.
+Stores a student's submitted answer for a question in an attempt.
 
 ## Columns
 
-| Column | Definition |
-|---|---|
-| `answer_id` | `bigint [pk, increment]` |
-| `attempt_id` | `bigint [not null]` |
-| `question_id` | `bigint [not null]` |
-| `selected_option_id` | `bigint` |
-| `is_correct` | `boolean` |
-| `answered_at` | `timestamp` |
-
-## Indexes
-
-- `(attempt_id, question_id) [unique]`
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `answer_id` | bigint | PK | Answer identifier |
+| `attempt_id` | bigint | not null, FK | Parent attempt |
+| `question_id` | bigint | not null, FK | Answered question |
+| `selected_option_id` | bigint | FK | Chosen option |
+| `is_correct` | boolean |  | Result of evaluation |
+| `answered_at` | timestamp |  | Submission time |
 
 ## Relationships
 
-- student_answers.attempt_id -> practice_attempts.attempt_id
-- student_answers.question_id -> questions.question_id
-- student_answers.selected_option_id -> question_options.option_id
+- `attempt_id -> practice_attempts.attempt_id`
+- `question_id -> questions.question_id`
+- `selected_option_id -> question_options.option_id`
 
-## Recommended Supabase Queries
+## Notes
 
-```sql
-select * from student_answers limit 20;
-```
-
-## Agent Notes
-
-- Always select only required columns.
-- Avoid `select *` in production flows.
-- Use pagination for large datasets.
-
+- `selected_option_id` is nullable, which allows skipped or unanswered states if application logic supports them.

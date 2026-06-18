@@ -1,3 +1,4 @@
+import logging
 from math import ceil
 
 from middlewares.auth_middleware import CurrentUser
@@ -33,7 +34,9 @@ from schemas.teacher_ai_generator_schema import (
     TeacherQuestionUpdatePayload,
 )
 from utils.document_extract_util import extract_document_text
-from utils.openai_util import generate_mcq_questions_with_openai
+from utils.openai_util import generate_mcq_questions_with_ai
+
+logger = logging.getLogger(__name__)
 
 
 class TeacherAiAuthorizationError(ValueError):
@@ -46,6 +49,12 @@ class TeacherAiValidationError(ValueError):
 
 def _normalize_question_content(value: str) -> str:
     return " ".join((value or "").strip().lower().split())
+
+
+def _emit_ai_job_log(request_id: int, level: int, message: str) -> None:
+    formatted = f"[teacher_ai_generation][request_id={request_id}] {message}"
+    logger.log(level, formatted)
+    print(formatted, flush=True)
 
 
 def _serialize_difficulty_distribution(items: list[dict] | None) -> list[dict]:
@@ -651,9 +660,19 @@ async def create_teacher_manual_question(current_user: CurrentUser, payload: Tea
 async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
     request = await find_ai_request_by_id(request_id)
     if not request:
+        _emit_ai_job_log(
+            request_id,
+            logging.WARNING,
+            f"Request not found for teacher_id={teacher_id}. Worker exits without processing.",
+        )
         return
 
     async def _mark_failed(message: str, retry_count: int) -> None:
+        _emit_ai_job_log(
+            request_id,
+            logging.ERROR,
+            f"Marking request as failed | retry_count={retry_count} | error={message[:500]}",
+        )
         await update_ai_request_by_id(
             request_id=request_id,
             payload={
@@ -665,6 +684,18 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
 
     retry_count = int(request.get("retry_count") or 0)
     try:
+        _emit_ai_job_log(
+            request_id,
+            logging.INFO,
+            (
+                "Starting AI generation job "
+                f"| teacher_id={teacher_id} "
+                f"| document_topic_id={request.get('document_topic_id')} "
+                f"| num_questions={request.get('num_questions')} "
+                f"| content_scope={request.get('content_scope')!r} "
+                f"| retry_count={retry_count}"
+            ),
+        )
         await update_ai_request_by_id(
             request_id=request_id,
             payload={
@@ -682,6 +713,15 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
             file_url=str(serialized_doc_topic.get("file_url") or ""),
             file_type=str(serialized_doc_topic.get("file_type") or ""),
         )
+        _emit_ai_job_log(
+            request_id,
+            logging.INFO,
+            (
+                "Document extracted "
+                f"| file_type={serialized_doc_topic.get('file_type')} "
+                f"| text_length={len(document_text)}"
+            ),
+        )
 
         existing_contents = await list_existing_question_contents(int(request["document_topic_id"]))
         difficulty_distribution = _serialize_difficulty_distribution(
@@ -689,6 +729,15 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
         )
         if not difficulty_distribution:
             raise TeacherAiValidationError("AI request is missing difficulty distribution")
+        _emit_ai_job_log(
+            request_id,
+            logging.INFO,
+            (
+                "Loaded generation context "
+                f"| existing_question_count={len(existing_contents)} "
+                f"| difficulty_distribution={difficulty_distribution}"
+            ),
+        )
 
         existing_norms = {_normalize_question_content(item) for item in existing_contents}
         inserted_count = 0
@@ -698,29 +747,78 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
         for distribution_item in difficulty_distribution:
             expected_difficulty = distribution_item["difficulty"]
             expected_question_count = int(distribution_item["question_count"])
-            generated_items = generate_mcq_questions_with_openai(
+            _emit_ai_job_log(
+                request_id,
+                logging.INFO,
+                (
+                    "Generating difficulty batch "
+                    f"| difficulty={expected_difficulty} "
+                    f"| expected_question_count={expected_question_count} "
+                    f"| accumulated_batch_question_count={len(batch_contents)}"
+                ),
+            )
+            generated_items = generate_mcq_questions_with_ai(
                 document_text=document_text,
                 difficulty=expected_difficulty,
                 num_questions=expected_question_count,
                 content_scope=request.get("content_scope"),
                 existing_question_contents=existing_contents + batch_contents,
             )
+            _emit_ai_job_log(
+                request_id,
+                logging.INFO,
+                (
+                    "AI returned batch "
+                    f"| difficulty={expected_difficulty} "
+                    f"| generated_count={len(generated_items)} "
+                    f"| expected_count={expected_question_count}"
+                ),
+            )
             if len(generated_items) != expected_question_count:
                 raise TeacherAiValidationError(
                     f"AI returned {len(generated_items)} questions for {expected_difficulty}, expected {expected_question_count}"
                 )
 
-            for item in generated_items:
+            for index, item in enumerate(generated_items, start=1):
                 if item["difficulty"] != expected_difficulty:
                     raise TeacherAiValidationError(
                         f"AI returned difficulty {item['difficulty']} but expected {expected_difficulty}"
                     )
                 normalized = _normalize_question_content(item["content"])
                 if not normalized:
+                    _emit_ai_job_log(
+                        request_id,
+                        logging.WARNING,
+                        (
+                            "Skipping generated question with empty normalized content "
+                            f"| difficulty={expected_difficulty} "
+                            f"| batch_index={index}"
+                        ),
+                    )
                     continue
                 if normalized in batch_norms:
+                    _emit_ai_job_log(
+                        request_id,
+                        logging.WARNING,
+                        (
+                            "Skipping duplicate generated question inside current batch "
+                            f"| difficulty={expected_difficulty} "
+                            f"| batch_index={index} "
+                            f"| content_preview={item['content'][:200]!r}"
+                        ),
+                    )
                     continue
                 if normalized in existing_norms:
+                    _emit_ai_job_log(
+                        request_id,
+                        logging.WARNING,
+                        (
+                            "Skipping generated question because it already exists "
+                            f"| difficulty={expected_difficulty} "
+                            f"| batch_index={index} "
+                            f"| content_preview={item['content'][:200]!r}"
+                        ),
+                    )
                     continue
                 batch_norms.add(normalized)
                 existing_norms.add(normalized)
@@ -734,7 +832,7 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
                         "content": item["content"],
                         "difficulty": item["difficulty"],
                         "source": "ai",
-                        "status": "draft",
+                        "status": "inactive",
                         "explanation": item["explanation"],
                     }
                 )
@@ -744,8 +842,41 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
                     correct_option_index=int(item["correct_option_index"]),
                 )
                 inserted_count += 1
+                _emit_ai_job_log(
+                    request_id,
+                    logging.INFO,
+                    (
+                        "Inserted generated question "
+                        f"| difficulty={expected_difficulty} "
+                        f"| batch_index={index} "
+                        f"| question_id={created_question.get('question_id')} "
+                        f"| inserted_count={inserted_count}"
+                    ),
+                )
+
+            _emit_ai_job_log(
+                request_id,
+                logging.INFO,
+                (
+                    "Finished difficulty batch "
+                    f"| difficulty={expected_difficulty} "
+                    f"| inserted_count_so_far={inserted_count} "
+                    f"| unique_batch_question_count={len(batch_contents)}"
+                ),
+            )
 
         if inserted_count != int(request["num_questions"]):
+            _emit_ai_job_log(
+                request_id,
+                logging.ERROR,
+                (
+                    "Inserted question count mismatch before completion "
+                    f"| inserted_count={inserted_count} "
+                    f"| expected_total={int(request['num_questions'])} "
+                    f"| existing_question_count={len(existing_contents)} "
+                    f"| batch_generated_unique_count={len(batch_contents)}"
+                ),
+            )
             raise TeacherAiValidationError(
                 f"Generated {inserted_count} questions but expected {int(request['num_questions'])}"
             )
@@ -757,6 +888,11 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
                 "generated_question_count": inserted_count,
                 "error_message": None,
             },
+        )
+        _emit_ai_job_log(
+            request_id,
+            logging.INFO,
+            f"AI generation job completed successfully | inserted_count={inserted_count}",
         )
     except Exception as exc:
         await _mark_failed(str(exc), retry_count + 1)

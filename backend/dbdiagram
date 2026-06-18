@@ -183,6 +183,7 @@ difficulty difficulty_level [not null]
 source question_source [not null]
 status question_status
 explanation text
+image_id bigint
 created_at timestamp
 updated_at timestamp
 deleted_at timestamp
@@ -258,7 +259,26 @@ content text
 is_read boolean
 created_at timestamp
 }
+Table image_types {
+  image_type_id bigint [pk]
+  type_code varchar [not null, unique]
+  type_name varchar [not null]
+  description text
+  created_at timestamp
+}
 
+Table images {
+  image_id bigint [pk]
+  image_type_id bigint [not null]
+  uploaded_by bigint
+  file_name varchar
+  file_url text [not null]
+  file_hash varchar
+  file_size bigint
+  mime_type varchar
+  created_at timestamp
+  deleted_at timestamp
+}
 Ref: user_roles.user_id > users.user_id
 Ref: user_roles.role_id > roles.role_id
 
@@ -307,3 +327,7 @@ Ref: student_answers.question_id > questions.question_id
 Ref: student_answers.selected_option_id > question_options.option_id
 
 Ref: notifications.user_id > users.user_id
+
+Ref: images.image_type_id > image_types.image_type_id
+Ref: images.uploaded_by > users.user_id
+Ref: questions.image_id > images.image_id

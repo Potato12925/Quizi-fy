@@ -25,6 +25,8 @@ DROP TABLE IF EXISTS user_roles CASCADE;
 DROP TABLE IF EXISTS roles CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS images CASCADE;
+DROP TABLE IF EXISTS image_types CASCADE;
 
 DROP TYPE IF EXISTS active_status CASCADE;
 DROP TYPE IF EXISTS difficulty_level CASCADE;
@@ -207,6 +209,7 @@ CREATE TABLE questions (
     source question_source NOT NULL,
     status question_status DEFAULT 'draft',
     explanation TEXT,
+    image_id BIGINT REFERENCES images(image_id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP
@@ -292,6 +295,28 @@ CREATE TABLE notifications (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE image_types (
+    image_type_id BIGSERIAL PRIMARY KEY,
+    type_code VARCHAR(50) UNIQUE NOT NULL,
+    type_name VARCHAR(100) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE images (
+    image_id BIGSERIAL PRIMARY KEY,
+    image_type_id BIGINT NOT NULL REFERENCES image_types(image_type_id),
+    uploaded_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+
+    file_name VARCHAR(255),
+    file_url TEXT NOT NULL,
+    file_hash VARCHAR(255),
+    file_size BIGINT,
+    mime_type VARCHAR(100),
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
+);
 -- ================= RELATIONSHIP SUMMARY =================
 -- users 1---n user_roles n---1 roles
 -- users 1---n classes (teacher_id)
@@ -317,7 +342,10 @@ CREATE TABLE notifications (
 -- practice_attempts 1---n student_answers n---1 questions
 -- question_options 1---n student_answers
 -- users 1---n notifications
-
+-- image_types 1---n images
+-- users 1---n images
+-- images 1---n questions
+-- questions n---1 images
 -- ================= SEED DATA =================
 -- Seed data is generated separately by:
 -- python database/generate_seed_sql.py

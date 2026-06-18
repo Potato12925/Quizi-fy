@@ -7,7 +7,7 @@ interface ApiEnvelope<T> {
   meta?: Record<string, unknown> | null;
 }
 
-export type Difficulty = 'easy' | 'medium' | 'hard';
+export type DifficultyLevel = 'recognition' | 'comprehension' | 'application' | 'advanced';
 export type AiRequestStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 export type QuestionStatus = 'draft' | 'approved' | 'inactive' | 'rejected';
 
@@ -43,7 +43,6 @@ export interface TeacherAiRequestItem {
   request_id: number;
   document_topic_id: number;
   num_questions: number;
-  difficulty: Difficulty;
   content_scope?: string | null;
   status: AiRequestStatus;
   generated_question_count: number;
@@ -52,7 +51,17 @@ export interface TeacherAiRequestItem {
   is_reviewed: boolean;
   created_at: string;
   updated_at: string;
+  difficulty_distribution?: TeacherAiRequestDifficultyDistribution[];
   document_topic: TeacherDocumentTopicOption;
+}
+
+export interface TeacherAiRequestDifficultyDistribution {
+  distribution_id?: number | null;
+  request_id?: number | null;
+  difficulty: DifficultyLevel;
+  percentage?: number | null;
+  question_count: number;
+  created_at?: string | null;
 }
 
 export interface TeacherAiQuestionOption {
@@ -69,7 +78,7 @@ export interface TeacherAiQuestionItem {
   document_topic_id: number;
   ai_request_id?: number | null;
   content: string;
-  difficulty: Difficulty;
+  difficulty: DifficultyLevel;
   source: 'ai' | 'manual';
   status: QuestionStatus;
   explanation?: string | null;
@@ -88,8 +97,8 @@ export interface TeacherAiQuestionItem {
 export interface CreateTeacherAiRequestPayload {
   document_topic_id: number;
   num_questions: number;
-  difficulty: Difficulty;
-  content_scope?: string;
+  content_scope?: string | null;
+  difficulty_distribution: TeacherAiRequestDifficultyDistribution[];
 }
 
 export interface BulkQuestionStatusPayload {
@@ -105,7 +114,7 @@ export interface TeacherAiReviewOptionPayload {
 export interface TeacherAiReviewQuestionPayload {
   question_id: number;
   content: string;
-  difficulty: Difficulty;
+  difficulty: DifficultyLevel;
   status: Extract<QuestionStatus, 'draft' | 'approved' | 'rejected'>;
   explanation?: string | null;
   options: TeacherAiReviewOptionPayload[];

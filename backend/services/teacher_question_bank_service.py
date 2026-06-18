@@ -36,7 +36,7 @@ def _pick_document_topic_id(rows: list[dict], requested_document_topic_id: int |
 
     if rows:
         return int(rows[0]["document_topic_id"])
-    raise ValueError("Bạn chưa có tài liệu nào để gán câu hỏi")
+    raise ValueError("Bạn chưa có tài liệu nào để gắn câu hỏi")
 
 
 def _serialize_question(item: dict, document_topic_by_id: dict[int, dict], image_by_id: dict[int, dict] | None = None) -> dict:
@@ -139,7 +139,10 @@ async def get_teacher_question_bank(
 
 
 async def get_teacher_document_topic_options(
-    current_user: CurrentUser, class_subject_id: int | None = None, subject_id: int | None = None, topic_id: int | None = None
+    current_user: CurrentUser,
+    class_subject_id: int | None = None,
+    subject_id: int | None = None,
+    topic_id: int | None = None,
 ) -> list[dict]:
     rows = await list_teacher_document_topic_options(
         teacher_id=current_user.user_id,

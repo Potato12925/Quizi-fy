@@ -10,6 +10,7 @@ from controllers.database_controller import router as database_router
 from controllers.document_controller import router as document_router
 from controllers.document_topic_controller import router as document_topic_router
 from controllers.health_controller import router as health_router
+from controllers.image_controller import router as image_router
 from controllers.notification_controller import router as notification_router
 from controllers.practice_attempt_controller import router as practice_attempt_router
 from controllers.practice_set_controller import router as practice_set_router
@@ -28,6 +29,9 @@ from controllers.teacher_topic_management_controller import (
 )
 from controllers.teacher_question_bank_controller import (
     router as teacher_question_bank_router,
+)
+from controllers.teacher_question_image_controller import (
+    router as teacher_question_image_router,
 )
 from controllers.teacher_ai_generator_controller import (
     router as teacher_ai_generator_router,
@@ -91,6 +95,11 @@ def register_routes(app: FastAPI) -> None:
 
     app.include_router(
         document_router,
+        prefix="/api/v1",
+    )
+
+    app.include_router(
+        image_router,
         prefix="/api/v1",
     )
 
@@ -166,6 +175,11 @@ def register_routes(app: FastAPI) -> None:
 
     app.include_router(
         teacher_question_bank_router,
+        prefix="/api/v1",
+    )
+
+    app.include_router(
+        teacher_question_image_router,
         prefix="/api/v1",
     )
 

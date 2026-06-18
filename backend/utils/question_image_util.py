@@ -1,4 +1,4 @@
-from repositories.image_repository import find_image_by_id, list_images_by_ids
+from repositories.image_repository import find_image_by_id, find_question_image_type, list_images_by_ids
 
 
 class QuestionImageValidationError(ValueError):
@@ -38,9 +38,11 @@ async def validate_question_image(image_id: int | None, owner_user_id: int | Non
         )
 
     image_type = image.get("image_types") or {}
-    if image_type.get("type_code") != "question_image":
+    question_image_type = await find_question_image_type()
+    allowed_question_type_code = question_image_type.get("type_code") if question_image_type else None
+    if not allowed_question_type_code or image_type.get("type_code") != allowed_question_type_code:
         raise QuestionImageValidationError(
-            message="Question image must use type question_image",
+            message="Question image must use a valid question image type",
             error_code="QUESTION_IMAGE_INVALID_TYPE",
             status_code=400,
         )

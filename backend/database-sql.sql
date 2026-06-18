@@ -44,6 +44,9 @@ CREATE TYPE question_source AS ENUM ('ai', 'manual');
 CREATE TYPE question_status AS ENUM ('draft', 'approved', 'inactive', 'rejected');
 CREATE TYPE practice_attempt_status AS ENUM ('in_progress', 'submitted', 'timeout');
 
+
+
+
 CREATE TABLE users (
     user_id BIGSERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
@@ -66,7 +69,31 @@ CREATE TABLE roles (
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE image_types (
+    image_type_id BIGSERIAL PRIMARY KEY,
+    type_code VARCHAR(50) UNIQUE NOT NULL,
+    type_name VARCHAR(100) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
+INSERT INTO image_types (type_code, type_name, description)
+VALUES ('question_image', 'Question Image', 'Images that can be attached to questions');
+
+CREATE TABLE images (
+    image_id BIGSERIAL PRIMARY KEY,
+    image_type_id BIGINT NOT NULL REFERENCES image_types(image_type_id),
+    uploaded_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+
+    file_name VARCHAR(255),
+    file_url TEXT NOT NULL,
+    file_hash VARCHAR(255),
+    file_size BIGINT,
+    mime_type VARCHAR(100),
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
+);
 CREATE TABLE user_roles (
     user_role_id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -295,31 +322,6 @@ CREATE TABLE notifications (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE image_types (
-    image_type_id BIGSERIAL PRIMARY KEY,
-    type_code VARCHAR(50) UNIQUE NOT NULL,
-    type_name VARCHAR(100) NOT NULL,
-    description TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-INSERT INTO image_types (type_code, type_name, description)
-VALUES ('question_image', 'Question Image', 'Images that can be attached to questions');
-
-CREATE TABLE images (
-    image_id BIGSERIAL PRIMARY KEY,
-    image_type_id BIGINT NOT NULL REFERENCES image_types(image_type_id),
-    uploaded_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
-
-    file_name VARCHAR(255),
-    file_url TEXT NOT NULL,
-    file_hash VARCHAR(255),
-    file_size BIGINT,
-    mime_type VARCHAR(100),
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP
-);
 -- ================= RELATIONSHIP SUMMARY =================
 -- users 1---n user_roles n---1 roles
 -- users 1---n classes (teacher_id)

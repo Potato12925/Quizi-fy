@@ -33,6 +33,7 @@ from schemas.teacher_ai_generator_schema import (
     TeacherManualQuestionPayload,
     TeacherQuestionUpdatePayload,
 )
+from utils.question_image_util import build_image_info, load_question_image_map, validate_question_image
 from utils.document_extract_util import extract_document_text
 from utils.openai_util import generate_mcq_questions_with_ai
 
@@ -113,11 +114,15 @@ def _serialize_question_item(item: dict, document_topic_map: dict[int, dict]) ->
     dt_id = int(item["document_topic_id"])
     doc_topic = document_topic_map.get(dt_id) or {}
     options = sorted(item.get("question_options") or [], key=lambda opt: int(opt.get("order_num") or 0))
+    image_id = int(item["image_id"]) if item.get("image_id") is not None else None
+    image_map = item.get("_image_map") or {}
     return {
         "question_id": int(item["question_id"]),
         "teacher_id": int(item["teacher_id"]),
         "document_topic_id": dt_id,
         "ai_request_id": item.get("ai_request_id"),
+        "image_id": image_id,
+        "image": build_image_info(image_map.get(image_id)) if image_id is not None else None,
         "content": item.get("content"),
         "difficulty": item.get("difficulty"),
         "source": item.get("source"),
@@ -133,6 +138,19 @@ def _serialize_question_item(item: dict, document_topic_map: dict[int, dict]) ->
         "subject_id": doc_topic.get("subject_id"),
         "subject_name": doc_topic.get("subject_name"),
         "options": options,
+    }
+
+
+def _build_question_history_snapshot(item: dict, image_by_id: dict[int, dict] | None = None, options: list[dict] | None = None) -> dict:
+    image_id = int(item["image_id"]) if item.get("image_id") is not None else None
+    return {
+        "content": item.get("content"),
+        "difficulty": item.get("difficulty"),
+        "status": item.get("status"),
+        "explanation": item.get("explanation"),
+        "image_id": image_id,
+        "image": build_image_info((image_by_id or {}).get(image_id)) if image_id is not None else None,
+        "options": options if options is not None else item.get("question_options") or [],
     }
 
 
@@ -338,9 +356,13 @@ async def list_teacher_ai_request_questions(current_user: CurrentUser, request_i
         raise TeacherAiAuthorizationError("You do not have permission to access this AI request")
 
     questions = await list_questions_by_ai_request_id(request_id=request_id, teacher_id=current_user.user_id)
+    image_by_id = await load_question_image_map(questions)
     serialized_doc_topic = _serialize_document_topic_row(doc_topic)
     return [
-        _serialize_question_item(item, {serialized_doc_topic["document_topic_id"]: serialized_doc_topic})
+        _serialize_question_item(
+            {**item, "_image_map": image_by_id},
+            {serialized_doc_topic["document_topic_id"]: serialized_doc_topic},
+        )
         for item in questions
     ]
 
@@ -366,6 +388,7 @@ async def confirm_teacher_ai_request_review(
     if not existing_questions:
         raise TeacherAiValidationError("No generated questions found for this AI request")
 
+    existing_image_map = await load_question_image_map(existing_questions)
     existing_map = {int(item["question_id"]): item for item in existing_questions}
     existing_ids = set(existing_map.keys())
     payload_ids = {item.question_id for item in payload.questions}
@@ -385,12 +408,17 @@ async def confirm_teacher_ai_request_review(
         existing = existing_map[question_payload.question_id]
         old_options = _serialize_review_options(existing.get("question_options") or [])
         new_options = _normalize_review_option_payload(question_payload.options)
+        has_image_field = "image_id" in question_payload.model_fields_set
+        next_image_id = question_payload.image_id if has_image_field else existing.get("image_id")
+        next_image = await validate_question_image(next_image_id, owner_user_id=current_user.user_id) if next_image_id is not None else None
 
         old_snapshot = {
             "content": existing.get("content"),
             "difficulty": existing.get("difficulty"),
             "status": existing.get("status"),
             "explanation": existing.get("explanation"),
+            "image_id": int(existing["image_id"]) if existing.get("image_id") is not None else None,
+            "image": build_image_info(existing_image_map.get(int(existing["image_id"]))) if existing.get("image_id") is not None else None,
             "options": old_options,
         }
         new_snapshot = {
@@ -398,6 +426,8 @@ async def confirm_teacher_ai_request_review(
             "difficulty": question_payload.difficulty,
             "status": question_payload.status,
             "explanation": question_payload.explanation,
+            "image_id": int(next_image_id) if next_image_id is not None else None,
+            "image": build_image_info(next_image) if next_image is not None else None,
             "options": new_options,
         }
 
@@ -433,6 +463,7 @@ async def confirm_teacher_ai_request_review(
                 "difficulty": question_payload.difficulty,
                 "status": question_payload.status,
                 "explanation": question_payload.explanation,
+                "image_id": next_image_id,
             },
         )
 
@@ -514,10 +545,13 @@ async def update_teacher_question(
     if not existing:
         raise ValueError("Question not found")
 
+    old_image_by_id = await load_question_image_map([existing])
+    image = await validate_question_image(payload.image_id, owner_user_id=current_user.user_id) if payload.image_id is not None else None
     updated = await update_teacher_question_by_id(
         question_id=question_id,
         teacher_id=current_user.user_id,
         payload={
+            "image_id": payload.image_id,
             "content": payload.content,
             "difficulty": payload.difficulty,
             "explanation": payload.explanation,
@@ -532,17 +566,19 @@ async def update_teacher_question(
         {
             "question_id": question_id,
             "changed_by": current_user.user_id,
-            "old_data": {
-                "content": existing.get("content"),
-                "difficulty": existing.get("difficulty"),
-                "explanation": existing.get("explanation"),
-                "options": existing.get("question_options") or [],
-            },
+            "old_data": _build_question_history_snapshot(existing, old_image_by_id),
             "new_data": {
-                "content": payload.content,
-                "difficulty": payload.difficulty,
-                "explanation": payload.explanation,
-                "options": payload.options,
+                **_build_question_history_snapshot(
+                    {
+                        **(updated or existing),
+                        "image_id": payload.image_id,
+                        "content": payload.content,
+                        "difficulty": payload.difficulty,
+                        "explanation": payload.explanation,
+                    },
+                    {int(image["image_id"]): image} if image else {},
+                    options=payload.options,
+                ),
                 "correct_option_index": payload.correct_option_index,
             },
             "change_type": "teacher_question_update",
@@ -555,7 +591,10 @@ async def update_teacher_question(
     if doc_topic:
         serialized = _serialize_document_topic_row(doc_topic)
         dt_map[serialized["document_topic_id"]] = serialized
-    return _serialize_question_item(refreshed or updated or existing, dt_map)
+    image_by_id = dict(old_image_by_id)
+    if image:
+        image_by_id[int(image["image_id"])] = image
+    return _serialize_question_item({**(refreshed or updated or existing), "_image_map": image_by_id}, dt_map)
 
 
 async def bulk_approve_teacher_questions(current_user: CurrentUser, payload: TeacherBulkQuestionStatusPayload) -> dict:
@@ -617,11 +656,13 @@ async def create_teacher_manual_question(current_user: CurrentUser, payload: Tea
     if not doc_topic:
         raise TeacherAiAuthorizationError("You can only create manual questions in your own document topics")
 
+    image = await validate_question_image(payload.image_id, owner_user_id=current_user.user_id) if payload.image_id is not None else None
     created = await create_question_record(
         {
             "teacher_id": current_user.user_id,
             "document_topic_id": payload.document_topic_id,
             "ai_request_id": None,
+            "image_id": payload.image_id,
             "content": payload.content,
             "difficulty": payload.difficulty,
             "source": "manual",
@@ -645,6 +686,8 @@ async def create_teacher_manual_question(current_user: CurrentUser, payload: Tea
                 "difficulty": payload.difficulty,
                 "status": "draft",
                 "source": "manual",
+                "image_id": payload.image_id,
+                "image": build_image_info(image) if image is not None else None,
             },
             "change_type": "teacher_manual_question_create",
         }
@@ -652,7 +695,7 @@ async def create_teacher_manual_question(current_user: CurrentUser, payload: Tea
     refreshed = await find_teacher_question_by_id(question_id=question_id, teacher_id=current_user.user_id)
     serialized_dt = _serialize_document_topic_row(doc_topic)
     return _serialize_question_item(
-        refreshed or created,
+        {**(refreshed or created), "_image_map": {int(image["image_id"]): image} if image else {}},
         {serialized_dt["document_topic_id"]: serialized_dt},
     )
 
@@ -829,6 +872,7 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
                         "teacher_id": teacher_id,
                         "document_topic_id": int(request["document_topic_id"]),
                         "ai_request_id": request_id,
+                        "image_id": None,
                         "content": item["content"],
                         "difficulty": item["difficulty"],
                         "source": "ai",

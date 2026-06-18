@@ -303,6 +303,9 @@ CREATE TABLE image_types (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+INSERT INTO image_types (type_code, type_name, description)
+VALUES ('question_image', 'Question Image', 'Images that can be attached to questions');
+
 CREATE TABLE images (
     image_id BIGSERIAL PRIMARY KEY,
     image_type_id BIGINT NOT NULL REFERENCES image_types(image_type_id),

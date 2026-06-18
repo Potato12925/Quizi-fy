@@ -17,6 +17,7 @@ Stores the question bank, including AI-generated and manually created questions.
 | `source` | `question_source` | not null | `ai` or `manual` |
 | `status` | `question_status` |  | Workflow status |
 | `explanation` | text |  | Answer explanation |
+| `image_id` | bigint |
 | `created_at` | timestamp |  | Creation time |
 | `updated_at` | timestamp |  | Last update time |
 | `deleted_at` | timestamp |  | Soft delete marker |
@@ -30,7 +31,7 @@ Stores the question bank, including AI-generated and manually created questions.
 - `question_history.question_id -> questions.question_id`
 - `practice_set_questions.question_id -> questions.question_id`
 - `student_answers.question_id -> questions.question_id`
-
+- `questions.image_id > images.image_id`
 ## Notes
 
 - This is a soft-delete table.

@@ -43,7 +43,7 @@ async def get_attempt_result_details(attempt_id: int) -> dict | None:
     
     answers_resp = await asyncio.to_thread(
         lambda: supabase.table("student_answers")
-        .select("*, questions(*, question_options(*))")
+        .select("*, questions(question_id,content,explanation,image_id,question_options(*))")
         .eq("attempt_id", attempt_id)
         .is_("deleted_at", None)
         .execute()

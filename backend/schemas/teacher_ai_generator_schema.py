@@ -58,6 +58,7 @@ class TeacherAiRequestCreatePayload(BaseModel):
 
 
 class TeacherQuestionUpdatePayload(BaseModel):
+    image_id: int | None = Field(default=None, ge=1)
     content: str = Field(min_length=1)
     difficulty: QuestionDifficulty
     explanation: str | None = Field(default=None, max_length=4000)
@@ -107,6 +108,7 @@ class TeacherAiReviewOptionPayload(BaseModel):
 
 class TeacherAiReviewQuestionPayload(BaseModel):
     question_id: int = Field(ge=1)
+    image_id: int | None = Field(default=None, ge=1)
     content: str = Field(min_length=1)
     difficulty: QuestionDifficulty
     status: ReviewableQuestionStatus
@@ -171,6 +173,7 @@ class TeacherBulkQuestionStatusPayload(BaseModel):
 
 class TeacherManualQuestionPayload(BaseModel):
     document_topic_id: int = Field(ge=1)
+    image_id: int | None = Field(default=None, ge=1)
     content: str = Field(min_length=1)
     difficulty: QuestionDifficulty
     explanation: str | None = Field(default=None, max_length=4000)

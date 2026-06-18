@@ -8,6 +8,7 @@ QUESTION_STATUSES = {"draft", "approved", "inactive", "rejected"}
 class ManualQuestionPayload(BaseModel):
     document_topic_id: int | None = Field(default=None, ge=1)
     topic_id: int | None = Field(default=None, ge=1)
+    image_id: int | None = Field(default=None, ge=1)
     content: str = Field(min_length=1)
     difficulty: QuestionDifficulty
     status: str = Field(default="draft")

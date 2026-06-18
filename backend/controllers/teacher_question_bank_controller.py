@@ -12,6 +12,7 @@ from services.teacher_question_bank_service import (
     update_teacher_question,
     update_teacher_question_status,
 )
+from utils.question_image_util import QuestionImageValidationError
 
 router = APIRouter(prefix="/teacher/question-bank", tags=["Teacher Question Bank"])
 
@@ -76,6 +77,8 @@ async def create_manual_question_route(
         return success_response(data=result, message="Question created successfully", status_code=201)
     except TeacherQuestionBankAuthorizationError as exc:
         return error_response(message=str(exc), status_code=403, error_code="TEACHER_QUESTION_BANK_CREATE_FORBIDDEN")
+    except QuestionImageValidationError as exc:
+        return error_response(message=str(exc), status_code=exc.status_code, error_code=exc.error_code)
     except ValueError as exc:
         return error_response(message=str(exc), status_code=400, error_code="TEACHER_QUESTION_BANK_CREATE_INVALID")
     except Exception:
@@ -93,6 +96,8 @@ async def update_teacher_question_route(
         return success_response(data=result, message="Question updated successfully", status_code=200)
     except TeacherQuestionBankAuthorizationError as exc:
         return error_response(message=str(exc), status_code=403, error_code="TEACHER_QUESTION_BANK_UPDATE_FORBIDDEN")
+    except QuestionImageValidationError as exc:
+        return error_response(message=str(exc), status_code=exc.status_code, error_code=exc.error_code)
     except ValueError as exc:
         status_code = 404 if str(exc) == "Question not found" else 400
         return error_response(message=str(exc), status_code=status_code, error_code="TEACHER_QUESTION_BANK_UPDATE_INVALID")

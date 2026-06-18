@@ -10,7 +10,7 @@ AI_REQUEST_SELECT = (
     "ai_request_difficulty_distribution(distribution_id,request_id,difficulty,percentage,question_count,created_at)"
 )
 QUESTION_SELECT = (
-    "question_id,teacher_id,document_topic_id,ai_request_id,content,difficulty,source,status,explanation,"
+    "question_id,teacher_id,document_topic_id,ai_request_id,image_id,content,difficulty,source,status,explanation,"
     "created_at,updated_at,deleted_at,"
     "question_options(option_id,option_label,option_text,is_correct,order_num)"
 )

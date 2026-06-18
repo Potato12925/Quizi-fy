@@ -24,6 +24,7 @@ from services.teacher_ai_generator_service import (
     retry_teacher_ai_request,
     update_teacher_question,
 )
+from utils.question_image_util import QuestionImageValidationError
 
 router = APIRouter(prefix="/teacher", tags=["Teacher AI Generator"])
 
@@ -131,6 +132,8 @@ async def confirm_teacher_ai_request_review_route(
             payload=payload,
         )
         return success_response(data=result, message="AI request review confirmed successfully", status_code=200)
+    except QuestionImageValidationError as exc:
+        return error_response(message=str(exc), status_code=exc.status_code, error_code=exc.error_code)
     except TeacherAiAuthorizationError as exc:
         return error_response(message=str(exc), status_code=403, error_code="TEACHER_AI_REQUEST_CONFIRM_FORBIDDEN")
     except TeacherAiValidationError as exc:
@@ -150,6 +153,8 @@ async def update_teacher_question_route(
     try:
         result = await update_teacher_question(current_user=current_user, question_id=question_id, payload=payload)
         return success_response(data=result, message="Question updated successfully", status_code=200)
+    except QuestionImageValidationError as exc:
+        return error_response(message=str(exc), status_code=exc.status_code, error_code=exc.error_code)
     except ValueError as exc:
         return error_response(message=str(exc), status_code=404, error_code="TEACHER_QUESTION_NOT_FOUND")
     except Exception:
@@ -188,6 +193,8 @@ async def create_teacher_manual_question_route(
     try:
         result = await create_teacher_manual_question(current_user=current_user, payload=payload)
         return success_response(data=result, message="Manual question created successfully", status_code=201)
+    except QuestionImageValidationError as exc:
+        return error_response(message=str(exc), status_code=exc.status_code, error_code=exc.error_code)
     except TeacherAiAuthorizationError as exc:
         return error_response(message=str(exc), status_code=403, error_code="TEACHER_MANUAL_QUESTION_CREATE_FORBIDDEN")
     except ValueError as exc:

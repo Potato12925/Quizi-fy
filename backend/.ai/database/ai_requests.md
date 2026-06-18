@@ -11,7 +11,6 @@ Tracks AI generation jobs for a specific document-topic scope.
 | `request_id` | bigint | PK | AI request identifier |
 | `document_topic_id` | bigint | not null, FK | Generation source scope |
 | `num_questions` | int | not null | Requested question count |
-| `difficulty` | `difficulty_level` | not null | Target difficulty |
 | `content_scope` | text |  | Optional content subset or prompt scope |
 | `status` | `ai_request_status` |  | Request lifecycle status |
 | `generated_question_count` | int |  | Actual generated count |
@@ -25,8 +24,10 @@ Tracks AI generation jobs for a specific document-topic scope.
 
 - `document_topic_id -> document_topics.document_topic_id`
 - `questions.ai_request_id -> ai_requests.request_id`
+- `ai_request_difficulty_distribution.request_id -> ai_requests.request_id`
 
 ## Notes
 
 - This table captures job orchestration metadata, not the generated questions themselves.
 - One request can produce many questions.
+- Difficulty targeting is stored in `ai_request_difficulty_distribution`, which may contain multiple rows per request.

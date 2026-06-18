@@ -49,7 +49,7 @@ export default function DashboardSidebar({ role }: { role?: 'student' | 'teacher
 
       <nav className="flex-1 px-6 mt-4 space-y-2">
         {currentMenu.map((item) => {
-          const isActive = pathname === item.path;
+          const isActive = pathname === item.path || pathname.startsWith(`${item.path}/`);
           return (
             <Link
               key={item.path}

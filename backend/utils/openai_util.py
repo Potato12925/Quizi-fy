@@ -15,7 +15,7 @@ class AiGenerationError(ValueError):
     pass
 
 
-def generate_mcq_questions_with_openai(
+def generate_mcq_questions_with_ai(
     *,
     document_text: str,
     difficulty: QuestionDifficulty,
@@ -24,7 +24,7 @@ def generate_mcq_questions_with_openai(
     existing_question_contents: list[str],
 ) -> list[dict]:
     if not Config.OPENAI_API_KEY:
-        raise AiGenerationError("Missing OpenAI API key")
+        raise AiGenerationError("Missing AI API key")
 
     prompt = _build_prompt(
         document_text=document_text,
@@ -52,21 +52,21 @@ def generate_mcq_questions_with_openai(
             ],
         )
     except Exception as exc:
-        raise AiGenerationError("OpenAI request failed") from exc
+        raise AiGenerationError("AI request failed") from exc
 
     content = response.choices[0].message.content if response.choices else None
     if not content:
-        raise AiGenerationError("OpenAI returned empty content")
+        raise AiGenerationError("AI returned empty content")
 
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError as exc:
-        raise AiGenerationError("OpenAI returned invalid JSON") from exc
+        raise AiGenerationError("AI returned invalid JSON") from exc
 
     try:
         validated = AiGeneratedQuestionsResponsePayload.model_validate(parsed)
     except Exception as exc:
-        raise AiGenerationError("OpenAI returned invalid question format") from exc
+        raise AiGenerationError("AI returned invalid question format") from exc
 
     results: list[dict] = []
     for item in validated.questions:
@@ -115,6 +115,12 @@ def _build_prompt(
         Difficulty must be "{difficulty}" for every question.
         Content scope: {scope_text}
 
+        Difficulty definitions (Vietnamese high-school standard):
+        - recognition (Nhận biết): kiểm tra nhớ khái niệm, định nghĩa, công thức, sự kiện
+        - comprehension (Thông hiểu): giải thích, so sánh, diễn giải bản chất
+        - application (Vận dụng): áp dụng kiến thức vào bài tập hoặc tình huống quen thuộc
+        - advanced (Vận dụng cao): tổng hợp, suy luận nhiều bước, phân hóa học sinh
+
         Avoid generating questions that are duplicates or very similar to existing questions:
         {existing_text}
 
@@ -126,7 +132,7 @@ def _build_prompt(
           "questions": [
             {{
               "content": "question text",
-              "difficulty": "easy|medium|hard",
+              "difficulty": "recognition|comprehension|application|advanced",
               "explanation": "brief explanation",
               "options": ["option A", "option B", "option C", "option D"],
               "correct_option": "A|B|C|D"
@@ -137,6 +143,8 @@ def _build_prompt(
         Rules:
         - Exactly 4 options.
         - Exactly 1 correct option.
+        - Every question must have difficulty "{difficulty}" exactly.
+        - Return exactly {num_questions} questions.
         - No markdown.
         - Output JSON only.
         """

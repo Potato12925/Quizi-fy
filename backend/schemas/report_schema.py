@@ -3,12 +3,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-
+from schemas.difficulty_schema import QuestionDifficulty
 SortOrder = Literal["asc", "desc"]
 ExportFormat = Literal["csv", "xlsx", "pdf"]
 ClassReportExportFormat = Literal["docx", "pdf"]
 QuestionStatus = Literal["draft", "approved", "inactive", "rejected"]
-QuestionDifficulty = Literal["easy", "medium", "hard"]
 QuestionSource = Literal["ai", "manual"]
 AiRequestStatus = Literal["pending", "processing", "completed", "failed", "cancelled"]
 

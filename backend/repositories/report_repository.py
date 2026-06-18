@@ -348,7 +348,7 @@ async def list_questions(
     query = (
         supabase.table("questions")
         .select(
-            "question_id,teacher_id,document_topic_id,ai_request_id,content,difficulty,source,status,explanation,created_at,updated_at,deleted_at"
+            "question_id,teacher_id,document_topic_id,ai_request_id,image_id,content,difficulty,source,status,explanation,created_at,updated_at,deleted_at"
         )
         .is_("deleted_at", None)
     )

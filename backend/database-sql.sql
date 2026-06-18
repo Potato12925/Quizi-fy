@@ -11,6 +11,7 @@ DROP TABLE IF EXISTS practice_sets CASCADE;
 DROP TABLE IF EXISTS question_options CASCADE;
 DROP TABLE IF EXISTS question_history CASCADE;
 DROP TABLE IF EXISTS questions CASCADE;
+DROP TABLE IF EXISTS ai_request_difficulty_distribution CASCADE;
 DROP TABLE IF EXISTS ai_requests CASCADE;
 DROP TABLE IF EXISTS document_topics CASCADE;
 DROP TABLE IF EXISTS documents CASCADE;
@@ -24,6 +25,8 @@ DROP TABLE IF EXISTS user_roles CASCADE;
 DROP TABLE IF EXISTS roles CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS images CASCADE;
+DROP TABLE IF EXISTS image_types CASCADE;
 
 DROP TYPE IF EXISTS active_status CASCADE;
 DROP TYPE IF EXISTS difficulty_level CASCADE;
@@ -35,11 +38,14 @@ DROP TYPE IF EXISTS practice_attempt_status CASCADE;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TYPE active_status AS ENUM ('active', 'inactive');
-CREATE TYPE difficulty_level AS ENUM ('easy', 'medium', 'hard');
+CREATE TYPE difficulty_level AS ENUM ('recognition', 'comprehension', 'application', 'advanced');
 CREATE TYPE ai_request_status AS ENUM ('pending', 'processing', 'completed', 'failed', 'cancelled');
 CREATE TYPE question_source AS ENUM ('ai', 'manual');
 CREATE TYPE question_status AS ENUM ('draft', 'approved', 'inactive', 'rejected');
 CREATE TYPE practice_attempt_status AS ENUM ('in_progress', 'submitted', 'timeout');
+
+
+
 
 CREATE TABLE users (
     user_id BIGSERIAL PRIMARY KEY,
@@ -63,7 +69,31 @@ CREATE TABLE roles (
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE image_types (
+    image_type_id BIGSERIAL PRIMARY KEY,
+    type_code VARCHAR(50) UNIQUE NOT NULL,
+    type_name VARCHAR(100) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
+INSERT INTO image_types (type_code, type_name, description)
+VALUES ('question_image', 'Question Image', 'Images that can be attached to questions');
+
+CREATE TABLE images (
+    image_id BIGSERIAL PRIMARY KEY,
+    image_type_id BIGINT NOT NULL REFERENCES image_types(image_type_id),
+    uploaded_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+
+    file_name VARCHAR(255),
+    file_url TEXT NOT NULL,
+    file_hash VARCHAR(255),
+    file_size BIGINT,
+    mime_type VARCHAR(100),
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
+);
 CREATE TABLE user_roles (
     user_role_id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -172,7 +202,6 @@ CREATE TABLE ai_requests (
     request_id BIGSERIAL PRIMARY KEY,
     document_topic_id BIGINT NOT NULL REFERENCES document_topics(document_topic_id) ON DELETE CASCADE,
     num_questions INT NOT NULL,
-    difficulty difficulty_level NOT NULL,
     content_scope TEXT,
     status ai_request_status DEFAULT 'pending',
     generated_question_count INT DEFAULT 0,
@@ -182,6 +211,20 @@ CREATE TABLE ai_requests (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_reviewed BOOLEAN NOT NULL DEFAULT FALSE
 );
+
+CREATE TABLE ai_request_difficulty_distribution (
+    distribution_id BIGSERIAL PRIMARY KEY,
+    request_id BIGINT NOT NULL REFERENCES ai_requests(request_id) ON DELETE CASCADE,
+    difficulty difficulty_level NOT NULL,
+    percentage INT,
+    question_count INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_ai_request_distribution UNIQUE(request_id, difficulty),
+    CONSTRAINT chk_ai_request_distribution_question_count CHECK (question_count > 0),
+    CONSTRAINT chk_ai_request_distribution_percentage CHECK (percentage IS NULL OR (percentage >= 0 AND percentage <= 100))
+);
+
+CREATE INDEX idx_ai_request_distribution_request_id ON ai_request_difficulty_distribution(request_id);
 
 CREATE TABLE questions (
     question_id BIGSERIAL PRIMARY KEY,
@@ -193,6 +236,7 @@ CREATE TABLE questions (
     source question_source NOT NULL,
     status question_status DEFAULT 'draft',
     explanation TEXT,
+    image_id BIGINT REFERENCES images(image_id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP
@@ -288,6 +332,7 @@ CREATE TABLE notifications (
 -- users 1---n documents
 -- documents 1---n document_topics n---1 topics
 -- document_topics 1---n ai_requests
+-- ai_requests 1---n ai_request_difficulty_distribution
 -- users 1---n questions
 -- document_topics 1---n questions
 -- ai_requests 1---n questions
@@ -302,7 +347,10 @@ CREATE TABLE notifications (
 -- practice_attempts 1---n student_answers n---1 questions
 -- question_options 1---n student_answers
 -- users 1---n notifications
-
+-- image_types 1---n images
+-- users 1---n images
+-- images 1---n questions
+-- questions n---1 images
 -- ================= SEED DATA =================
 -- Seed data is generated separately by:
 -- python database/generate_seed_sql.py

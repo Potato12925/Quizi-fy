@@ -1,6 +1,7 @@
 from math import ceil
 
 from repositories.ai_request_repository import (
+    bulk_create_ai_request_difficulty_distribution,
     create_ai_request_record,
     find_ai_request_by_id,
     list_ai_requests,
@@ -11,14 +12,26 @@ from schemas.ai_request_schema import AiRequestCreateRequest, AiRequestUpdateReq
 
 
 async def create_ai_request(payload: AiRequestCreateRequest) -> dict:
-    return await create_ai_request_record(
+    created = await create_ai_request_record(
         {
             "document_topic_id": payload.document_topic_id,
             "num_questions": payload.num_questions,
-            "difficulty": payload.difficulty,
             "content_scope": payload.content_scope,
         }
     )
+    await bulk_create_ai_request_difficulty_distribution(
+        [
+            {
+                "request_id": created["request_id"],
+                "difficulty": item.difficulty,
+                "percentage": item.percentage,
+                "question_count": item.question_count,
+            }
+            for item in payload.difficulty_distribution
+        ]
+    )
+    refreshed = await find_ai_request_by_id(int(created["request_id"]))
+    return refreshed or created
 
 
 async def get_ai_request_by_id(record_id: int) -> dict:

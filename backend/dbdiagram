@@ -12,9 +12,10 @@ cancelled
 }
 
 Enum difficulty_level {
-easy
-medium
-hard
+recognition
+comprehension
+application
+advanced
 }
 
 Enum practice_attempt_status {
@@ -149,7 +150,6 @@ Table ai_requests {
 request_id bigint [pk]
 document_topic_id bigint [not null]
 num_questions int [not null]
-difficulty difficulty_level [not null]
 content_scope text
 status ai_request_status
 generated_question_count int
@@ -158,6 +158,19 @@ error_message text
 is_reviewed boolean [default: false]
 created_at timestamp
 updated_at timestamp
+}
+
+Table ai_request_difficulty_distribution {
+distribution_id bigint [pk]
+request_id bigint [not null]
+difficulty difficulty_level [not null]
+percentage int
+question_count int [not null]
+created_at timestamp
+
+indexes {
+  (request_id, difficulty) [unique]
+}
 }
 
 Table questions {
@@ -170,6 +183,7 @@ difficulty difficulty_level [not null]
 source question_source [not null]
 status question_status
 explanation text
+image_id bigint
 created_at timestamp
 updated_at timestamp
 deleted_at timestamp
@@ -245,7 +259,26 @@ content text
 is_read boolean
 created_at timestamp
 }
+Table image_types {
+  image_type_id bigint [pk]
+  type_code varchar [not null, unique]
+  type_name varchar [not null]
+  description text
+  created_at timestamp
+}
 
+Table images {
+  image_id bigint [pk]
+  image_type_id bigint [not null]
+  uploaded_by bigint
+  file_name varchar
+  file_url text [not null]
+  file_hash varchar
+  file_size bigint
+  mime_type varchar
+  created_at timestamp
+  deleted_at timestamp
+}
 Ref: user_roles.user_id > users.user_id
 Ref: user_roles.role_id > roles.role_id
 
@@ -269,6 +302,7 @@ Ref: document_topics.document_id > documents.document_id
 Ref: document_topics.topic_id > topics.topic_id
 
 Ref: ai_requests.document_topic_id > document_topics.document_topic_id
+Ref: ai_request_difficulty_distribution.request_id > ai_requests.request_id
 
 Ref: questions.teacher_id > users.user_id
 Ref: questions.document_topic_id > document_topics.document_topic_id
@@ -293,3 +327,7 @@ Ref: student_answers.question_id > questions.question_id
 Ref: student_answers.selected_option_id > question_options.option_id
 
 Ref: notifications.user_id > users.user_id
+
+Ref: images.image_type_id > image_types.image_type_id
+Ref: images.uploaded_by > users.user_id
+Ref: questions.image_id > images.image_id

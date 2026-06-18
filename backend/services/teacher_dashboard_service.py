@@ -65,6 +65,22 @@ def _build_document_topic_ids_by_document(context_by_document_topic_id: dict[int
     return ids_by_document
 
 
+def _serialize_difficulty_distribution(items: list[dict] | None) -> list[dict]:
+    rows = items or []
+    sorted_rows = sorted(
+        rows,
+        key=lambda item: (int(item.get("created_at") is None), int(item.get("distribution_id") or 0)),
+    )
+    return [
+        {
+            "difficulty": item.get("difficulty"),
+            "percentage": _safe_int(item.get("percentage")) if item.get("percentage") is not None else None,
+            "question_count": _safe_int(item.get("question_count")),
+        }
+        for item in sorted_rows
+    ]
+
+
 def _serialize_recent_ai_request(item: dict, context_by_document_topic_id: dict[int, dict]) -> dict:
     document_topic_id = _safe_int(item.get("document_topic_id"))
     context = context_by_document_topic_id.get(document_topic_id) or {}
@@ -81,7 +97,9 @@ def _serialize_recent_ai_request(item: dict, context_by_document_topic_id: dict[
         "subject_id": context.get("subject_id"),
         "subject_name": context.get("subject_name"),
         "num_questions": _safe_int(item.get("num_questions")),
-        "difficulty": item.get("difficulty"),
+        "difficulty_distribution": _serialize_difficulty_distribution(
+            item.get("ai_request_difficulty_distribution")
+        ),
         "status": item.get("status"),
         "generated_question_count": _safe_int(item.get("generated_question_count")),
         "is_reviewed": bool(item.get("is_reviewed")),
@@ -188,9 +206,10 @@ async def get_teacher_dashboard_stats(current_user: CurrentUser, recent_limit: i
     question_approved = 0
     question_rejected = 0
     question_inactive = 0
-    question_easy = 0
-    question_medium = 0
-    question_hard = 0
+    question_recognition = 0
+    question_comprehension = 0
+    question_application = 0
+    question_advanced = 0
     question_count_by_document_topic_id: dict[int, int] = {}
     for row in question_stats_rows:
         status = str(row.get("status") or "")
@@ -204,12 +223,14 @@ async def get_teacher_dashboard_stats(current_user: CurrentUser, recent_limit: i
             question_inactive += 1
 
         difficulty = str(row.get("difficulty") or "")
-        if difficulty == "easy":
-            question_easy += 1
-        elif difficulty == "medium":
-            question_medium += 1
-        elif difficulty == "hard":
-            question_hard += 1
+        if difficulty == "recognition":
+            question_recognition += 1
+        elif difficulty == "comprehension":
+            question_comprehension += 1
+        elif difficulty == "application":
+            question_application += 1
+        elif difficulty == "advanced":
+            question_advanced += 1
 
         document_topic_id = _safe_int(row.get("document_topic_id"))
         if document_topic_id > 0:
@@ -327,9 +348,10 @@ async def get_teacher_dashboard_stats(current_user: CurrentUser, recent_limit: i
             "inactive": question_inactive,
         },
         "question_difficulty": {
-            "easy": question_easy,
-            "medium": question_medium,
-            "hard": question_hard,
+            "recognition": question_recognition,
+            "comprehension": question_comprehension,
+            "application": question_application,
+            "advanced": question_advanced,
         },
         "insights": {
             "ai_completion_rate_pct": _safe_pct(ai_completed, total_ai_requests),

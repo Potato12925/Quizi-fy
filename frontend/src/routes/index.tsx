@@ -19,6 +19,8 @@ import AdminSubjects from '@/pages/admin/AdminSubjects';
 // Teacher Pages
 import TeacherDashboard from '@/pages/teacher/TeacherDashboard';
 import TeacherAIGenerator from '@/pages/teacher/TeacherAIGenerator';
+import TeacherAIGeneratorCreatePage from '@/pages/teacher/ai-generator/TeacherAIGeneratorCreatePage';
+import TeacherAIGeneratorRequestPage from '@/pages/teacher/ai-generator/TeacherAIGeneratorRequestPage';
 import TeacherQuestionBank from '@/pages/teacher/TeacherQuestionBank';
 import TeacherResources from '@/pages/teacher/TeacherResources';
 import TeacherSubjects from '@/pages/teacher/TeacherSubjects';
@@ -102,6 +104,16 @@ export const router = createBrowserRouter([
           {
             path: 'ai-generator',
             element: <TeacherAIGenerator />,
+            children: [
+              {
+                index: true,
+                element: <TeacherAIGeneratorCreatePage />,
+              },
+              {
+                path: 'requests/:requestId',
+                element: <TeacherAIGeneratorRequestPage />,
+              },
+            ],
           },
           {
             path: 'question-bank',

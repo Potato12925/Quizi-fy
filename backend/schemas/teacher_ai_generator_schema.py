@@ -2,16 +2,22 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from schemas.difficulty_schema import QUESTION_DIFFICULTIES, QuestionDifficulty
 
-QuestionDifficulty = Literal["easy", "medium", "hard"]
 QuestionStatus = Literal["draft", "approved", "inactive", "rejected"]
 ReviewableQuestionStatus = Literal["draft", "approved", "rejected"]
+
+
+class TeacherAiDifficultyDistributionPayload(BaseModel):
+    difficulty: QuestionDifficulty
+    percentage: int | None = Field(default=None, ge=0, le=100)
+    question_count: int = Field(ge=1)
 
 
 class TeacherAiRequestCreatePayload(BaseModel):
     document_topic_id: int = Field(ge=1)
     num_questions: int = Field(ge=1, le=100)
-    difficulty: QuestionDifficulty
+    difficulty_distribution: list[TeacherAiDifficultyDistributionPayload] = Field(min_length=1)
     content_scope: str | None = Field(default=None, max_length=4000)
 
     @field_validator("content_scope")
@@ -22,8 +28,37 @@ class TeacherAiRequestCreatePayload(BaseModel):
         normalized = value.strip()
         return normalized or None
 
+    @field_validator("difficulty_distribution")
+    @classmethod
+    def validate_difficulty_distribution(
+        cls,
+        value: list[TeacherAiDifficultyDistributionPayload],
+        info,
+    ) -> list[TeacherAiDifficultyDistributionPayload]:
+        if not value:
+            raise ValueError("difficulty_distribution must not be empty")
+
+        difficulties = [item.difficulty for item in value]
+        if len(set(difficulties)) != len(difficulties):
+            raise ValueError("difficulty_distribution contains duplicate difficulty values")
+
+        total_question_count = sum(item.question_count for item in value)
+        num_questions = info.data.get("num_questions")
+        if isinstance(num_questions, int) and total_question_count != num_questions:
+            raise ValueError("sum of difficulty_distribution.question_count must equal num_questions")
+
+        percentages = [item.percentage for item in value]
+        has_percentage = any(item is not None for item in percentages)
+        if has_percentage:
+            if any(item is None for item in percentages):
+                raise ValueError("percentage must be provided for every difficulty when used")
+            if sum(int(item or 0) for item in percentages) != 100:
+                raise ValueError("sum of difficulty_distribution.percentage must equal 100")
+        return value
+
 
 class TeacherQuestionUpdatePayload(BaseModel):
+    image_id: int | None = Field(default=None, ge=1)
     content: str = Field(min_length=1)
     difficulty: QuestionDifficulty
     explanation: str | None = Field(default=None, max_length=4000)
@@ -73,6 +108,7 @@ class TeacherAiReviewOptionPayload(BaseModel):
 
 class TeacherAiReviewQuestionPayload(BaseModel):
     question_id: int = Field(ge=1)
+    image_id: int | None = Field(default=None, ge=1)
     content: str = Field(min_length=1)
     difficulty: QuestionDifficulty
     status: ReviewableQuestionStatus
@@ -137,6 +173,7 @@ class TeacherBulkQuestionStatusPayload(BaseModel):
 
 class TeacherManualQuestionPayload(BaseModel):
     document_topic_id: int = Field(ge=1)
+    image_id: int | None = Field(default=None, ge=1)
     content: str = Field(min_length=1)
     difficulty: QuestionDifficulty
     explanation: str | None = Field(default=None, max_length=4000)
@@ -194,6 +231,13 @@ class AiGeneratedQuestionPayload(BaseModel):
         if any(not item for item in normalized):
             raise ValueError("options must not contain empty values")
         return normalized
+
+    @field_validator("difficulty")
+    @classmethod
+    def validate_difficulty(cls, value: QuestionDifficulty) -> QuestionDifficulty:
+        if value not in QUESTION_DIFFICULTIES:
+            raise ValueError("difficulty is invalid")
+        return value
 
 
 class AiGeneratedQuestionsResponsePayload(BaseModel):

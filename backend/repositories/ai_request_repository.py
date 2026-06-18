@@ -3,7 +3,11 @@ import asyncio
 from core.supabase import SupabaseManager
 
 
-SELECT_FIELDS = "request_id,document_topic_id,num_questions,difficulty,content_scope,status,generated_question_count,retry_count,error_message,created_at,updated_at"
+SELECT_FIELDS = (
+    "request_id,document_topic_id,num_questions,content_scope,status,generated_question_count,retry_count,"
+    "error_message,is_reviewed,created_at,updated_at,"
+    "ai_request_difficulty_distribution(distribution_id,request_id,difficulty,percentage,question_count,created_at)"
+)
 HAS_DELETED = False
 
 
@@ -22,6 +26,16 @@ async def create_ai_request_record(payload: dict) -> dict:
     if not rows:
         raise ValueError("Unable to create ai_request")
     return rows[0]
+
+
+async def bulk_create_ai_request_difficulty_distribution(payloads: list[dict]) -> list[dict]:
+    if not payloads:
+        return []
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("ai_request_difficulty_distribution").insert(payloads).execute()
+    )
+    return response.data or []
 
 
 async def list_ai_requests(page: int, limit: int) -> tuple[list[dict], int]:

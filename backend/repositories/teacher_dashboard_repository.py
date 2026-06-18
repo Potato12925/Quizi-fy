@@ -192,8 +192,9 @@ async def list_recent_ai_requests_by_document_topic_ids(document_topic_ids: list
     response = await asyncio.to_thread(
         lambda: supabase.table("ai_requests")
         .select(
-            "request_id,document_topic_id,num_questions,difficulty,content_scope,status,"
-            "generated_question_count,retry_count,error_message,is_reviewed,created_at,updated_at"
+            "request_id,document_topic_id,num_questions,content_scope,status,"
+            "generated_question_count,retry_count,error_message,is_reviewed,created_at,updated_at,"
+            "ai_request_difficulty_distribution(distribution_id,request_id,difficulty,percentage,question_count,created_at)"
         )
         .in_("document_topic_id", document_topic_ids)
         .order("created_at", desc=True)

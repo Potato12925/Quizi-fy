@@ -18,6 +18,7 @@ from repositories.practice_set_repository import find_practice_sets_with_subject
 from repositories.user_repository import find_user_by_id
 from schemas.practice_attempt_schema import PracticeAttemptCreateRequest, PracticeAttemptUpdateRequest, PracticeAttemptStartRequest
 from schemas.student_answer_schema import StudentAnswerSaveRequest
+from utils.question_image_util import build_image_info, load_question_image_map
 
 
 async def create_practice_attempt(payload: PracticeAttemptCreateRequest) -> dict:
@@ -131,17 +132,22 @@ async def get_attempt_result(attempt_id: int) -> dict:
         raise ValueError("PracticeAttempt not found")
         
     answers = details.get("answers", [])
+    question_rows = [ans.get("questions") for ans in answers if ans.get("questions")]
+    image_by_id = await load_question_image_map(question_rows)
     formatted_questions = []
     for ans in answers:
         q = ans.get("questions")
         if not q:
             continue
         opts = q.get("question_options", [])
+        image_id = int(q["image_id"]) if q.get("image_id") is not None else None
         
         formatted_questions.append({
             "question_id": q["question_id"],
             "content": q["content"],
             "explanation": q["explanation"],
+            "image_id": image_id,
+            "image": build_image_info(image_by_id.get(image_id)) if image_id is not None else None,
             "selected_option_id": ans["selected_option_id"],
             "is_correct": ans["is_correct"],
             "options": [
@@ -171,12 +177,14 @@ async def get_attempt_questions(attempt_id: int) -> dict:
     
     ps_id = attempt["practice_set_id"]
     psq_resp = await asyncio.to_thread(lambda: supabase.table("practice_set_questions")
-        .select("order_num, questions(*, question_options(option_id, option_text, order_num))")
+        .select("order_num, questions(question_id,content,image_id,question_options(option_id, option_text, order_num))")
         .eq("practice_set_id", ps_id)
         .order("order_num")
         .execute()
     )
     questions_data = psq_resp.data or []
+    question_rows = [row.get("questions") for row in questions_data if row.get("questions")]
+    image_by_id = await load_question_image_map(question_rows)
     
     answers_resp = await asyncio.to_thread(
         lambda: supabase.table("student_answers")
@@ -193,10 +201,13 @@ async def get_attempt_questions(attempt_id: int) -> dict:
         if not q: continue
         opts = q.get("question_options", [])
         opts.sort(key=lambda x: x.get("order_num", 0))
+        image_id = int(q["image_id"]) if q.get("image_id") is not None else None
         
         formatted_questions.append({
             "question_id": q["question_id"],
             "content": q["content"],
+            "image_id": image_id,
+            "image": build_image_info(image_by_id.get(image_id)) if image_id is not None else None,
             "options": [{"option_id": o["option_id"], "option_text": o["option_text"]} for o in opts],
             "order_num": row["order_num"],
             "selected_option_id": answers.get(q["question_id"])

@@ -5,11 +5,12 @@ from core.supabase import SupabaseManager
 
 
 AI_REQUEST_SELECT = (
-    "request_id,document_topic_id,num_questions,difficulty,content_scope,status,"
-    "generated_question_count,retry_count,error_message,is_reviewed,created_at,updated_at"
+    "request_id,document_topic_id,num_questions,content_scope,status,"
+    "generated_question_count,retry_count,error_message,is_reviewed,created_at,updated_at,"
+    "ai_request_difficulty_distribution(distribution_id,request_id,difficulty,percentage,question_count,created_at)"
 )
 QUESTION_SELECT = (
-    "question_id,teacher_id,document_topic_id,ai_request_id,content,difficulty,source,status,explanation,"
+    "question_id,teacher_id,document_topic_id,ai_request_id,image_id,content,difficulty,source,status,explanation,"
     "created_at,updated_at,deleted_at,"
     "question_options(option_id,option_label,option_text,is_correct,order_num)"
 )
@@ -68,6 +69,16 @@ async def create_ai_request_record(payload: dict) -> dict:
     if not rows:
         raise ValueError("Unable to create ai_request")
     return rows[0]
+
+
+async def bulk_create_ai_request_difficulty_distribution(payloads: list[dict]) -> list[dict]:
+    if not payloads:
+        return []
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("ai_request_difficulty_distribution").insert(payloads).execute()
+    )
+    return response.data or []
 
 
 async def find_active_ai_request_for_document_topic(document_topic_id: int) -> dict | None:

@@ -4,7 +4,10 @@ from datetime import datetime, timezone
 from core.supabase import SupabaseManager
 
 
-QUESTION_SELECT = "question_id,teacher_id,document_topic_id,content,difficulty,source,status,explanation,created_at,updated_at,question_options(option_id,option_label,option_text,is_correct,order_num)"
+QUESTION_SELECT = (
+    "question_id,teacher_id,document_topic_id,image_id,content,difficulty,source,status,explanation,"
+    "created_at,updated_at,question_options(option_id,option_label,option_text,is_correct,order_num)"
+)
 
 
 async def list_teacher_document_topic_options(

@@ -58,32 +58,30 @@ async def list_teacher_document_topics_scope(teacher_id: int) -> list[dict]:
 
 async def list_scoped_practice_sets(
     assigned_subject_ids: list[int],
-    scoped_document_topic_ids: list[int],
+    scoped_topic_ids: list[int],
 ) -> list[dict]:
     if not assigned_subject_ids:
         return []
     supabase = SupabaseManager.get_client()
-    # Subject scope is always enforced. Topic scope is optional via document_topic_id.
     base_rows_response = await asyncio.to_thread(
         lambda: supabase.table("practice_sets")
-        .select("practice_set_id,student_id,subject_id,document_topic_id")
+        .select("practice_set_id,student_id,subject_id,topic_id")
         .in_("subject_id", assigned_subject_ids)
         .is_("deleted_at", None)
         .execute()
     )
     base_rows = base_rows_response.data or []
-    if not scoped_document_topic_ids:
-        return [row for row in base_rows if row.get("document_topic_id") is None]
+    if not scoped_topic_ids:
+        return base_rows
 
-    scoped_document_topic_id_set = set(int(item) for item in scoped_document_topic_ids)
+    scoped_topic_id_set = set(int(item) for item in scoped_topic_ids)
     scoped_rows: list[dict] = []
     for row in base_rows:
-        document_topic_id = row.get("document_topic_id")
-        if document_topic_id is None:
-            scoped_rows.append(row)
+        row_topic_id = row.get("topic_id")
+        if row_topic_id is None:
             continue
         try:
-            if int(document_topic_id) in scoped_document_topic_id_set:
+            if int(row_topic_id) in scoped_topic_id_set:
                 scoped_rows.append(row)
         except (TypeError, ValueError):
             continue
@@ -118,13 +116,13 @@ async def list_student_answers_by_attempt_ids(attempt_ids: list[int]) -> list[di
     return response.data or []
 
 
-async def list_question_document_topics(question_ids: list[int]) -> list[dict]:
+async def list_question_topic_rows(question_ids: list[int]) -> list[dict]:
     if not question_ids:
         return []
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("questions")
-        .select("question_id,document_topic_id")
+        .select("question_id,topic_id")
         .in_("question_id", question_ids)
         .is_("deleted_at", None)
         .execute()

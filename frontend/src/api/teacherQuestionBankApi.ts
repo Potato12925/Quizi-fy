@@ -51,26 +51,16 @@ export interface TeacherQuestionBankItem {
   explanation?: string;
   created_at: string;
   updated_at?: string;
-  document_topic_id: number;
+  document_topic_id?: number | null;
   image_id?: number | null;
   image?: QuestionImageInfo | null;
   topic_id: number;
   topic_name: string;
   subject_id: number;
   subject_name: string;
-  document_id: number;
-  document_title: string;
+  document_id?: number | null;
+  document_title?: string | null;
   options: QuestionOptionItem[];
-}
-
-export interface DocumentTopicOption {
-  document_topic_id: number;
-  document_id: number;
-  document_title: string;
-  topic_id: number;
-  topic_name: string;
-  subject_id: number;
-  subject_name: string;
 }
 
 export interface QuestionBankFilters {
@@ -86,8 +76,7 @@ export interface QuestionBankFilters {
 }
 
 export interface ManualQuestionPayloadV2 {
-  document_topic_id?: number;
-  topic_id?: number;
+  topic_id: number;
   image_id?: number | null;
   content: string;
   difficulty: QuestionDifficulty;
@@ -144,19 +133,6 @@ export const getTeacherQuestionBank = async (
 
   const res = await api.get<ApiEnvelope<TeacherQuestionBankItem[]>>('/teacher/question-bank', { params });
   return { items: res.data || [], meta: res.meta || null };
-};
-
-export const getDocumentTopicOptions = async (
-  subjectId: number,
-  topicId?: number,
-): Promise<DocumentTopicOption[]> => {
-  const params: Record<string, string> = { subject_id: String(subjectId) };
-  if (topicId) params.topic_id = String(topicId);
-  const res = await api.get<ApiEnvelope<DocumentTopicOption[]>>(
-    '/teacher/question-bank/document-topic-options',
-    { params },
-  );
-  return res.data || [];
 };
 
 export const createTeacherManualQuestion = async (

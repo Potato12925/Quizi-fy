@@ -435,7 +435,7 @@ DOCUMENT_TOPICS = [
 
 # (
 #   ai_request_key,
-#   document_topic_key,
+#   topic_key,
 #   num_questions,
 #   content_scope,
 #   status,
@@ -609,7 +609,7 @@ AI_REQUESTS = [
 # (
 #   question_key,
 #   teacher_key,
-#   document_topic_key,
+#   topic_key,
 #   ai_request_key,
 #   content,
 #   difficulty,
@@ -621,7 +621,7 @@ QUESTIONS = [
     (
         "Q001",
         "USR002",
-        "DT001",
+        "TOP001",
         None,
         "Đồ thị của hàm số y = ax^2 + bx + c (a ≠ 0) là đường gì?",
         "recognition",
@@ -632,7 +632,7 @@ QUESTIONS = [
     (
         "Q002",
         "USR002",
-        "DT001",
+        "TOP001",
         None,
         "Với hàm số y = ax^2 + bx + c, trục đối xứng của parabol có dạng nào?",
         "comprehension",
@@ -643,7 +643,7 @@ QUESTIONS = [
     (
         "Q003",
         "USR002",
-        "DT002",
+        "TOP007",
         None,
         "Đạo hàm của hàm số y = x^3 là gì?",
         "recognition",
@@ -654,7 +654,7 @@ QUESTIONS = [
     (
         "Q004",
         "USR002",
-        "DT003",
+        "TOP017",
         None,
         "Giá trị của tích phân từ 0 đến 1 của hàm số x dx bằng bao nhiêu?",
         "comprehension",
@@ -665,7 +665,7 @@ QUESTIONS = [
     (
         "Q005",
         "USR003",
-        "DT004",
+        "TOP003",
         None,
         "Tác phẩm Vợ nhặt của Kim Lân viết về bối cảnh nào?",
         "comprehension",
@@ -676,7 +676,7 @@ QUESTIONS = [
     (
         "Q006",
         "USR003",
-        "DT005",
+        "TOP008",
         None,
         "Phong trào Thơ mới ở Việt Nam phát triển mạnh trong giai đoạn nào?",
         "comprehension",
@@ -687,7 +687,7 @@ QUESTIONS = [
     (
         "Q007",
         "USR004",
-        "DT006",
+        "TOP004",
         None,
         "Cấu trúc khẳng định của thì hiện tại hoàn thành là gì?",
         "recognition",
@@ -698,7 +698,7 @@ QUESTIONS = [
     (
         "Q008",
         "USR004",
-        "DT007",
+        "TOP015",
         None,
         "Trong câu điều kiện loại 2, mệnh đề if thường dùng thì nào?",
         "comprehension",
@@ -709,7 +709,7 @@ QUESTIONS = [
     (
         "Q009",
         "USR004",
-        "DT007",
+        "TOP015",
         None,
         "Trong câu bị động ở thì hiện tại đơn, cấu trúc đúng là gì?",
         "comprehension",
@@ -720,7 +720,7 @@ QUESTIONS = [
     (
         "Q010",
         "USR004",
-        "DT008",
+        "TOP023",
         None,
         "Để xác định ý chính của một đoạn văn tiếng Anh, học sinh nên làm gì trước tiên?",
         "recognition",
@@ -731,7 +731,7 @@ QUESTIONS = [
     (
         "Q011",
         "USR005",
-        "DT009",
+        "TOP005",
         None,
         "Đơn vị của vận tốc trong hệ SI là gì?",
         "recognition",
@@ -742,7 +742,7 @@ QUESTIONS = [
     (
         "Q012",
         "USR005",
-        "DT010",
+        "TOP010",
         None,
         "Trong dao động điều hòa, li độ biến thiên theo hàm nào của thời gian?",
         "advanced",
@@ -753,7 +753,7 @@ QUESTIONS = [
     (
         "Q013",
         "USR006",
-        "DT011",
+        "TOP006",
         None,
         "Hạt nhân nguyên tử được cấu tạo từ những hạt nào?",
         "recognition",
@@ -764,7 +764,7 @@ QUESTIONS = [
     (
         "Q014",
         "USR007",
-        "DT012",
+        "TOP012",
         None,
         "Gen là một đoạn của phân tử nào?",
         "recognition",
@@ -775,7 +775,7 @@ QUESTIONS = [
     (
         "Q015",
         "USR008",
-        "DT013",
+        "TOP019",
         None,
         "Cách mạng tháng Tám năm 1945 đã dẫn tới sự ra đời của nhà nước nào?",
         "comprehension",
@@ -786,7 +786,7 @@ QUESTIONS = [
     (
         "Q016",
         "USR009",
-        "DT014",
+        "TOP020",
         None,
         "Vùng nào sau đây có thế mạnh nổi bật về cây công nghiệp lâu năm?",
         "comprehension",
@@ -797,7 +797,7 @@ QUESTIONS = [
     (
         "Q017",
         "USR010",
-        "DT015",
+        "TOP021",
         None,
         "Công dân Việt Nam đủ bao nhiêu tuổi thì có quyền bầu cử?",
         "recognition",
@@ -808,7 +808,7 @@ QUESTIONS = [
     (
         "Q018",
         "USR011",
-        "DT016",
+        "TOP016",
         None,
         "Trong bảng tính, hàm SUM dùng để làm gì?",
         "recognition",
@@ -926,7 +926,7 @@ QUESTION_HISTORY = [
 #   practice_set_key,
 #   student_key,
 #   subject_key,
-#   document_topic_key,
+#   topic_key,
 #   difficulty,
 #   num_questions_requested,
 #   num_questions_actual,
@@ -934,14 +934,14 @@ QUESTION_HISTORY = [
 #   prioritize_unanswered,
 # )
 PRACTICE_SETS = [
-    ("PS001", "USR012", "SUB001", "DT001", "recognition", 2, 2, 15, True),
-    ("PS002", "USR018", "SUB003", "DT007", "comprehension", 2, 2, 20, True),
-    ("PS003", "USR024", "SUB001", "DT002", "recognition", 1, 1, 15, False),
-    ("PS004", "USR030", "SUB002", "DT004", "comprehension", 1, 1, 20, True),
-    ("PS005", "USR036", "SUB006", "DT012", "recognition", 1, 1, 10, False),
-    ("PS006", "USR042", "SUB007", "DT013", "comprehension", 1, 1, 15, True),
-    ("PS007", "USR045", "SUB008", "DT014", "comprehension", 1, 1, 15, True),
-    ("PS008", "USR047", "SUB010", "DT016", "recognition", 1, 1, 10, False),
+    ("PS001", "USR012", "SUB001", "TOP001", "recognition", 2, 2, 15, True),
+    ("PS002", "USR018", "SUB003", "TOP015", "comprehension", 2, 2, 20, True),
+    ("PS003", "USR024", "SUB001", "TOP007", "recognition", 1, 1, 15, False),
+    ("PS004", "USR030", "SUB002", "TOP003", "comprehension", 1, 1, 20, True),
+    ("PS005", "USR036", "SUB006", "TOP012", "recognition", 1, 1, 10, False),
+    ("PS006", "USR042", "SUB007", "TOP019", "comprehension", 1, 1, 15, True),
+    ("PS007", "USR045", "SUB008", "TOP020", "comprehension", 1, 1, 15, True),
+    ("PS008", "USR047", "SUB010", "TOP016", "recognition", 1, 1, 10, False),
 ]
 
 # (practice_set_question_key, practice_set_key, question_key, order_num)
@@ -1254,7 +1254,7 @@ class Seeder:
         rows = [
             {
                 "teacher_id": self.user_ids[teacher_key],
-                "document_topic_id": self.document_topic_ids[document_topic_key],
+                "topic_id": self.topic_ids[topic_key],
                 "ai_request_id": self.ai_request_ids[ai_request_key] if ai_request_key else None,
                 "content": content,
                 "difficulty": difficulty,
@@ -1265,7 +1265,7 @@ class Seeder:
             for (
                 _,
                 teacher_key,
-                document_topic_key,
+                topic_key,
                 ai_request_key,
                 content,
                 difficulty,
@@ -1309,7 +1309,7 @@ class Seeder:
             {
                 "student_id": self.user_ids[student_key],
                 "subject_id": self.subject_ids[subject_key],
-                "document_topic_id": self.document_topic_ids[document_topic_key],
+                "topic_id": self.topic_ids[topic_key],
                 "difficulty": difficulty,
                 "num_questions_requested": num_questions_requested,
                 "num_questions_actual": num_questions_actual,
@@ -1320,7 +1320,7 @@ class Seeder:
                 _,
                 student_key,
                 subject_key,
-                document_topic_key,
+                topic_key,
                 difficulty,
                 num_questions_requested,
                 num_questions_actual,

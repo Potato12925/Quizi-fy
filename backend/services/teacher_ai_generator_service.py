@@ -14,6 +14,7 @@ from repositories.teacher_ai_generator_repository import (
     find_ai_request_by_id,
     find_teacher_document_topic_row,
     find_teacher_question_by_id,
+    find_teacher_topic_row,
     list_ai_requests_by_document_topic_ids,
     list_existing_question_contents,
     list_questions_by_ai_request_id,
@@ -111,8 +112,25 @@ def _serialize_document_topic_row(row: dict) -> dict:
 
 
 def _serialize_question_item(item: dict, document_topic_map: dict[int, dict]) -> dict:
-    dt_id = int(item["document_topic_id"])
-    doc_topic = document_topic_map.get(dt_id) or {}
+    topic = item.get("topics") or {}
+    class_subject = topic.get("class_subjects") or {}
+    subject = class_subject.get("subjects") or {}
+    ai_request = item.get("ai_requests") or {}
+    dt_id = int(ai_request["document_topic_id"]) if ai_request.get("document_topic_id") is not None else None
+    doc_topic = document_topic_map.get(dt_id or 0) or {}
+    if not doc_topic:
+        nested_document_topic = ai_request.get("document_topics") or {}
+        nested_document = nested_document_topic.get("documents") or {}
+        doc_topic = {
+            "document_topic_id": dt_id,
+            "document_id": nested_document.get("document_id"),
+            "document_title": nested_document.get("title"),
+            "topic_id": topic.get("topic_id") or nested_document_topic.get("topic_id"),
+            "topic_name": topic.get("topic_name"),
+            "class_subject_id": topic.get("class_subject_id"),
+            "subject_id": class_subject.get("subject_id"),
+            "subject_name": subject.get("subject_name"),
+        }
     options = sorted(item.get("question_options") or [], key=lambda opt: int(opt.get("order_num") or 0))
     image_id = int(item["image_id"]) if item.get("image_id") is not None else None
     image_map = item.get("_image_map") or {}
@@ -120,7 +138,7 @@ def _serialize_question_item(item: dict, document_topic_map: dict[int, dict]) ->
         "question_id": int(item["question_id"]),
         "teacher_id": int(item["teacher_id"]),
         "document_topic_id": dt_id,
-        "ai_request_id": item.get("ai_request_id"),
+        "ai_request_id": int(item["ai_request_id"]) if item.get("ai_request_id") is not None else None,
         "image_id": image_id,
         "image": build_image_info(image_map.get(image_id)) if image_id is not None else None,
         "content": item.get("content"),
@@ -144,6 +162,7 @@ def _serialize_question_item(item: dict, document_topic_map: dict[int, dict]) ->
 def _build_question_history_snapshot(item: dict, image_by_id: dict[int, dict] | None = None, options: list[dict] | None = None) -> dict:
     image_id = int(item["image_id"]) if item.get("image_id") is not None else None
     return {
+        "topic_id": int(item["topic_id"]) if item.get("topic_id") is not None else None,
         "content": item.get("content"),
         "difficulty": item.get("difficulty"),
         "status": item.get("status"),
@@ -586,15 +605,10 @@ async def update_teacher_question(
     )
 
     refreshed = await find_teacher_question_by_id(question_id=question_id, teacher_id=current_user.user_id)
-    doc_topic = await find_teacher_document_topic_row(current_user.user_id, int(existing["document_topic_id"]))
-    dt_map = {}
-    if doc_topic:
-        serialized = _serialize_document_topic_row(doc_topic)
-        dt_map[serialized["document_topic_id"]] = serialized
     image_by_id = dict(old_image_by_id)
     if image:
         image_by_id[int(image["image_id"])] = image
-    return _serialize_question_item({**(refreshed or updated or existing), "_image_map": image_by_id}, dt_map)
+    return _serialize_question_item({**(refreshed or updated or existing), "_image_map": image_by_id}, {})
 
 
 async def bulk_approve_teacher_questions(current_user: CurrentUser, payload: TeacherBulkQuestionStatusPayload) -> dict:
@@ -652,15 +666,15 @@ async def _bulk_update_teacher_question_status(
 
 
 async def create_teacher_manual_question(current_user: CurrentUser, payload: TeacherManualQuestionPayload) -> dict:
-    doc_topic = await find_teacher_document_topic_row(current_user.user_id, payload.document_topic_id)
-    if not doc_topic:
-        raise TeacherAiAuthorizationError("You can only create manual questions in your own document topics")
+    topic = await find_teacher_topic_row(current_user.user_id, payload.topic_id)
+    if not topic:
+        raise TeacherAiAuthorizationError("You can only create manual questions in your assigned topics")
 
     image = await validate_question_image(payload.image_id, owner_user_id=current_user.user_id) if payload.image_id is not None else None
     created = await create_question_record(
         {
             "teacher_id": current_user.user_id,
-            "document_topic_id": payload.document_topic_id,
+            "topic_id": payload.topic_id,
             "ai_request_id": None,
             "image_id": payload.image_id,
             "content": payload.content,
@@ -682,6 +696,7 @@ async def create_teacher_manual_question(current_user: CurrentUser, payload: Tea
             "changed_by": current_user.user_id,
             "old_data": None,
             "new_data": {
+                "topic_id": payload.topic_id,
                 "content": payload.content,
                 "difficulty": payload.difficulty,
                 "status": "draft",
@@ -693,10 +708,9 @@ async def create_teacher_manual_question(current_user: CurrentUser, payload: Tea
         }
     )
     refreshed = await find_teacher_question_by_id(question_id=question_id, teacher_id=current_user.user_id)
-    serialized_dt = _serialize_document_topic_row(doc_topic)
     return _serialize_question_item(
         {**(refreshed or created), "_image_map": {int(image["image_id"]): image} if image else {}},
-        {serialized_dt["document_topic_id"]: serialized_dt},
+        {},
     )
 
 
@@ -870,7 +884,7 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
                 created_question = await create_question_record(
                     {
                         "teacher_id": teacher_id,
-                        "document_topic_id": int(request["document_topic_id"]),
+                        "topic_id": int(serialized_doc_topic["topic_id"]),
                         "ai_request_id": request_id,
                         "image_id": None,
                         "content": item["content"],

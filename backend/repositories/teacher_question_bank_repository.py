@@ -5,9 +5,50 @@ from core.supabase import SupabaseManager
 
 
 QUESTION_SELECT = (
-    "question_id,teacher_id,document_topic_id,image_id,content,difficulty,source,status,explanation,"
-    "created_at,updated_at,question_options(option_id,option_label,option_text,is_correct,order_num)"
+    "question_id,teacher_id,topic_id,ai_request_id,image_id,content,difficulty,source,status,explanation,"
+    "created_at,updated_at,"
+    "question_options(option_id,option_label,option_text,is_correct,order_num),"
+    "topics!questions_topic_id_fkey(topic_id,topic_name,class_subject_id,deleted_at,"
+    "class_subjects!topics_class_subject_id_fkey(class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
+    "classes!class_subjects_class_id_fkey(class_id,class_name,status,deleted_at),"
+    "subjects!class_subjects_subject_id_fkey(subject_id,subject_name,status,deleted_at)"
+    ")),"
+    "ai_requests!questions_ai_request_id_fkey(request_id,document_topic_id,"
+    "document_topics!ai_requests_document_topic_id_fkey(document_topic_id,document_id,topic_id,"
+    "documents(document_id,title,file_type,file_size,status,created_at,teacher_id,deleted_at)"
+    "))"
 )
+
+
+async def list_teacher_topic_options(
+    teacher_id: int, class_subject_id: int | None = None, subject_id: int | None = None, topic_id: int | None = None
+) -> list[dict]:
+    supabase = SupabaseManager.get_client()
+    query = (
+        supabase.table("topics")
+        .select(
+            "topic_id,topic_name,class_subject_id,deleted_at,"
+            "class_subjects!topics_class_subject_id_fkey!inner(class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
+            "classes!class_subjects_class_id_fkey!inner(class_id,class_name,status,deleted_at),"
+            "subjects!class_subjects_subject_id_fkey!inner(subject_id,subject_name,status,deleted_at))"
+        )
+        .eq("class_subjects.assigned_teacher_id", teacher_id)
+        .is_("deleted_at", None)
+        .eq("class_subjects.status", "active")
+        .is_("class_subjects.deleted_at", None)
+        .eq("class_subjects.classes.status", "active")
+        .is_("class_subjects.classes.deleted_at", None)
+        .eq("class_subjects.subjects.status", "active")
+        .is_("class_subjects.subjects.deleted_at", None)
+    )
+    if class_subject_id is not None:
+        query = query.eq("class_subject_id", class_subject_id)
+    if subject_id is not None:
+        query = query.eq("class_subjects.subject_id", subject_id)
+    if topic_id is not None:
+        query = query.eq("topic_id", topic_id)
+    response = await asyncio.to_thread(lambda: query.order("topic_id", desc=True).execute())
+    return response.data or []
 
 
 async def list_teacher_document_topic_options(
@@ -43,7 +84,7 @@ async def list_teacher_document_topic_options(
 
 async def list_teacher_questions(
     teacher_id: int,
-    document_topic_ids: list[int],
+    topic_ids: list[int],
     page: int,
     limit: int,
     difficulty: str | None = None,
@@ -51,7 +92,7 @@ async def list_teacher_questions(
     source: str | None = None,
     keyword: str | None = None,
 ) -> tuple[list[dict], int]:
-    if not document_topic_ids:
+    if not topic_ids:
         return [], 0
 
     supabase = SupabaseManager.get_client()
@@ -62,7 +103,7 @@ async def list_teacher_questions(
         supabase.table("questions")
         .select(QUESTION_SELECT, count="exact")
         .eq("teacher_id", teacher_id)
-        .in_("document_topic_id", document_topic_ids)
+        .in_("topic_id", topic_ids)
         .is_("deleted_at", None)
     )
 

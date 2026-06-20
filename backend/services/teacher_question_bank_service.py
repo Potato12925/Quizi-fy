@@ -8,6 +8,7 @@ from repositories.teacher_question_bank_repository import (
     find_teacher_question_by_id,
     list_teacher_document_topic_options,
     list_teacher_questions,
+    list_teacher_topic_options,
     replace_question_options,
     soft_delete_question_record,
     update_question_record,
@@ -20,33 +21,36 @@ class TeacherQuestionBankAuthorizationError(ValueError):
     pass
 
 
-def _pick_document_topic_id(rows: list[dict], requested_document_topic_id: int | None, requested_topic_id: int | None) -> int:
-    if requested_document_topic_id is not None:
-        for row in rows:
-            if int(row["document_topic_id"]) == requested_document_topic_id:
-                return requested_document_topic_id
-        raise TeacherQuestionBankAuthorizationError("You can only manage questions under your own document topics")
-
-    if requested_topic_id is not None:
-        for row in rows:
-            topic = row.get("topics") or {}
-            if int(topic.get("topic_id") or 0) == requested_topic_id:
-                return int(row["document_topic_id"])
-        raise ValueError("Không tìm thấy tài liệu phù hợp cho chương đã chọn")
-
-    if rows:
-        return int(rows[0]["document_topic_id"])
-    raise ValueError("Bạn chưa có tài liệu nào để gắn câu hỏi")
+def _serialize_topic_context(topic_row: dict) -> dict:
+    class_subject = topic_row.get("class_subjects") or {}
+    subject = class_subject.get("subjects") or {}
+    class_ref = class_subject.get("classes") or {}
+    return {
+        "topic_id": int(topic_row["topic_id"]),
+        "topic_name": topic_row.get("topic_name"),
+        "class_subject_id": topic_row.get("class_subject_id"),
+        "class_id": class_subject.get("class_id"),
+        "class_name": class_ref.get("class_name"),
+        "subject_id": class_subject.get("subject_id"),
+        "subject_name": subject.get("subject_name"),
+    }
 
 
-def _serialize_question(item: dict, document_topic_by_id: dict[int, dict], image_by_id: dict[int, dict] | None = None) -> dict:
-    dt_id = int(item["document_topic_id"])
-    dt = document_topic_by_id.get(dt_id, {})
-    topic = dt.get("topics") or {}
+def _resolve_allowed_topic(topic_rows: list[dict], requested_topic_id: int) -> dict:
+    for row in topic_rows:
+        if int(row["topic_id"]) == requested_topic_id:
+            return row
+    raise TeacherQuestionBankAuthorizationError("You can only manage questions under your assigned topics")
+
+
+def _serialize_question(item: dict, image_by_id: dict[int, dict] | None = None) -> dict:
+    topic = item.get("topics") or {}
     class_subject = topic.get("class_subjects") or {}
     subject = class_subject.get("subjects") or {}
     class_ref = class_subject.get("classes") or {}
-    document = dt.get("documents") or {}
+    ai_request = item.get("ai_requests") or {}
+    document_topic = ai_request.get("document_topics") or {}
+    document = document_topic.get("documents") or {}
     options = sorted(item.get("question_options") or [], key=lambda x: int(x.get("order_num") or 0))
     image_id = int(item["image_id"]) if item.get("image_id") is not None else None
     image = build_image_info((image_by_id or {}).get(image_id)) if image_id is not None else None
@@ -60,7 +64,8 @@ def _serialize_question(item: dict, document_topic_by_id: dict[int, dict], image
         "explanation": item.get("explanation"),
         "created_at": item.get("created_at"),
         "updated_at": item.get("updated_at"),
-        "document_topic_id": dt_id,
+        "document_topic_id": int(ai_request["document_topic_id"]) if ai_request.get("document_topic_id") is not None else None,
+        "ai_request_id": int(item["ai_request_id"]) if item.get("ai_request_id") is not None else None,
         "image_id": image_id,
         "image": image,
         "topic_id": topic.get("topic_id"),
@@ -79,7 +84,7 @@ def _serialize_question(item: dict, document_topic_by_id: dict[int, dict], image
 def _build_history_snapshot(item: dict, image_by_id: dict[int, dict] | None = None) -> dict:
     image_id = int(item["image_id"]) if item.get("image_id") is not None else None
     return {
-        "document_topic_id": int(item["document_topic_id"]) if item.get("document_topic_id") is not None else None,
+        "topic_id": int(item["topic_id"]) if item.get("topic_id") is not None else None,
         "content": item.get("content"),
         "difficulty": item.get("difficulty"),
         "status": item.get("status"),
@@ -103,17 +108,17 @@ async def get_teacher_question_bank(
     source: str | None = None,
     keyword: str | None = None,
 ) -> dict:
-    document_topics = await list_teacher_document_topic_options(
+    topic_rows = await list_teacher_topic_options(
         teacher_id=current_user.user_id,
         class_subject_id=class_subject_id,
         subject_id=subject_id,
         topic_id=topic_id,
     )
-    dt_ids = [int(row["document_topic_id"]) for row in document_topics]
+    topic_ids = [int(row["topic_id"]) for row in topic_rows]
 
     items, total = await list_teacher_questions(
         teacher_id=current_user.user_id,
-        document_topic_ids=dt_ids,
+        topic_ids=topic_ids,
         page=page,
         limit=limit,
         difficulty=difficulty,
@@ -122,9 +127,8 @@ async def get_teacher_question_bank(
         keyword=keyword,
     )
 
-    dt_by_id = {int(row["document_topic_id"]): row for row in document_topics}
     image_by_id = await load_question_image_map(items)
-    serialized = [_serialize_question(item, dt_by_id, image_by_id) for item in items]
+    serialized = [_serialize_question(item, image_by_id) for item in items]
     total_pages = ceil(total / limit) if total > 0 else 1
 
     return {
@@ -179,18 +183,15 @@ async def get_teacher_document_topic_options(
 
 
 async def create_teacher_manual_question(current_user: CurrentUser, payload: ManualQuestionPayload) -> dict:
-    allowed_rows = await list_teacher_document_topic_options(teacher_id=current_user.user_id)
-    resolved_document_topic_id = _pick_document_topic_id(
-        rows=allowed_rows,
-        requested_document_topic_id=payload.document_topic_id,
-        requested_topic_id=payload.topic_id,
-    )
+    allowed_topic_rows = await list_teacher_topic_options(teacher_id=current_user.user_id)
+    _resolve_allowed_topic(allowed_topic_rows, payload.topic_id)
     image = await validate_question_image(payload.image_id, owner_user_id=current_user.user_id)
 
     created = await create_question_record(
         {
             "teacher_id": current_user.user_id,
-            "document_topic_id": resolved_document_topic_id,
+            "topic_id": payload.topic_id,
+            "ai_request_id": None,
             "image_id": payload.image_id,
             "content": payload.content,
             "difficulty": payload.difficulty,
@@ -204,7 +205,6 @@ async def create_teacher_manual_question(current_user: CurrentUser, payload: Man
     await replace_question_options(question_id, payload.options, payload.correct_option_index)
 
     refreshed = await find_teacher_question_by_id(question_id, current_user.user_id)
-    dt_by_id = {int(item["document_topic_id"]): item for item in allowed_rows}
     final_question = refreshed or created
     await create_question_history_record(
         {
@@ -219,7 +219,7 @@ async def create_teacher_manual_question(current_user: CurrentUser, payload: Man
         }
     )
     image_by_id = {int(image["image_id"]): image} if image else {}
-    return _serialize_question(final_question, dt_by_id, image_by_id)
+    return _serialize_question(final_question, image_by_id)
 
 
 async def update_teacher_question(current_user: CurrentUser, question_id: int, payload: ManualQuestionPayload) -> dict:
@@ -227,12 +227,8 @@ async def update_teacher_question(current_user: CurrentUser, question_id: int, p
     if not existing:
         raise ValueError("Question not found")
 
-    allowed_rows = await list_teacher_document_topic_options(teacher_id=current_user.user_id)
-    resolved_document_topic_id = _pick_document_topic_id(
-        rows=allowed_rows,
-        requested_document_topic_id=payload.document_topic_id,
-        requested_topic_id=payload.topic_id,
-    )
+    allowed_topic_rows = await list_teacher_topic_options(teacher_id=current_user.user_id)
+    _resolve_allowed_topic(allowed_topic_rows, payload.topic_id)
     old_image_by_id = await load_question_image_map([existing])
     image = await validate_question_image(payload.image_id, owner_user_id=current_user.user_id)
 
@@ -240,7 +236,7 @@ async def update_teacher_question(current_user: CurrentUser, question_id: int, p
         question_id=question_id,
         teacher_id=current_user.user_id,
         payload={
-            "document_topic_id": resolved_document_topic_id,
+            "topic_id": payload.topic_id,
             "image_id": payload.image_id,
             "content": payload.content,
             "difficulty": payload.difficulty,
@@ -254,7 +250,6 @@ async def update_teacher_question(current_user: CurrentUser, question_id: int, p
 
     await replace_question_options(question_id, payload.options, payload.correct_option_index)
     refreshed = await find_teacher_question_by_id(question_id, current_user.user_id)
-    dt_by_id = {int(item["document_topic_id"]): item for item in allowed_rows}
     final_question = refreshed or updated
     image_by_id = dict(old_image_by_id)
     if image:
@@ -268,7 +263,7 @@ async def update_teacher_question(current_user: CurrentUser, question_id: int, p
             "change_type": "teacher_question_update",
         }
     )
-    return _serialize_question(final_question, dt_by_id, image_by_id)
+    return _serialize_question(final_question, image_by_id)
 
 
 async def update_teacher_question_status(current_user: CurrentUser, question_id: int, status: str) -> dict:

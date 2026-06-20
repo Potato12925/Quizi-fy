@@ -229,7 +229,7 @@ CREATE INDEX idx_ai_request_distribution_request_id ON ai_request_difficulty_dis
 CREATE TABLE questions (
     question_id BIGSERIAL PRIMARY KEY,
     teacher_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    document_topic_id BIGINT REFERENCES document_topics(document_topic_id) ON DELETE SET NULL,
+    topic_id BIGINT NOT NULL REFERENCES topics(topic_id) ON DELETE CASCADE,
     ai_request_id BIGINT REFERENCES ai_requests(request_id) ON DELETE SET NULL,
     content TEXT NOT NULL,
     difficulty difficulty_level NOT NULL,
@@ -242,8 +242,8 @@ CREATE TABLE questions (
     deleted_at TIMESTAMP
 );
 
-CREATE INDEX idx_questions_document_topic ON questions(document_topic_id);
-CREATE INDEX idx_questions_topic_difficulty_status ON questions(document_topic_id, difficulty, status);
+CREATE INDEX idx_questions_topic ON questions(topic_id);
+CREATE INDEX idx_questions_topic_difficulty_status ON questions(topic_id, difficulty, status);
 CREATE INDEX idx_questions_status ON questions(status);
 CREATE INDEX idx_questions_teacher_created ON questions(teacher_id, created_at);
 
@@ -271,7 +271,7 @@ CREATE TABLE practice_sets (
     practice_set_id BIGSERIAL PRIMARY KEY,
     student_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     subject_id BIGINT NOT NULL REFERENCES subjects(subject_id) ON DELETE CASCADE,
-    document_topic_id BIGINT REFERENCES document_topics(document_topic_id) ON DELETE SET NULL,
+    topic_id BIGINT REFERENCES topics(topic_id) ON DELETE SET NULL,
     difficulty difficulty_level,
     num_questions_requested INT NOT NULL,
     num_questions_actual INT,
@@ -334,14 +334,14 @@ CREATE TABLE notifications (
 -- document_topics 1---n ai_requests
 -- ai_requests 1---n ai_request_difficulty_distribution
 -- users 1---n questions
--- document_topics 1---n questions
+-- topics 1---n questions
 -- ai_requests 1---n questions
 -- questions 1---n question_options
 -- questions 1---n question_history
 -- users 1---n question_history
 -- users 1---n practice_sets
 -- subjects 1---n practice_sets
--- document_topics 1---n practice_sets
+-- topics 1---n practice_sets
 -- practice_sets 1---n practice_set_questions n---1 questions
 -- practice_sets 1---n practice_attempts
 -- practice_attempts 1---n student_answers n---1 questions

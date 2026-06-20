@@ -25,7 +25,7 @@ async def create_question(payload: QuestionCreateRequest) -> dict:
     created = await create_question_record(
         {
             "teacher_id": payload.teacher_id,
-            "document_topic_id": payload.document_topic_id,
+            "topic_id": payload.topic_id,
             "image_id": payload.image_id,
             "content": payload.content,
             "difficulty": payload.difficulty,

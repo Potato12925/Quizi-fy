@@ -19,7 +19,7 @@ class PracticeSetUpdateRequest(BaseModel):
 
 class PracticeSetGenerateRequest(BaseModel):
     subject_id: int = Field(ge=1)
-    document_topic_id: int | None = None
+    topic_id: int | None = Field(default=None, ge=1)
     difficulty: PracticeQuestionDifficulty | None = None
     time_limit_minutes: int | None = Field(default=None, ge=1)
     num_questions: int = Field(ge=1)

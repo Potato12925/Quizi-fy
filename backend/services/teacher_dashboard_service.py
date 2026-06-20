@@ -65,6 +65,17 @@ def _build_document_topic_ids_by_document(context_by_document_topic_id: dict[int
     return ids_by_document
 
 
+def _build_topic_ids_by_document(context_by_document_topic_id: dict[int, dict]) -> dict[int, set[int]]:
+    topic_ids_by_document: dict[int, set[int]] = {}
+    for context in context_by_document_topic_id.values():
+        document_id = context.get("document_id")
+        topic_id = context.get("topic_id")
+        if document_id is None or topic_id is None:
+            continue
+        topic_ids_by_document.setdefault(document_id, set()).add(int(topic_id))
+    return topic_ids_by_document
+
+
 def _serialize_difficulty_distribution(items: list[dict] | None) -> list[dict]:
     rows = items or []
     sorted_rows = sorted(
@@ -109,7 +120,8 @@ def _serialize_recent_ai_request(item: dict, context_by_document_topic_id: dict[
 
 
 def _serialize_recent_approved_question(item: dict, context_by_document_topic_id: dict[int, dict]) -> dict:
-    document_topic_id = _safe_int(item.get("document_topic_id"))
+    ai_request = item.get("ai_requests") or {}
+    document_topic_id = _safe_int(ai_request.get("document_topic_id"))
     context = context_by_document_topic_id.get(document_topic_id) or {}
     return {
         "question_id": _safe_int(item.get("question_id")),
@@ -138,9 +150,9 @@ async def get_teacher_dashboard_stats(current_user: CurrentUser, recent_limit: i
     assigned_subjects = await list_assigned_subjects_for_teacher(teacher_id)
     subject_ids = sorted({_safe_int(item.get("subject_id")) for item in assigned_subjects if item.get("subject_id") is not None})
 
-    topic_count_task = count_active_topics_by_subject_ids(subject_ids)
+    topic_count_task = count_active_topics_by_subject_ids(teacher_id, subject_ids)
     document_count_task = count_active_documents_by_teacher(teacher_id)
-    upload_topics_task = list_active_topics_by_subject_ids(subject_ids)
+    upload_topics_task = list_active_topics_by_subject_ids(teacher_id, subject_ids)
     document_topic_rows_task = list_teacher_document_topic_context(teacher_id)
     (
         total_topics,
@@ -156,6 +168,7 @@ async def get_teacher_dashboard_stats(current_user: CurrentUser, recent_limit: i
 
     context_by_document_topic_id = _build_document_topic_context_map(document_topic_rows)
     document_topic_ids = sorted(context_by_document_topic_id.keys())
+    topic_ids_by_document = _build_topic_ids_by_document(context_by_document_topic_id)
 
     ai_stats_rows_task = list_ai_requests_by_document_topic_ids_for_stats(document_topic_ids)
     question_stats_rows_task = list_questions_by_document_topic_ids_for_stats(teacher_id=teacher_id, document_topic_ids=document_topic_ids)
@@ -210,7 +223,7 @@ async def get_teacher_dashboard_stats(current_user: CurrentUser, recent_limit: i
     question_comprehension = 0
     question_application = 0
     question_advanced = 0
-    question_count_by_document_topic_id: dict[int, int] = {}
+    question_count_by_topic_id: dict[int, int] = {}
     for row in question_stats_rows:
         status = str(row.get("status") or "")
         if status == "draft":
@@ -232,22 +245,21 @@ async def get_teacher_dashboard_stats(current_user: CurrentUser, recent_limit: i
         elif difficulty == "advanced":
             question_advanced += 1
 
-        document_topic_id = _safe_int(row.get("document_topic_id"))
-        if document_topic_id > 0:
-            question_count_by_document_topic_id[document_topic_id] = question_count_by_document_topic_id.get(document_topic_id, 0) + 1
+        topic_id = _safe_int(row.get("topic_id"))
+        if topic_id > 0:
+            question_count_by_topic_id[topic_id] = question_count_by_topic_id.get(topic_id, 0) + 1
     total_questions = len(question_stats_rows)
 
     ai_summary_by_document: dict[int, dict] = {}
     question_count_by_document: dict[int, int] = {}
     document_topic_ids_by_document = _build_document_topic_ids_by_document(context_by_document_topic_id)
-    for document_id, topic_ids in document_topic_ids_by_document.items():
+    for document_id, related_document_topic_ids in document_topic_ids_by_document.items():
         latest_created_at = ""
         latest_status = None
         total_count = 0
-        question_count = 0
 
-        for topic_id in topic_ids:
-            ai_rows = ai_status_by_document_topic_id.get(topic_id) or []
+        for document_topic_id in related_document_topic_ids:
+            ai_rows = ai_status_by_document_topic_id.get(document_topic_id) or []
             total_count += len(ai_rows)
             for row in ai_rows:
                 created_at = str(row.get("created_at") or "")
@@ -255,14 +267,15 @@ async def get_teacher_dashboard_stats(current_user: CurrentUser, recent_limit: i
                     latest_created_at = created_at
                     latest_status = row.get("status")
 
-            question_count += question_count_by_document_topic_id.get(topic_id, 0)
-
         ai_summary_by_document[document_id] = {
             "count": total_count,
             "latest_created_at": latest_created_at,
             "latest_status": latest_status,
         }
-        question_count_by_document[document_id] = question_count
+        question_count_by_document[document_id] = sum(
+            question_count_by_topic_id.get(topic_id, 0)
+            for topic_id in topic_ids_by_document.get(document_id, set())
+        )
 
     topic_name_by_subject: dict[int, dict[int, str]] = {}
     for topic in upload_topics:
@@ -367,6 +380,7 @@ async def get_teacher_dashboard_stats(current_user: CurrentUser, recent_limit: i
         "recent_approved_questions": [
             _serialize_recent_approved_question(item, context_by_document_topic_id)
             for item in recent_approved_questions_rows
+            if _safe_int((item.get("ai_requests") or {}).get("document_topic_id")) in context_by_document_topic_id
         ],
         "upload_subjects": upload_subjects,
     }

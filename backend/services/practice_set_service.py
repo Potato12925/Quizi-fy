@@ -33,7 +33,7 @@ async def get_practice_set_by_id(record_id: int) -> dict:
 async def generate_practice_set(student_id: int, payload: PracticeSetGenerateRequest) -> dict:
     question_ids = await get_random_question_ids(
         subject_id=payload.subject_id,
-        document_topic_id=payload.document_topic_id,
+        topic_id=payload.topic_id,
         difficulty=payload.difficulty,
         limit=payload.num_questions
     )
@@ -43,7 +43,7 @@ async def generate_practice_set(student_id: int, payload: PracticeSetGenerateReq
     ps_payload = {
         "student_id": student_id,
         "subject_id": payload.subject_id,
-        "document_topic_id": payload.document_topic_id,
+        "topic_id": payload.topic_id,
         "difficulty": payload.difficulty if payload.difficulty != "mix" else None,
         "time_limit_minutes": payload.time_limit_minutes,
         "num_questions_requested": payload.num_questions,

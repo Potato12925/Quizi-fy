@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from core.supabase import SupabaseManager
 
 
-SELECT_FIELDS = "question_id,teacher_id,document_topic_id,ai_request_id,image_id,content,difficulty,source,status,explanation"
+SELECT_FIELDS = "question_id,teacher_id,topic_id,ai_request_id,image_id,content,difficulty,source,status,explanation"
 HAS_DELETED = True
 
 
@@ -18,16 +18,16 @@ async def find_question_by_id(record_id: int) -> dict | None:
     return rows[0] if rows else None
 
 
-async def get_random_question_ids(subject_id: int, document_topic_id: int | None, difficulty: str | None, limit: int) -> list[int]:
+async def get_random_question_ids(subject_id: int, topic_id: int | None, difficulty: str | None, limit: int) -> list[int]:
     supabase = SupabaseManager.get_client()
     query = (
         supabase.table("questions")
-        .select("question_id, document_topics!inner(topics!inner(class_subjects!inner(subject_id)))")
+        .select("question_id, topics!questions_topic_id_fkey!inner(topic_id,class_subjects!topics_class_subject_id_fkey!inner(subject_id))")
         .eq("status", "approved")
-        .eq("document_topics.topics.class_subjects.subject_id", subject_id)
+        .eq("topics.class_subjects.subject_id", subject_id)
     )
-    if document_topic_id:
-        query = query.eq("document_topic_id", document_topic_id)
+    if topic_id:
+        query = query.eq("topic_id", topic_id)
     if difficulty and difficulty != "mix":
         query = query.eq("difficulty", difficulty)
     if HAS_DELETED:

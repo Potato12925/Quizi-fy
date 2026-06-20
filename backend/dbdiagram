@@ -1,264 +1,265 @@
 Enum active_status {
-active
-inactive
+  active
+  inactive
 }
 
 Enum ai_request_status {
-pending
-processing
-completed
-failed
-cancelled
+  pending
+  processing
+  completed
+  failed
+  cancelled
 }
 
 Enum difficulty_level {
-recognition
-comprehension
-application
-advanced
+  recognition
+  comprehension
+  application
+  advanced
 }
 
 Enum practice_attempt_status {
-in_progress
-submitted
-timeout
+  in_progress
+  submitted
+  timeout
 }
 
 Enum question_source {
-ai
-manual
+  ai
+  manual
 }
 
 Enum question_status {
-draft
-approved
-inactive
-rejected
+  draft
+  approved
+  inactive
+  rejected
 }
 
 Table users {
-user_id bigint [pk]
-username varchar [not null, unique]
-password_hash varchar [not null]
-full_name varchar [not null]
-is_active boolean [default: true]
-must_change_password boolean [default: true]
-created_at timestamp
-updated_at timestamp
-deleted_at timestamp
+  user_id bigint [pk]
+  username varchar [not null, unique]
+  password_hash varchar [not null]
+  full_name varchar [not null]
+  is_active boolean [default: true]
+  must_change_password boolean [default: true]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 }
 
 Table roles {
-role_id bigint [pk]
-role_code varchar [not null, unique]
-role_name varchar [not null]
-description text
-created_at timestamp
+  role_id bigint [pk]
+  role_code varchar [not null, unique]
+  role_name varchar [not null]
+  description text
+  created_at timestamp
 }
 
 Table user_roles {
-user_role_id bigint [pk]
-user_id bigint [not null]
-role_id bigint [not null]
-assigned_at timestamp
+  user_role_id bigint [pk]
+  user_id bigint [not null]
+  role_id bigint [not null]
+  assigned_at timestamp
 }
 
 Table classes {
-class_id bigint [pk]
-class_code varchar [not null, unique]
-class_name varchar [not null]
-description text
-teacher_id bigint [not null]
-status active_status
-created_at timestamp
-updated_at timestamp
-deleted_at timestamp
+  class_id bigint [pk]
+  class_code varchar [not null, unique]
+  class_name varchar [not null]
+  description text
+  teacher_id bigint [not null]
+  status active_status
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 }
 
 Table subjects {
-subject_id bigint [pk]
-subject_code varchar [not null, unique]
-subject_name varchar [not null]
-description text
-status active_status
-created_at timestamp
-updated_at timestamp
-deleted_at timestamp
+  subject_id bigint [pk]
+  subject_code varchar [not null, unique]
+  subject_name varchar [not null]
+  description text
+  status active_status
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 }
 
 Table class_teachers {
-class_teacher_id bigint [pk]
-class_id bigint [not null]
-teacher_id bigint [not null]
-joined_at timestamp
-deleted_at timestamp
+  class_teacher_id bigint [pk]
+  class_id bigint [not null]
+  teacher_id bigint [not null]
+  joined_at timestamp
+  deleted_at timestamp
 }
 
 Table class_students {
-class_student_id bigint [pk]
-class_id bigint [not null]
-student_id bigint [not null]
-joined_at timestamp
-deleted_at timestamp
+  class_student_id bigint [pk]
+  class_id bigint [not null]
+  student_id bigint [not null]
+  joined_at timestamp
+  deleted_at timestamp
 }
 
 Table class_subjects {
-class_subject_id bigint [pk]
-class_id bigint [not null]
-subject_id bigint [not null]
-assigned_teacher_id bigint
-status active_status
-created_at timestamp
-updated_at timestamp
-deleted_at timestamp
+  class_subject_id bigint [pk]
+  class_id bigint [not null]
+  subject_id bigint [not null]
+  assigned_teacher_id bigint
+  status active_status
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 }
 
 Table topics {
-topic_id bigint [pk]
-topic_name varchar [not null]
-description text
-class_subject_id bigint
-created_at timestamp
-updated_at timestamp
-deleted_at timestamp
+  topic_id bigint [pk]
+  topic_name varchar [not null]
+  description text
+  class_subject_id bigint
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 }
 
 Table documents {
-document_id bigint [pk]
-teacher_id bigint [not null]
-title varchar [not null]
-description text
-file_url text [not null]
-file_hash varchar
-file_type varchar [not null]
-file_size bigint [not null]
-status active_status
-created_at timestamp
-updated_at timestamp
-deleted_at timestamp
+  document_id bigint [pk]
+  teacher_id bigint [not null]
+  title varchar [not null]
+  description text
+  file_url text [not null]
+  file_hash varchar
+  file_type varchar [not null]
+  file_size bigint [not null]
+  status active_status
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 }
 
 Table document_topics {
-document_topic_id bigint [pk]
-document_id bigint [not null]
-topic_id bigint [not null]
-created_at timestamp
-deleted_at timestamp
+  document_topic_id bigint [pk]
+  document_id bigint [not null]
+  topic_id bigint [not null]
+  created_at timestamp
+  deleted_at timestamp
 }
 
 Table ai_requests {
-request_id bigint [pk]
-document_topic_id bigint [not null]
-num_questions int [not null]
-content_scope text
-status ai_request_status
-generated_question_count int
-retry_count int
-error_message text
-is_reviewed boolean [default: false]
-created_at timestamp
-updated_at timestamp
+  request_id bigint [pk]
+  document_topic_id bigint [not null]
+  num_questions int [not null]
+  content_scope text
+  status ai_request_status
+  generated_question_count int
+  retry_count int
+  error_message text
+  is_reviewed boolean [default: false]
+  created_at timestamp
+  updated_at timestamp
 }
 
 Table ai_request_difficulty_distribution {
-distribution_id bigint [pk]
-request_id bigint [not null]
-difficulty difficulty_level [not null]
-percentage int
-question_count int [not null]
-created_at timestamp
+  distribution_id bigint [pk]
+  request_id bigint [not null]
+  difficulty difficulty_level [not null]
+  percentage int
+  question_count int [not null]
+  created_at timestamp
 
-indexes {
-  (request_id, difficulty) [unique]
-}
+  indexes {
+    (request_id, difficulty) [unique]
+  }
 }
 
 Table questions {
-question_id bigint [pk]
-teacher_id bigint [not null]
-document_topic_id bigint
-ai_request_id bigint
-content text [not null]
-difficulty difficulty_level [not null]
-source question_source [not null]
-status question_status
-explanation text
-image_id bigint
-created_at timestamp
-updated_at timestamp
-deleted_at timestamp
+  question_id bigint [pk]
+  teacher_id bigint [not null]
+  topic_id bigint [not null]
+  ai_request_id bigint
+  content text [not null]
+  difficulty difficulty_level [not null]
+  source question_source [not null]
+  status question_status
+  explanation text
+  image_id bigint
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
 }
 
 Table question_options {
-option_id bigint [pk]
-question_id bigint [not null]
-option_label varchar [not null]
-option_text text [not null]
-is_correct boolean
-order_num int [not null]
+  option_id bigint [pk]
+  question_id bigint [not null]
+  option_label varchar [not null]
+  option_text text [not null]
+  is_correct boolean
+  order_num int [not null]
 }
 
 Table question_history {
-history_id bigint [pk]
-question_id bigint [not null]
-changed_by bigint [not null]
-old_data jsonb
-new_data jsonb
-change_type varchar
-changed_at timestamp
+  history_id bigint [pk]
+  question_id bigint [not null]
+  changed_by bigint [not null]
+  old_data jsonb
+  new_data jsonb
+  change_type varchar
+  changed_at timestamp
 }
 
 Table practice_sets {
-practice_set_id bigint [pk]
-student_id bigint [not null]
-subject_id bigint [not null]
-document_topic_id bigint
-difficulty difficulty_level
-num_questions_requested int [not null]
-num_questions_actual int
-time_limit_minutes int
-prioritize_unanswered boolean
-created_at timestamp
-deleted_at timestamp
+  practice_set_id bigint [pk]
+  student_id bigint [not null]
+  subject_id bigint [not null]
+  topic_id bigint
+  difficulty difficulty_level
+  num_questions_requested int [not null]
+  num_questions_actual int
+  time_limit_minutes int
+  prioritize_unanswered boolean
+  created_at timestamp
+  deleted_at timestamp
 }
 
 Table practice_set_questions {
-practice_set_question_id bigint [pk]
-practice_set_id bigint [not null]
-question_id bigint [not null]
-order_num int [not null]
+  practice_set_question_id bigint [pk]
+  practice_set_id bigint [not null]
+  question_id bigint [not null]
+  order_num int [not null]
 }
 
 Table practice_attempts {
-attempt_id bigint [pk]
-practice_set_id bigint [not null]
-started_at timestamp
-submitted_at timestamp
-score numeric
-total_correct int
-total_wrong int
-status practice_attempt_status
-deleted_at timestamp
+  attempt_id bigint [pk]
+  practice_set_id bigint [not null]
+  started_at timestamp
+  submitted_at timestamp
+  score numeric
+  total_correct int
+  total_wrong int
+  status practice_attempt_status
+  deleted_at timestamp
 }
 
 Table student_answers {
-answer_id bigint [pk]
-attempt_id bigint [not null]
-question_id bigint [not null]
-selected_option_id bigint
-is_correct boolean
-answered_at timestamp
-deleted_at timestamp
+  answer_id bigint [pk]
+  attempt_id bigint [not null]
+  question_id bigint [not null]
+  selected_option_id bigint
+  is_correct boolean
+  answered_at timestamp
+  deleted_at timestamp
 }
 
 Table notifications {
-notification_id bigint [pk]
-user_id bigint [not null]
-title varchar
-content text
-is_read boolean
-created_at timestamp
+  notification_id bigint [pk]
+  user_id bigint [not null]
+  title varchar
+  content text
+  is_read boolean
+  created_at timestamp
 }
+
 Table image_types {
   image_type_id bigint [pk]
   type_code varchar [not null, unique]
@@ -279,6 +280,7 @@ Table images {
   created_at timestamp
   deleted_at timestamp
 }
+
 Ref: user_roles.user_id > users.user_id
 Ref: user_roles.role_id > roles.role_id
 
@@ -305,7 +307,7 @@ Ref: ai_requests.document_topic_id > document_topics.document_topic_id
 Ref: ai_request_difficulty_distribution.request_id > ai_requests.request_id
 
 Ref: questions.teacher_id > users.user_id
-Ref: questions.document_topic_id > document_topics.document_topic_id
+Ref: questions.topic_id > topics.topic_id
 Ref: questions.ai_request_id > ai_requests.request_id
 
 Ref: question_options.question_id > questions.question_id
@@ -315,7 +317,7 @@ Ref: question_history.changed_by > users.user_id
 
 Ref: practice_sets.student_id > users.user_id
 Ref: practice_sets.subject_id > subjects.subject_id
-Ref: practice_sets.document_topic_id > document_topics.document_topic_id
+Ref: practice_sets.topic_id > topics.topic_id
 
 Ref: practice_set_questions.practice_set_id > practice_sets.practice_set_id
 Ref: practice_set_questions.question_id > questions.question_id

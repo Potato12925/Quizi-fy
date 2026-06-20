@@ -11,13 +11,11 @@ import {
 import {
   createTeacherManualQuestion,
   getAssignedSubjects,
-  getDocumentTopicOptions,
   getTeacherQuestionBank,
   getTeacherQuestionImageErrorMessage,
   getTopicsBySubjectId,
   softDeleteTeacherQuestion,
   type AssignedSubject,
-  type DocumentTopicOption,
   type ManualQuestionPayloadV2,
   type QuestionDifficulty,
   type TeacherQuestionBankItem,
@@ -31,7 +29,6 @@ type ModalMode = 'create' | 'edit' | 'view';
 type FormState = {
   subjectId: string;
   topicId: string;
-  documentTopicId: string;
   imageId: string;
   imageUrl: string;
   content: string;
@@ -59,7 +56,6 @@ const DIFFICULTY_LABELS: Record<QuestionDifficulty, string> = {
 const buildInitialFormState = (overrides: Partial<FormState> = {}): FormState => ({
   subjectId: '',
   topicId: '',
-  documentTopicId: '',
   imageId: '',
   imageUrl: '',
   content: '',
@@ -72,6 +68,7 @@ const buildInitialFormState = (overrides: Partial<FormState> = {}): FormState =>
 });
 
 const getQuestionImageUrl = (question: TeacherQuestionBankItem) => question.image?.file_url || '';
+const getQuestionDocumentTitle = (question: TeacherQuestionBankItem) => question.document_title?.trim() || '';
 
 const getDifficultyLabel = (difficulty: QuestionDifficulty) => DIFFICULTY_LABELS[difficulty] || difficulty;
 
@@ -86,7 +83,6 @@ export default function QuestionBankPage() {
   const [subjects, setSubjects] = useState<AssignedSubject[]>([]);
   const [topics, setTopics] = useState<TopicItem[]>([]);
   const [modalTopics, setModalTopics] = useState<TopicItem[]>([]);
-  const [documentTopicOptions, setDocumentTopicOptions] = useState<DocumentTopicOption[]>([]);
   const [questions, setQuestions] = useState<TeacherQuestionBankItem[]>([]);
 
   const [activeSubject, setActiveSubject] = useState('');
@@ -155,36 +151,6 @@ export default function QuestionBankPage() {
     }
   };
 
-  const loadModalDocumentTopics = async (
-    subjectId: string,
-    topicId: string,
-    currentDocumentTopicId?: string,
-  ) => {
-    if (!subjectId) {
-      setDocumentTopicOptions([]);
-      return;
-    }
-
-    const options = await getDocumentTopicOptions(
-      Number(subjectId),
-      topicId ? Number(topicId) : undefined,
-    );
-    setDocumentTopicOptions(options);
-
-    const hasCurrent = currentDocumentTopicId
-      ? options.some((item) => String(item.document_topic_id) === currentDocumentTopicId)
-      : false;
-
-    setFormData((prev) => ({
-      ...prev,
-      documentTopicId: hasCurrent
-        ? currentDocumentTopicId || ''
-        : options[0]
-          ? String(options[0].document_topic_id)
-          : '',
-    }));
-  };
-
   const openCreateModal = async () => {
     resetModalImagePreviewUrl();
     setSelectedImageFile(null);
@@ -201,12 +167,6 @@ export default function QuestionBankPage() {
         topicId: initialTopicId,
       }),
     );
-
-    if (activeSubject) {
-      await loadModalDocumentTopics(activeSubject, initialTopicId);
-    } else {
-      setDocumentTopicOptions([]);
-    }
 
     setIsModalOpen(true);
   };
@@ -230,7 +190,6 @@ export default function QuestionBankPage() {
       buildInitialFormState({
         subjectId,
         topicId: String(question.topic_id),
-        documentTopicId: String(question.document_topic_id),
         imageId: question.image_id != null ? String(question.image_id) : '',
         imageUrl: getQuestionImageUrl(question),
         content: question.content,
@@ -240,12 +199,6 @@ export default function QuestionBankPage() {
         correctOptionIndex: correctIndex >= 0 ? correctIndex : 0,
         explanation: question.explanation || '',
       }),
-    );
-
-    await loadModalDocumentTopics(
-      subjectId,
-      String(question.topic_id),
-      String(question.document_topic_id),
     );
     setIsModalOpen(true);
   };
@@ -331,10 +284,6 @@ export default function QuestionBankPage() {
       setFormError('Vui lòng chọn chương học');
       return;
     }
-    if (!formData.documentTopicId) {
-      setFormError('Vui lòng chọn tài liệu nguồn');
-      return;
-    }
     if (!formData.content.trim()) {
       setFormError('Nội dung câu hỏi không được để trống');
       return;
@@ -357,7 +306,7 @@ export default function QuestionBankPage() {
     }
 
     const payload: ManualQuestionPayloadV2 = {
-      document_topic_id: Number(formData.documentTopicId),
+      topic_id: Number(formData.topicId),
       image_id: formData.imageId.trim() ? Number(formData.imageId.trim()) : null,
       content: formData.content.trim(),
       difficulty: formData.difficulty,
@@ -616,6 +565,7 @@ export default function QuestionBankPage() {
                   const optionsSorted = [...question.options].sort((left, right) => left.order_num - right.order_num);
                   const correctOption = optionsSorted.find((option) => option.is_correct);
                   const imageUrl = getQuestionImageUrl(question);
+                  const documentTitle = getQuestionDocumentTitle(question);
                   const showImage = Boolean(imageUrl) && !brokenListImageIds.includes(question.question_id);
 
                   return (
@@ -630,6 +580,9 @@ export default function QuestionBankPage() {
                       <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
                         <div className="flex-1 space-y-4">
                           <div className="flex flex-wrap gap-2">
+                            <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                              {question.subject_name}
+                            </span>
                             <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
                               Trắc nghiệm
                             </span>
@@ -658,6 +611,10 @@ export default function QuestionBankPage() {
                           <h4 className="text-lg font-black leading-snug tracking-tight text-slate-800">
                             {question.content}
                           </h4>
+                          <div className="space-y-1 text-xs font-bold text-slate-500">
+                            <p>{question.topic_name}</p>
+                            {documentTitle && <p>(Document: {documentTitle})</p>}
+                          </div>
                           {showImage && (
                             <img
                               src={imageUrl}
@@ -763,9 +720,7 @@ export default function QuestionBankPage() {
                           ...prev,
                           subjectId: nextSubjectId,
                           topicId: nextTopicId,
-                          documentTopicId: '',
                         }));
-                        await loadModalDocumentTopics(nextSubjectId, nextTopicId);
                       }}
                       className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50"
                     >
@@ -788,9 +743,7 @@ export default function QuestionBankPage() {
                         setFormData((prev) => ({
                           ...prev,
                           topicId: nextTopicId,
-                          documentTopicId: '',
                         }));
-                        await loadModalDocumentTopics(formData.subjectId, nextTopicId);
                       }}
                       className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50"
                     >
@@ -799,29 +752,6 @@ export default function QuestionBankPage() {
                           {topic.topic_name}
                         </option>
                       ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                      Tài liệu nguồn
-                    </label>
-                    <select
-                      disabled={modalMode === 'view'}
-                      value={formData.documentTopicId}
-                      onChange={(event) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          documentTopicId: event.target.value,
-                        }))
-                      }
-                      className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50"
-                    >
-                      {documentTopicOptions.map((option) => (
-                        <option key={option.document_topic_id} value={option.document_topic_id}>
-                          {option.document_title}
-                        </option>
-                      ))}
-                      {documentTopicOptions.length === 0 && <option value="">Không có tài liệu phù hợp</option>}
                     </select>
                   </div>
                 </div>

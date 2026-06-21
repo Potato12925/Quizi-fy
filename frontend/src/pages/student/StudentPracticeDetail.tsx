@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { getPracticeDetail, autosaveAnswers, submitPractice } from '../../api/studentApi';
 import type { Question } from '../../api/studentApi';
@@ -8,7 +8,7 @@ export default function PracticePage() {
   const navigate = useNavigate();
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
-  const [timeLeft, setTimeLeft] = useState(1200); // 20 minutes
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -17,6 +17,18 @@ export default function PracticePage() {
     if (id) {
         getPracticeDetail(id).then(res => {
             setQuestions(res.questions);
+
+            const duration = Number(res.duration || 0);
+            let startedAtMs = null;
+            if (res.startedAt) {
+                const dateStr = res.startedAt;
+                const suffixPattern = /(Z|[+-]\d{2}:\d{2})$/;
+                const normalizedStr = suffixPattern.test(dateStr) ? dateStr : dateStr + 'Z';
+                startedAtMs = new Date(normalizedStr).getTime();
+            }
+            const elapsedSeconds = startedAtMs ? Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)) : 0;
+            setTimeLeft(Math.max(0, duration - elapsedSeconds));
+
             // Pre-fill answers if any
             const initAns: Record<number, number> = {};
             res.questions.forEach((q, idx) => {
@@ -37,11 +49,16 @@ export default function PracticePage() {
 
   // Timer effect
   useEffect(() => {
+    if (loading || submitting || timeLeft === null || timeLeft <= 0) {
+      return;
+    }
+
     const timer = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      setTimeLeft((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
     }, 1000);
+
     return () => clearInterval(timer);
-  }, []);
+  }, [loading, submitting, timeLeft]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -81,6 +98,24 @@ export default function PracticePage() {
     }
   }
 
+  const autoSubmit = useCallback(async () => {
+    if (!id || submitting) return;
+    setSubmitting(true);
+    try {
+        await submitPractice(id);
+        navigate(`/student/results/${id}`);
+    } catch(e) {
+        console.error("Auto-submit failed", e);
+        navigate(`/student/results/${id}`);
+    }
+  }, [id, submitting, navigate]);
+
+  useEffect(() => {
+    if (!loading && !submitting && timeLeft === 0 && id) {
+      autoSubmit();
+    }
+  }, [loading, submitting, timeLeft, id, autoSubmit]);
+
   if (loading) {
       return <div className="min-h-screen flex items-center justify-center text-slate-500 font-black uppercase tracking-widest">Đang tải đề thi...</div>;
   }
@@ -110,10 +145,10 @@ export default function PracticePage() {
         </div>
 
         <div className="flex items-center gap-10">
-           <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined text-[#b20112] text-xl">timer</span>
-              <span className="text-2xl font-black text-slate-900 font-mono tracking-tight">{formatTime(timeLeft)}</span>
-           </div>
+            <div className="flex items-center gap-3">
+               <span className="material-symbols-outlined text-[#b20112] text-xl">timer</span>
+               <span className="text-2xl font-black text-slate-900 font-mono tracking-tight">{timeLeft !== null ? formatTime(timeLeft) : '--:--'}</span>
+            </div>
            <button 
              onClick={handleSubmit}
              disabled={submitting}

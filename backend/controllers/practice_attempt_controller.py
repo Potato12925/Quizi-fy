@@ -75,48 +75,61 @@ async def get_progress_route(current_user: CurrentUser = Depends(require_roles("
 
 
 @router.post("/start", summary="Start practice attempt")
-async def start_practice_attempt_route(payload: PracticeAttemptStartRequest, _: CurrentUser = Depends(require_roles("student"))):
+async def start_practice_attempt_route(payload: PracticeAttemptStartRequest, current_user: CurrentUser = Depends(require_roles("student"))):
     try:
-        result = await start_attempt(payload)
+        result = await start_attempt(payload, current_user.user_id)
         return success_response(data=result, message="Practice attempt started", status_code=201)
+    except ValueError as exc:
+        status_code = 403 if str(exc) == "Access denied" else 404
+        return error_response(message=str(exc), status_code=status_code, error_code="PRACTICE_ATTEMPT_START_INVALID")
     except Exception:
         return error_response(message="Unable to start practice attempt", status_code=500, error_code="PRACTICE_ATTEMPT_START_FAILED")
 
 @router.get("/{attempt_id}/questions", summary="Get attempt questions")
-async def get_attempt_questions_route(attempt_id: int, _: CurrentUser = Depends(require_roles("student"))):
+async def get_attempt_questions_route(attempt_id: int, current_user: CurrentUser = Depends(require_roles("student"))):
     try:
-        result = await get_attempt_questions(attempt_id)
+        result = await get_attempt_questions(attempt_id, current_user.user_id)
         return success_response(data=result, message="Questions loaded successfully", status_code=200)
     except ValueError as exc:
-        return error_response(message=str(exc), status_code=404, error_code="PRACTICE_ATTEMPT_NOT_FOUND")
+        status_code = 403 if str(exc) == "Access denied" else 404
+        return error_response(message=str(exc), status_code=status_code, error_code="PRACTICE_ATTEMPT_NOT_FOUND")
     except Exception:
         return error_response(message="Unable to load questions", status_code=500, error_code="QUESTIONS_LOAD_FAILED")
 
 @router.post("/{attempt_id}/answers", summary="Autosave student answers")
-async def autosave_answers_route(attempt_id: int, payload: StudentAnswerSaveRequest, _: CurrentUser = Depends(require_roles("student"))):
+async def autosave_answers_route(attempt_id: int, payload: StudentAnswerSaveRequest, current_user: CurrentUser = Depends(require_roles("student"))):
     try:
-        result = await autosave_answers(attempt_id, payload)
+        result = await autosave_answers(attempt_id, payload, current_user.user_id)
         return success_response(data=result, message="Answers saved successfully", status_code=200)
+    except ValueError as exc:
+        status_code = 403 if str(exc) == "Access denied" else 400
+        return error_response(message=str(exc), status_code=status_code, error_code="ANSWERS_SAVE_INVALID")
     except Exception as e:
         return error_response(message=f"Unable to save answers: {str(e)}", status_code=500, error_code="ANSWERS_SAVE_FAILED")
 
 @router.post("/{attempt_id}/submit", summary="Submit practice attempt")
-async def submit_practice_attempt_route(attempt_id: int, _: CurrentUser = Depends(require_roles("student"))):
+async def submit_practice_attempt_route(attempt_id: int, current_user: CurrentUser = Depends(require_roles("student"))):
     try:
-        result = await submit_attempt(attempt_id)
+        result = await submit_attempt(attempt_id, current_user.user_id)
         return success_response(data=result, message="Practice attempt submitted", status_code=200)
     except ValueError as exc:
-        return error_response(message=str(exc), status_code=404, error_code="PRACTICE_ATTEMPT_NOT_FOUND")
-    except Exception:
-        return error_response(message="Unable to submit practice attempt", status_code=500, error_code="PRACTICE_ATTEMPT_SUBMIT_FAILED")
+        status_code = 403 if str(exc) == "Access denied" else 400
+        if "not found" in str(exc).lower():
+            status_code = 404
+        return error_response(message=str(exc), status_code=status_code, error_code="PRACTICE_ATTEMPT_SUBMIT_INVALID")
+    except Exception as e:
+        return error_response(message=f"Unable to submit practice attempt: {str(e)}", status_code=500, error_code="PRACTICE_ATTEMPT_SUBMIT_FAILED")
 
 @router.get("/{attempt_id}/result", summary="Get attempt result")
-async def get_practice_attempt_result_route(attempt_id: int, _: CurrentUser = Depends(require_roles("student"))):
+async def get_practice_attempt_result_route(attempt_id: int, current_user: CurrentUser = Depends(require_roles("student"))):
     try:
-        result = await get_attempt_result(attempt_id)
+        result = await get_attempt_result(attempt_id, current_user.user_id)
         return success_response(data=result, message="Result loaded successfully", status_code=200)
     except ValueError as exc:
-        return error_response(message=str(exc), status_code=404, error_code="PRACTICE_ATTEMPT_NOT_FOUND")
+        status_code = 403 if str(exc) == "Access denied" else 400
+        if "not found" in str(exc).lower():
+            status_code = 404
+        return error_response(message=str(exc), status_code=status_code, error_code="RESULT_GET_INVALID")
     except Exception:
         return error_response(message="Unable to load result", status_code=500, error_code="RESULT_GET_FAILED")
 

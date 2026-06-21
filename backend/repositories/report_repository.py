@@ -348,7 +348,8 @@ async def list_questions(
     query = (
         supabase.table("questions")
         .select(
-            "question_id,teacher_id,document_topic_id,ai_request_id,image_id,content,difficulty,source,status,explanation,created_at,updated_at,deleted_at"
+            "question_id,teacher_id,topic_id,ai_request_id,image_id,content,difficulty,source,status,explanation,created_at,updated_at,deleted_at,"
+            "ai_requests!questions_ai_request_id_fkey(document_topic_id)"
         )
         .is_("deleted_at", None)
     )
@@ -377,7 +378,14 @@ async def list_questions(
         query = query.ilike("content", f"%{search}%")
 
     response = await asyncio.to_thread(lambda: query.order("created_at", desc=True).execute())
-    return response.data or []
+    rows = response.data or []
+    for item in rows:
+        ai_req = item.get("ai_requests")
+        if isinstance(ai_req, dict):
+            item["document_topic_id"] = ai_req.get("document_topic_id")
+        else:
+            item["document_topic_id"] = None
+    return rows
 
 
 async def list_question_options(question_ids: list[int]) -> list[dict]:

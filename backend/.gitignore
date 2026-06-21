@@ -95,3 +95,7 @@ Scripts/
 
 
 test_supabase.py
+test_api_generate.py
+test_student_logic.py
+
+.bat

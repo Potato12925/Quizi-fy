@@ -274,10 +274,11 @@ export default function HistoryPage() {
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                   <span className="material-symbols-outlined text-sm">timer</span> {attempt.time}
                 </p>
-                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${attempt.status === 'Xuất sắc' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                  attempt.status === 'Giỏi' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'
+                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${attempt.performance === 'Xuất sắc' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                  attempt.performance === 'Giỏi' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                  attempt.performance === 'Khá' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                  attempt.performance === 'Đang làm' ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-100'
                   }`}>
-                  {attempt.status}
                 </span>
               </div>
             </div>

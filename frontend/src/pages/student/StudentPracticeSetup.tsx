@@ -10,7 +10,7 @@ function SetupContent() {
   const [config, setConfig] = useState({
     subject: initialSubject,
     quantity: 20,
-    level: 'Trung bình',
+    level: 'Thông hiểu',
     topics: [] as string[],
     mode: 'random-all' 
   });
@@ -116,7 +116,7 @@ function SetupContent() {
                <div className="space-y-6">
                   <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Mức độ khó</label>
                   <div className="flex p-1.5 bg-slate-50 rounded-2xl gap-1">
-                    {['Dễ', 'Trung bình', 'Khó'].map(l => (
+                    {['Nhận biết', 'Thông hiểu', 'Vận dụng', 'Vận dụng cao'].map(l => (
                       <button 
                         key={l}
                         onClick={() => setConfig({...config, level: l})}

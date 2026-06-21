@@ -41,6 +41,7 @@ export interface HistoryItem {
   total: number;
   time: string;
   status: string;
+  performance: string;
   started_at: string;
 }
 
@@ -68,6 +69,7 @@ export interface PracticeDetail {
   id: string;
   subjectName: string;
   duration: number; // in seconds
+  startedAt?: string;
   questions: Question[];
 }
 
@@ -230,17 +232,31 @@ export const getStudentHistory = async (forceRefresh = false): Promise<HistoryIt
   try {
     const res = await client.api.get('/practice-attempts/my-history');
     const dbAttempts = res.data || [];
-    cachedHistory = dbAttempts.map((a: any) => ({
-      id: a.attempt_id,
-      practice_set_id: a.practice_set_id,
-      subject: a.subject_name || 'N/A',
-      date: new Date(a.started_at).toLocaleDateString('vi-VN'),
-      score: a.score || 0,
-      total: (a.total_correct || 0) + (a.total_wrong || 0),
-      time: a.submitted_at ? 'Hoàn thành' : '--:--',
-      status: a.status === 'submitted' ? 'Đã nộp' : 'Đang làm',
-      started_at: a.started_at
-    }));
+    cachedHistory = dbAttempts.map((a: any) => {
+      const score = Number(a.score || 0);
+      const performance = a.status !== 'submitted'
+        ? 'Đang làm'
+        : score >= 8
+          ? 'Xuất sắc'
+          : score >= 6.5
+            ? 'Giỏi'
+            : score >= 5
+              ? 'Khá'
+              : 'Trung bình';
+
+      return {
+        id: a.attempt_id,
+        practice_set_id: a.practice_set_id,
+        subject: a.subject_name || 'N/A',
+        date: new Date(a.started_at).toLocaleDateString('vi-VN'),
+        score,
+        total: (a.total_correct || 0) + (a.total_wrong || 0),
+        time: a.submitted_at ? 'Hoàn thành' : '--:--',
+        status: a.status === 'submitted' ? 'Đã nộp' : 'Đang làm',
+        performance,
+        started_at: a.started_at
+      };
+    });
     return cachedHistory!;
   } catch (error) {
     console.warn('Lỗi tải lịch sử:', error);
@@ -270,7 +286,10 @@ export const createPracticeSession = async (payload: PracticeSessionPayload): Pr
     const setRes = await client.api.post('/practice-sets/generate', {
       subject_id: parseInt(payload.subject),
       num_questions: payload.quantity,
-      difficulty: payload.level === 'Dễ' ? 'easy' : payload.level === 'Khó' ? 'hard' : 'medium'
+      difficulty: payload.level === 'Nhận biết' ? 'recognition' :
+                  payload.level === 'Thông hiểu' ? 'comprehension' :
+                  payload.level === 'Vận dụng' ? 'application' :
+                  payload.level === 'Vận dụng cao' ? 'advanced' : 'mix'
     });
     const practiceSetId = setRes.data.practice_set_id;
 
@@ -313,7 +332,8 @@ export const getPracticeDetail = async (practiceId: string): Promise<PracticeDet
     return {
       id: practiceId,
       subjectName: 'Bài luyện tập',
-      duration: 1200,
+      duration: Number(data.duration_seconds || 1200),
+      startedAt: data.started_at,
       questions: data.questions.map((q: any) => ({
         id: q.question_id,
         text: q.content,
@@ -377,11 +397,23 @@ export const getStudentResultDetail = async (resultId: string): Promise<StudentR
     const total_q = data.attempt.total_correct + data.attempt.total_wrong;
     const acc = total_q > 0 ? (data.attempt.total_correct / total_q) * 100 : 0;
 
+    const time = (() => {
+      if (data.attempt?.started_at && data.attempt?.submitted_at) {
+        const start = new Date(data.attempt.started_at).getTime();
+        const end = new Date(data.attempt.submitted_at).getTime();
+        const diffSeconds = Math.max(0, Math.floor((end - start) / 1000));
+        const mins = Math.floor(diffSeconds / 60);
+        const secs = diffSeconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      }
+      return '--:--';
+    })();
+
     return {
       overview: {
         score: score,
         total: total_q,
-        time: '--:--',
+        time: time,
         accuracy: Math.round(acc)
       },
       questions: questions

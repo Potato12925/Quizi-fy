@@ -31,6 +31,12 @@ async def get_practice_set_by_id(record_id: int) -> dict:
 
 
 async def generate_practice_set(student_id: int, payload: PracticeSetGenerateRequest) -> dict:
+    from repositories.class_subject_repository import list_my_subjects
+    my_subjects = await list_my_subjects(student_id)
+    allowed_subject_ids = {item["subject_id"] for item in my_subjects}
+    if payload.subject_id not in allowed_subject_ids:
+        raise ValueError("Student is not enrolled in this subject")
+
     question_ids = await get_random_question_ids(
         subject_id=payload.subject_id,
         topic_id=payload.topic_id,

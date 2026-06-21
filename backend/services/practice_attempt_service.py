@@ -32,14 +32,53 @@ async def get_practice_attempt_by_id(record_id: int) -> dict:
     return data
 
 
-async def start_attempt(payload: PracticeAttemptStartRequest) -> dict:
+async def validate_attempt_ownership(attempt_id: int, student_id: int) -> dict:
+    attempt = await find_practice_attempt_by_id(attempt_id)
+    if not attempt:
+        raise ValueError("PracticeAttempt not found")
+        
+    supabase = SupabaseManager.get_client()
+    ps_resp = await asyncio.to_thread(
+        lambda: supabase.table("practice_sets")
+        .select("student_id")
+        .eq("practice_set_id", attempt["practice_set_id"])
+        .execute()
+    )
+    if not ps_resp.data:
+        raise ValueError("PracticeSet not found")
+        
+    if ps_resp.data[0]["student_id"] != student_id:
+        raise ValueError("Access denied")
+        
+    return attempt
+
+
+async def start_attempt(payload: PracticeAttemptStartRequest, student_id: int) -> dict:
+    supabase = SupabaseManager.get_client()
+    ps_resp = await asyncio.to_thread(
+        lambda: supabase.table("practice_sets")
+        .select("student_id")
+        .eq("practice_set_id", payload.practice_set_id)
+        .execute()
+    )
+    if not ps_resp.data:
+        raise ValueError("PracticeSet not found")
+        
+    if ps_resp.data[0]["student_id"] != student_id:
+        raise ValueError("Access denied")
+
     return await create_practice_attempt_record({
         "practice_set_id": payload.practice_set_id,
         "status": "in_progress",
         "started_at": datetime.now(timezone.utc).isoformat()
     })
 
-async def autosave_answers(attempt_id: int, payload: StudentAnswerSaveRequest) -> list[dict]:
+
+async def autosave_answers(attempt_id: int, payload: StudentAnswerSaveRequest, student_id: int) -> list[dict]:
+    attempt = await validate_attempt_ownership(attempt_id, student_id)
+    if attempt["status"] != "in_progress":
+        raise ValueError("Practice attempt is not in progress")
+
     answered_at = datetime.now(timezone.utc).isoformat()
     payloads = [
         {
@@ -53,8 +92,35 @@ async def autosave_answers(attempt_id: int, payload: StudentAnswerSaveRequest) -
     from repositories.student_answer_repository import upsert_student_answers
     return await upsert_student_answers(payloads)
 
-async def submit_attempt(attempt_id: int) -> dict:
+
+async def submit_attempt(attempt_id: int, student_id: int) -> dict:
+    attempt = await validate_attempt_ownership(attempt_id, student_id)
+    if attempt["status"] != "in_progress":
+        raise ValueError("Practice attempt is already completed")
+
     supabase = SupabaseManager.get_client()
+    
+    # 1. Fetch practice set questions to grade
+    ps_questions_resp = await asyncio.to_thread(
+        lambda: supabase.table("practice_set_questions")
+        .select("question_id")
+        .eq("practice_set_id", attempt["practice_set_id"])
+        .execute()
+    )
+    ps_question_ids = [row["question_id"] for row in (ps_questions_resp.data or [])]
+    
+    correct_options = {}
+    if ps_question_ids:
+        correct_options_resp = await asyncio.to_thread(
+            lambda: supabase.table("question_options")
+            .select("question_id, option_id")
+            .in_("question_id", ps_question_ids)
+            .eq("is_correct", True)
+            .execute()
+        )
+        correct_options = {opt["question_id"]: opt["option_id"] for opt in (correct_options_resp.data or [])}
+        
+    # 2. Fetch student answers
     answers_resp = await asyncio.to_thread(
         lambda: supabase.table("student_answers")
         .select("*")
@@ -62,84 +128,122 @@ async def submit_attempt(attempt_id: int) -> dict:
         .is_("deleted_at", None)
         .execute()
     )
-    answers = answers_resp.data or []
-    
-    question_ids = [a["question_id"] for a in answers]
-    correct_options = {}
-    if question_ids:
-        correct_options_resp = await asyncio.to_thread(lambda: supabase.table("question_options").select("question_id, option_id").in_("question_id", question_ids).eq("is_correct", True).execute())
-        correct_options = {opt["question_id"]: opt["option_id"] for opt in (correct_options_resp.data or [])}
+    answers_by_qid = {ans["question_id"]: ans for ans in (answers_resp.data or [])}
     
     total_correct = 0
     total_wrong = 0
-    updates = []
-    for ans in answers:
+    to_update = []
+    to_insert = []
+    
+    for qid in ps_question_ids:
+        ans = answers_by_qid.get(qid)
+        selected_option_id = ans["selected_option_id"] if ans else None
+        
         is_correct = False
-        if ans["selected_option_id"] and ans["selected_option_id"] == correct_options.get(ans["question_id"]):
+        if selected_option_id and selected_option_id == correct_options.get(qid):
             is_correct = True
             total_correct += 1
-        elif ans["selected_option_id"]:
+        else:
             total_wrong += 1
-        # if not selected, it's just wrong but total_wrong includes attempted wrong
-        updates.append({
-            "answer_id": ans["answer_id"],
-            "attempt_id": ans["attempt_id"],
-            "question_id": ans["question_id"],
+            
+        payload_item = {
+            "attempt_id": attempt_id,
+            "question_id": qid,
+            "selected_option_id": selected_option_id,
             "is_correct": is_correct
-        })
-    
-    if updates:
+        }
+        if ans:
+            payload_item["answer_id"] = ans["answer_id"]
+            to_update.append(payload_item)
+        else:
+            to_insert.append(payload_item)
+            
+    if to_update:
         await asyncio.to_thread(
             lambda: supabase.table("student_answers")
-            .upsert(updates, on_conflict="attempt_id,question_id")
+            .upsert(to_update, on_conflict="attempt_id,question_id")
+            .execute()
+        )
+    if to_insert:
+        await asyncio.to_thread(
+            lambda: supabase.table("student_answers")
+            .insert(to_insert)
             .execute()
         )
         
-    attempt = await find_practice_attempt_by_id(attempt_id)
-    if not attempt:
-        raise ValueError("PracticeAttempt not found")
-        
+    # 3. Check time limit timeout enforcement
     ps_resp = await asyncio.to_thread(
         lambda: supabase.table("practice_sets")
-        .select("num_questions_actual")
+        .select("time_limit_minutes")
         .eq("practice_set_id", attempt["practice_set_id"])
         .is_("deleted_at", None)
         .execute()
     )
-    num_q = None
-    if ps_resp.data and "num_questions_actual" in ps_resp.data[0]:
-        num_q = ps_resp.data[0]["num_questions_actual"]
+    time_limit_minutes = None
+    if ps_resp.data:
+        time_limit_minutes = ps_resp.data[0].get("time_limit_minutes")
         
-    if num_q is None:
-        num_q = total_correct + total_wrong
+    status = "submitted"
+    if time_limit_minutes:
+        started_str = attempt.get("started_at")
+        if started_str:
+            if started_str.endswith("Z"):
+                started_str = started_str[:-1] + "+00:00"
+            started_dt = datetime.fromisoformat(started_str)
+            if started_dt.tzinfo is None:
+                started_dt = started_dt.replace(tzinfo=timezone.utc)
+            
+            elapsed_seconds = (datetime.now(timezone.utc) - started_dt).total_seconds()
+            if elapsed_seconds > (time_limit_minutes * 60 + 60):  # 60s grace period
+                status = "timeout"
+                
+    num_q = len(ps_question_ids)
     if num_q == 0:
         num_q = 1
-    
+        
     score = (total_correct / num_q) * 10.0
     
     updated_attempt = await update_practice_attempt_by_id(attempt_id, {
-        "status": "submitted",
+        "status": status,
         "submitted_at": datetime.now(timezone.utc).isoformat(),
         "total_correct": total_correct,
-        "total_wrong": num_q - total_correct,
+        "total_wrong": total_wrong,
         "score": score
     })
     return updated_attempt
 
-async def get_attempt_result(attempt_id: int) -> dict:
+
+async def get_attempt_result(attempt_id: int, student_id: int) -> dict:
+    attempt = await validate_attempt_ownership(attempt_id, student_id)
+    if attempt["status"] == "in_progress":
+        raise ValueError("Practice attempt is not completed yet")
+        
     details = await get_attempt_result_details(attempt_id)
     if not details:
         raise ValueError("PracticeAttempt not found")
         
+    supabase = SupabaseManager.get_client()
+    
+    # Fetch practice set questions to get order_num
+    psq_resp = await asyncio.to_thread(
+        lambda: supabase.table("practice_set_questions")
+        .select("question_id, order_num")
+        .eq("practice_set_id", attempt["practice_set_id"])
+        .execute()
+    )
+    order_map = {row["question_id"]: row["order_num"] for row in (psq_resp.data or [])}
+    
     answers = details.get("answers", [])
     question_rows = [ans.get("questions") for ans in answers if ans.get("questions")]
     image_by_id = await load_question_image_map(question_rows)
     formatted_questions = []
+    
     for ans in answers:
         q = ans.get("questions")
         if not q:
             continue
         opts = q.get("question_options", [])
+        opts = sorted(opts, key=lambda x: x.get("order_num", 0))
         image_id = int(q["image_id"]) if q.get("image_id") is not None else None
         
         formatted_questions.append({
@@ -157,22 +261,25 @@ async def get_attempt_result(attempt_id: int) -> dict:
                     "is_correct": o["is_correct"]
                 }
                 for o in opts
-            ]
+            ],
+            "order_num": order_map.get(q["question_id"], 999)
         })
+        
+    formatted_questions.sort(key=lambda x: x["order_num"])
         
     return {
         "attempt": details["attempt"],
         "questions": formatted_questions
     }
 
+
 async def get_my_history(student_id: int) -> list[dict]:
     return await find_all_student_history(student_id)
 
-async def get_attempt_questions(attempt_id: int) -> dict:
-    attempt = await find_practice_attempt_by_id(attempt_id)
-    if not attempt:
-        raise ValueError("PracticeAttempt not found")
-        
+
+async def get_attempt_questions(attempt_id: int, student_id: int) -> dict:
+    attempt = await validate_attempt_ownership(attempt_id, student_id)
+    
     supabase = SupabaseManager.get_client()
     
     ps_id = attempt["practice_set_id"]
@@ -213,10 +320,23 @@ async def get_attempt_questions(attempt_id: int) -> dict:
             "selected_option_id": answers.get(q["question_id"])
         })
         
+    # Fetch practice set details to get correct duration
+    ps_resp = await asyncio.to_thread(
+        lambda: supabase.table("practice_sets")
+        .select("time_limit_minutes")
+        .eq("practice_set_id", ps_id)
+        .limit(1)
+        .execute()
+    )
+    practice_set = ps_resp.data[0] if ps_resp.data else {}
+    time_limit_minutes = practice_set.get("time_limit_minutes") or 20
+
     return {
         "attempt_id": attempt_id,
         "practice_set_id": ps_id,
         "status": attempt["status"],
+        "started_at": attempt.get("started_at"),
+        "duration_seconds": int(time_limit_minutes) * 60,
         "questions": formatted_questions
     }
 

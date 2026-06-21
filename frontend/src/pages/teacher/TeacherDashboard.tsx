@@ -308,10 +308,21 @@ export default function TeacherDashboard() {
   const approvalPct = clampPct(data.insights.question_approval_rate_pct);
   const totalDifficultyQuestions = Math.max(
     1,
-    data.question_difficulty.easy + data.question_difficulty.medium + data.question_difficulty.hard,
+    data.question_difficulty.recognition +
+      data.question_difficulty.comprehension +
+      data.question_difficulty.application +
+      data.question_difficulty.advanced,
   );
-  const easyPct = clampPct((data.question_difficulty.easy / totalDifficultyQuestions) * 100);
-  const hardPct = clampPct((data.question_difficulty.hard / totalDifficultyQuestions) * 100);
+  const easyPct = clampPct(
+    ((data.question_difficulty.recognition + data.question_difficulty.comprehension) /
+      totalDifficultyQuestions) *
+      100,
+  );
+  const hardPct = clampPct(
+    ((data.question_difficulty.application + data.question_difficulty.advanced) /
+      totalDifficultyQuestions) *
+      100,
+  );
   const topApproved = recentApprovedQuestions[0];
 
   return (

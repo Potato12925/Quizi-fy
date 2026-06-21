@@ -36,9 +36,10 @@ export interface TeacherQuestionStatuses {
 }
 
 export interface TeacherQuestionDifficulty {
-  easy: number;
-  medium: number;
-  hard: number;
+  recognition: number;
+  comprehension: number;
+  application: number;
+  advanced: number;
 }
 
 export interface TeacherDashboardInsights {

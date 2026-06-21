@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   downloadClassSummaryExport,
@@ -39,6 +39,10 @@ const DIFFICULTY_LABEL_MAP: Record<string, string> = {
   easy: 'Dễ',
   medium: 'Trung bình',
   hard: 'Khó',
+  recognition: 'Nhận biết',
+  comprehension: 'Thông hiểu',
+  application: 'Vận dụng',
+  advanced: 'Vận dụng cao',
 };
 
 const SOURCE_LABEL_MAP: Record<string, string> = {

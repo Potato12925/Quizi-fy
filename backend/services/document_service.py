@@ -20,6 +20,7 @@ from repositories.document_topic_repository import (
     list_by_document_id,
     replace_topics_for_document,
 )
+from repositories.subject_repository import find_subject_by_class_subject_id
 from schemas.document_schema import DocumentCreateRequest, DocumentUpdateRequest, DocumentUploadRequest
 from utils.hash_util import generate_sha256
 from utils.storage_util import upload_document_file
@@ -30,6 +31,10 @@ class DocumentValidationError(ValueError):
 
 
 class DocumentAuthorizationError(ValueError):
+    pass
+
+
+class DocumentSubjectInactiveError(DocumentValidationError):
     pass
 
 
@@ -142,6 +147,11 @@ async def create_document(payload: DocumentCreateRequest, current_user: CurrentU
     if not _is_admin(current_user):
         teacher_id = current_user.user_id
     _, class_subject_id = await _validate_topic_ids(payload.topic_ids)
+    subject = await find_subject_by_class_subject_id(class_subject_id)
+    if not subject:
+        raise DocumentValidationError("Class subject not found")
+    if subject.get("status") != "active":
+        raise DocumentSubjectInactiveError("Subject is inactive and cannot be used to create new documents")
     await _validate_class_subject_access_by_teacher(class_subject_id, teacher_id=teacher_id, is_admin=_is_admin(current_user))
     created = await create_document_record(
         {
@@ -333,6 +343,11 @@ async def upload_teacher_document(
     )
 
     _, class_subject_id = await _validate_topic_ids(payload.topic_ids)
+    subject = await find_subject_by_class_subject_id(class_subject_id)
+    if not subject:
+        raise DocumentValidationError("Class subject not found")
+    if subject.get("status") != "active":
+        raise DocumentSubjectInactiveError("Subject is inactive and cannot be used to create new documents")
     await _validate_class_subject_access_by_teacher(class_subject_id, teacher_id=teacher_id, is_admin=False)
 
     existing_title = await find_active_document_by_title_in_class_subject(

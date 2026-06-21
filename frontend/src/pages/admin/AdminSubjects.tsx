@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getSubjects, createSubject, updateSubject, deleteSubject, type AdminSubject } from '@/api/adminApi';
+import { ApiError } from '@/api/client';
 import LoadingState from '@/components/common/LoadingState';
 import ErrorState from '@/components/common/ErrorState';
 
@@ -28,6 +29,25 @@ export default function AdminSubjectsPage() {
 
   // Delete target
   const [deleteTarget, setDeleteTarget] = useState<AdminSubject | null>(null);
+  const [deleteError, setDeleteError] = useState<string>('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const resolveDeleteErrorMessage = (err: unknown): string => {
+    if (err instanceof ApiError) {
+      const errorCode = err.data?.error?.code;
+      if (errorCode === 'SUBJECT_DELETE_ASSIGNED_TO_CLASS') {
+        return 'Không thể xóa vì môn học đã được gán vào lớp. Bạn chỉ có thể chuyển môn sang trạng thái tạm khóa.';
+      }
+      if (errorCode === 'SUBJECT_DELETE_HAS_PRACTICE_HISTORY') {
+        return 'Không thể xóa vì môn học đã có dữ liệu practice/history. Bạn chỉ có thể chuyển môn sang trạng thái tạm khóa.';
+      }
+      if (errorCode === 'SUBJECT_DELETE_IN_USE') {
+        return 'Không thể xóa môn học đang được sử dụng. Bạn chỉ có thể chuyển môn sang trạng thái tạm khóa.';
+      }
+      return err.message || 'Lỗi khi xóa môn học.';
+    }
+    return 'Lỗi khi xóa môn học.';
+  };
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -110,12 +130,17 @@ export default function AdminSubjectsPage() {
 
   const handleDeleteSubject = async () => {
     if (!deleteTarget) return;
+
+    setDeleteError('');
+    setIsDeleting(true);
     try {
       await deleteSubject(deleteTarget.id);
       setSubjects(prev => prev.filter(s => s.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) {
-      alert('Lỗi khi xóa môn học.');
+      setDeleteError(resolveDeleteErrorMessage(err));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -375,18 +400,28 @@ export default function AdminSubjectsPage() {
             <p className="mb-6 text-sm leading-relaxed text-slate-500">
               Bạn có chắc chắn muốn xóa môn học <strong>{deleteTarget.name}</strong> ({deleteTarget.code})? Hành động này sẽ gỡ bỏ môn học khỏi danh mục đào tạo của trường.
             </p>
+            {deleteError && (
+              <div className="mb-6 p-4 rounded-xl border border-red-100 bg-red-50 text-[#b20112] text-sm font-semibold text-left">
+                {deleteError}
+              </div>
+            )}
             <div className="flex justify-center gap-3">
               <button
-                onClick={() => setDeleteTarget(null)}
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteError('');
+                }}
                 className="px-5 py-3 text-sm font-bold transition-all border cursor-pointer rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50"
+                disabled={isDeleting}
               >
                 Hủy
               </button>
               <button
                 onClick={handleDeleteSubject}
-                className="px-5 py-3 rounded-xl bg-[#b20112] text-white text-sm font-black hover:bg-red-700 transition-all cursor-pointer"
+                className="px-5 py-3 rounded-xl bg-[#b20112] text-white text-sm font-black hover:bg-red-700 transition-all cursor-pointer disabled:opacity-60"
+                disabled={isDeleting}
               >
-                Đồng ý xóa
+                {isDeleting ? 'Đang xử lý...' : 'Đồng ý xóa'}
               </button>
             </div>
           </div>

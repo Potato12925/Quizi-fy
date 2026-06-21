@@ -17,6 +17,7 @@ from repositories.user_repository import (
     soft_delete_user_by_id,
     update_user_by_id,
 )
+from repositories.user_usage_repository import check_user_active_assignments, check_user_generated_data
 from schemas.user_schema import UserCreateRequest, UserUpdateRequest, ChangePasswordRequest
 from middlewares.auth_middleware import CurrentUser
 from services.auth_service import _verify_password
@@ -223,11 +224,23 @@ async def delete_user(user_id: int) -> dict:
     if "admin" in roles:
         raise ValueError("Admin user cannot be deleted")
 
+    if "teacher" in roles:
+        has_assignments = await check_user_active_assignments(user_id)
+        if has_assignments:
+            raise ValueError("Giáo viên đang được phân công lớp hoặc môn học. Vui lòng chuyển phân công trước khi xóa.")
+
+    has_data = await check_user_generated_data(user_id)
+    if has_data:
+        updated_user = await update_user_by_id(user_id, {"is_active": False})
+        if not updated_user:
+            raise ValueError("User not found")
+        return {"user_id": user_id, "deleted": False, "locked": True}
+
     deleted = await soft_delete_user_by_id(user_id)
     if not deleted:
         raise ValueError("User not found")
 
-    return {"user_id": user_id, "deleted": True}
+    return {"user_id": user_id, "deleted": True, "locked": False}
 
 
 async def change_password_for_user(

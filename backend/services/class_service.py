@@ -12,6 +12,8 @@ from repositories.class_repository import (
     find_class_subject_mapping,
     find_class_subject_by_record_id,
     find_class_teacher_mapping,
+    hard_delete_class_by_id,
+    hard_delete_class_teacher_mappings_by_class_id,
     has_any_class_links,
     list_class_student_counts,
     list_class_students,
@@ -22,10 +24,10 @@ from repositories.class_repository import (
     list_classes,
     list_subject_profiles,
     list_user_profiles,
-    soft_delete_class_by_id,
     soft_delete_class_student_mapping,
     soft_delete_class_subject_mapping,
     soft_delete_class_subject_mapping_by_record_id,
+    summarize_class_subject_usage,
     soft_delete_class_teacher_mapping,
     update_class_by_id,
     update_class_student_mapping,
@@ -44,6 +46,10 @@ from schemas.class_schema import (
     ClassUpdateRequest,
     UpdateClassSubjectRequest,
 )
+
+
+class SubjectInactiveError(ValueError):
+    pass
 
 
 def _map_class_row(
@@ -219,6 +225,13 @@ async def update_class(class_id: int, payload: ClassUpdateRequest) -> dict:
         raise ValueError("Class not found")
 
     if payload.teacher_id is not None:
+        old_teacher_id = existing_class.get("teacher_id")
+        if old_teacher_id is not None and int(old_teacher_id) != payload.teacher_id:
+            try:
+                await remove_teacher_from_class(class_id, int(old_teacher_id))
+            except ValueError:
+                pass  # Ignore if they cannot be removed (e.g. still assigned to subjects)
+
         await _sync_owner_teacher_mapping(class_id=class_id, teacher_id=payload.teacher_id)
 
     mapped = await _build_class_view_payload([updated])
@@ -236,7 +249,8 @@ async def delete_class(class_id: int) -> dict:
             raise ValueError("Class not found")
         return {"class_id": class_id, "deleted": False, "status": "inactive"}
 
-    deleted = await soft_delete_class_by_id(class_id)
+    await hard_delete_class_teacher_mappings_by_class_id(class_id)
+    deleted = await hard_delete_class_by_id(class_id)
     if not deleted:
         raise ValueError("Class not found")
 
@@ -288,10 +302,14 @@ async def assign_subject_to_class(class_id: int, payload: AssignSubjectToClassRe
     class_data = await find_class_by_id(class_id)
     if not class_data:
         raise ValueError("Class not found")
+    if class_data.get("status") == "inactive":
+        raise ValueError("Không thể thêm dữ liệu vào lớp học đã bị tạm khóa")
 
     subject = await find_subject_by_id(payload.subject_id)
     if not subject:
         raise ValueError("Subject not found")
+    if subject.get("status") != "active":
+        raise SubjectInactiveError("Subject is inactive and cannot be assigned to class")
 
     await _ensure_teacher_exists(payload.assigned_teacher_id)
     teacher_mapping = await find_class_teacher_mapping(
@@ -302,12 +320,12 @@ async def assign_subject_to_class(class_id: int, payload: AssignSubjectToClassRe
     if teacher_mapping is None:
         await _sync_owner_teacher_mapping(class_id=class_id, teacher_id=payload.assigned_teacher_id)
 
-    active_existing = await find_class_subject_mapping(
+    current_existing = await find_class_subject_mapping(
         class_id=class_id,
         subject_id=payload.subject_id,
         include_deleted=False,
     )
-    if active_existing is not None:
+    if current_existing is not None and str(current_existing.get("status") or "").lower() == "active":
         raise ValueError("Subject already assigned to class")
 
     existing = await find_class_subject_mapping(
@@ -356,6 +374,23 @@ async def remove_subject_from_class(class_id: int, subject_id: int) -> dict:
     if not existing:
         raise ValueError("Class subject assignment not found")
 
+    class_subject_id = int(existing["class_subject_id"])
+    usage = await summarize_class_subject_usage(class_id=class_id, class_subject_id=class_subject_id, subject_id=subject_id)
+    has_historical_data = any(value > 0 for value in usage.values())
+    if has_historical_data:
+        updated = await update_class_subject_mapping(class_subject_id, {"status": "inactive"})
+        if not updated:
+            raise ValueError("Class subject assignment not found")
+        return {
+            "class_id": class_id,
+            "class_subject_id": class_subject_id,
+            "subject_id": subject_id,
+            "deleted": False,
+            "status": "inactive",
+            "reason": "has_historical_data",
+            "usage": usage,
+        }
+
     deleted = await soft_delete_class_subject_mapping(class_id=class_id, subject_id=subject_id)
     if not deleted:
         raise ValueError("Class subject assignment not found")
@@ -388,18 +423,10 @@ async def update_class_subject(class_id: int, class_subject_id: int, payload: Up
 
         current_assigned_teacher_id = int(class_subject["assigned_teacher_id"]) if class_subject.get("assigned_teacher_id") is not None else None
         if current_assigned_teacher_id != payload.assigned_teacher_id:
-            deleted = await soft_delete_class_subject_mapping_by_record_id(class_id=class_id, class_subject_id=class_subject_id)
-            if not deleted:
+            updated = await update_class_subject_mapping(class_subject_id, {"assigned_teacher_id": payload.assigned_teacher_id, "status": next_status})
+            if not updated:
                 raise ValueError("Class subject assignment not found")
 
-            created = await create_class_subject_mapping(
-                {
-                    "class_id": class_id,
-                    "subject_id": int(class_subject["subject_id"]),
-                    "assigned_teacher_id": payload.assigned_teacher_id,
-                    "status": next_status,
-                }
-            )
             subject = await find_subject_by_id(int(class_subject["subject_id"]))
             subject_name = subject.get("subject_name") if subject else f"#{int(class_subject['subject_id'])}"
             await create_notification_for_user(
@@ -409,7 +436,7 @@ async def update_class_subject(class_id: int, class_subject_id: int, payload: Up
             )
             rows = await get_class_subjects(class_id)
             for row in rows:
-                if int(row["class_subject_id"]) == int(created["class_subject_id"]):
+                if int(row["class_subject_id"]) == class_subject_id:
                     return row
             raise ValueError("Class subject assignment not found")
 
@@ -441,6 +468,27 @@ async def remove_subject_from_class_by_record_id(class_id: int, class_subject_id
     existing = await find_class_subject_by_record_id(class_id=class_id, class_subject_id=class_subject_id, include_deleted=False)
     if not existing:
         raise ValueError("Class subject assignment not found")
+
+    subject_id = int(existing["subject_id"])
+    usage = await summarize_class_subject_usage(
+        class_id=class_id,
+        class_subject_id=class_subject_id,
+        subject_id=subject_id,
+    )
+    has_historical_data = any(value > 0 for value in usage.values())
+    if has_historical_data:
+        updated = await update_class_subject_mapping(class_subject_id, {"status": "inactive"})
+        if not updated:
+            raise ValueError("Class subject assignment not found")
+        return {
+            "class_id": class_id,
+            "class_subject_id": class_subject_id,
+            "subject_id": subject_id,
+            "deleted": False,
+            "status": "inactive",
+            "reason": "has_historical_data",
+            "usage": usage,
+        }
 
     deleted = await soft_delete_class_subject_mapping_by_record_id(class_id=class_id, class_subject_id=class_subject_id)
     if not deleted:
@@ -478,6 +526,8 @@ async def assign_student_to_class(class_id: int, payload: AssignStudentToClassRe
     class_data = await find_class_by_id(class_id)
     if not class_data:
         raise ValueError("Class not found")
+    if class_data.get("status") == "inactive":
+        raise ValueError("Không thể thêm dữ liệu vào lớp học đã bị tạm khóa")
 
     await _ensure_student_exists(payload.student_id)
 
@@ -556,6 +606,8 @@ async def assign_teacher_to_class(class_id: int, payload: AssignTeacherToClassRe
     class_data = await find_class_by_id(class_id)
     if not class_data:
         raise ValueError("Class not found")
+    if class_data.get("status") == "inactive":
+        raise ValueError("Không thể thêm dữ liệu vào lớp học đã bị tạm khóa")
     await _ensure_teacher_exists(payload.teacher_id)
 
     existing = await find_class_teacher_mapping(class_id=class_id, teacher_id=payload.teacher_id, include_deleted=True)
@@ -579,6 +631,17 @@ async def remove_teacher_from_class(class_id: int, teacher_id: int) -> dict:
         raise ValueError("Class not found")
     if int(class_data["teacher_id"]) == teacher_id:
         raise ValueError("Cannot remove homeroom teacher from class teachers")
+
+    # Check if teacher is still assigned to any subject in this class
+    class_subjects = await list_class_subjects(class_id)
+    assigned_subjects = [
+        s for s in class_subjects if s.get("assigned_teacher_id") == teacher_id
+    ]
+    if assigned_subjects:
+        raise ValueError(
+            "Cannot remove teacher: still assigned to subject(s) in this class. "
+            "Please reassign before removing."
+        )
 
     existing = await find_class_teacher_mapping(class_id=class_id, teacher_id=teacher_id, include_deleted=False)
     if not existing:

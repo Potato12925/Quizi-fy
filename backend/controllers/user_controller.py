@@ -51,7 +51,7 @@ async def post_user(
 @router.get("", summary="List users")
 async def get_user_list(
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=10000),
     role_code: str = Query(default="all"),
     status: str = Query(default="all"),
     search: str | None = Query(default=None),

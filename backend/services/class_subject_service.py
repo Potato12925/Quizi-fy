@@ -8,10 +8,17 @@ from repositories.class_subject_repository import (
     soft_delete_class_subject_by_id,
     update_class_subject_by_id,
 )
+from repositories.subject_repository import is_subject_active
 from schemas.class_subject_schema import ClassSubjectCreateRequest, ClassSubjectUpdateRequest
 
 
+class ClassSubjectInactiveError(ValueError):
+    pass
+
+
 async def create_class_subject(payload: ClassSubjectCreateRequest) -> dict:
+    if not await is_subject_active(payload.subject_id):
+        raise ClassSubjectInactiveError("Subject is inactive and cannot be assigned to class")
     return await create_class_subject_record({ "class_id": payload.class_id, "subject_id": payload.subject_id, "assigned_teacher_id": payload.assigned_teacher_id, "status": "active" })
 
 
@@ -55,6 +62,28 @@ async def delete_class_subject(record_id: int) -> dict:
     existing = await find_class_subject_by_id(record_id)
     if not existing:
         raise ValueError("ClassSubject not found")
+
+    from services.class_service import summarize_class_subject_usage, update_class_subject_mapping
+    class_id = int(existing["class_id"])
+    subject_id = int(existing["subject_id"])
+    
+    usage = await summarize_class_subject_usage(
+        class_id=class_id,
+        class_subject_id=record_id,
+        subject_id=subject_id,
+    )
+    has_historical_data = any(value > 0 for value in usage.values())
+    if has_historical_data:
+        updated = await update_class_subject_mapping(record_id, {"status": "inactive"})
+        if not updated:
+            raise ValueError("ClassSubject not found")
+        return {
+            "class_subject_id": record_id,
+            "deleted": False,
+            "status": "inactive",
+            "reason": "has_historical_data"
+        }
+
     deleted = await soft_delete_class_subject_by_id(record_id)
     if not deleted:
         raise ValueError("ClassSubject not found")

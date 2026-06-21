@@ -2,20 +2,25 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   assignStudentToAdminClass,
   assignSubjectToAdminClass,
+  assignTeacherToAdminClass,
   createAdminClass,
   deleteAdminClass,
   getAdminClassDetail,
   getAdminClasses,
   getAdminClassStudents,
   getAdminClassSubjects,
+  getAdminClassTeachers,
   getAdminStudentOptions,
   getAdminSubjectOptions,
   getAdminTeacherOptions,
   removeStudentFromAdminClass,
   removeSubjectFromAdminClassByClassSubjectId,
+  removeTeacherFromAdminClass,
+  updateAdminClassSubjectById,
   type AdminClassRecord,
   type AdminClassStudentRecord,
   type AdminClassSubjectRecord,
+  type AdminClassTeacherRecord,
   type AdminClassTeacherOption,
   type AdminClassStudentOption,
   type AdminSubjectOption,
@@ -26,7 +31,7 @@ import EmptyState from '@/components/common/EmptyState';
 import ErrorState from '@/components/common/ErrorState';
 import LoadingState from '@/components/common/LoadingState';
 
-type DetailTab = 'subjects' | 'students';
+type DetailTab = 'subjects' | 'students' | 'teachers';
 
 const toStatusLabel = (status: 'active' | 'inactive') => (status === 'active' ? 'Hoạt động' : 'Tạm khóa');
 
@@ -42,7 +47,11 @@ export default function AdminClassesPage() {
 
   const [classSubjects, setClassSubjects] = useState<AdminClassSubjectRecord[]>([]);
   const [classStudents, setClassStudents] = useState<AdminClassStudentRecord[]>([]);
+  const [classTeachers, setClassTeachers] = useState<AdminClassTeacherRecord[]>([]);
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>('subjects');
+  const [selectedTeacherToAssign, setSelectedTeacherToAssign] = useState('');
+  const [editingSubjectId, setEditingSubjectId] = useState<number | null>(null);
+  const [editingTeacherId, setEditingTeacherId] = useState('');
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,14 +131,16 @@ export default function AdminClassesPage() {
     setIsDetailLoading(true);
     setDetailError(null);
     try {
-      const [detail, subjects, students] = await Promise.all([
+      const [detail, subjects, students, teachers] = await Promise.all([
         getAdminClassDetail(classId),
         getAdminClassSubjects(classId),
         getAdminClassStudents(classId),
+        getAdminClassTeachers(classId),
       ]);
       setSelectedClass(detail);
       setClassSubjects(subjects);
       setClassStudents(students);
+      setClassTeachers(teachers);
     } catch (err: any) {
       setDetailError(err?.message || 'Không thể tải chi tiết lớp học.');
     } finally {
@@ -165,6 +176,7 @@ export default function AdminClassesPage() {
       setSelectedClass(null);
       setClassSubjects([]);
       setClassStudents([]);
+      setClassTeachers([]);
       return;
     }
     fetchSelectedClassDetail(selectedClassId);
@@ -266,9 +278,9 @@ export default function AdminClassesPage() {
       setDeleteTarget(null);
       await fetchClasses();
       if (result.deleted) {
-        alert('Đã xóa mềm lớp học thành công.');
+        alert('Đã xóa lớp học thành công.');
       } else {
-        alert('Lớp đã phát sinh dữ liệu, hệ thống chuyển sang trạng thái tạm khóa.');
+        alert('Lớp đã phát sinh dữ liệu học tập, hệ thống chuyển sang trạng thái tạm khóa.');
       }
     } catch (err: any) {
       alert(err?.message || 'Lỗi khi xóa lớp học.');
@@ -301,12 +313,31 @@ export default function AdminClassesPage() {
     const label = subjectName || `#${classSubjectId}`;
     if (!window.confirm(`Bạn có chắc muốn gỡ môn học ${label} ra khỏi lớp?`)) return;
     try {
-      await removeSubjectFromAdminClassByClassSubjectId(selectedClassId, classSubjectId);
+      const result = await removeSubjectFromAdminClassByClassSubjectId(selectedClassId, classSubjectId);
       await fetchSelectedClassDetail(selectedClassId);
       await fetchClasses();
-      alert('Đã gỡ môn học khỏi lớp.');
+      if (result && result.deleted === false) {
+        alert('Môn đã có dữ liệu, hệ thống chuyển sang tạm khóa.');
+      } else {
+        alert('Đã gỡ môn học khỏi lớp.');
+      }
     } catch (err: any) {
       alert(err?.message || 'Lỗi khi gỡ môn học khỏi lớp.');
+    }
+  };
+
+  const handleUpdateSubjectTeacher = async (classSubjectId: number) => {
+    if (!selectedClassId || !editingTeacherId) return;
+    try {
+      await updateAdminClassSubjectById(selectedClassId, classSubjectId, {
+        assigned_teacher_id: Number(editingTeacherId),
+      });
+      setEditingSubjectId(null);
+      setEditingTeacherId('');
+      await fetchSelectedClassDetail(selectedClassId);
+      alert('Đã đổi giáo viên phụ trách môn học.');
+    } catch (err: any) {
+      alert(err?.message || 'Lỗi khi đổi giáo viên phụ trách.');
     }
   };
 
@@ -341,6 +372,38 @@ export default function AdminClassesPage() {
     const enrolled = new Set(classStudents.map((item) => item.student_id));
     return studentOptions.filter((item) => item.is_active && !enrolled.has(item.user_id));
   }, [classStudents, studentOptions]);
+
+  const availableTeachersToAssign = useMemo(() => {
+    const assigned = new Set(classTeachers.map((item) => item.teacher_id));
+    return teacherOptions.filter((item) => item.is_active && !assigned.has(item.user_id));
+  }, [classTeachers, teacherOptions]);
+
+  const handleAssignTeacher = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClassId || !selectedTeacherToAssign) return;
+    try {
+      await assignTeacherToAdminClass(selectedClassId, { teacher_id: Number(selectedTeacherToAssign) });
+      setSelectedTeacherToAssign('');
+      await fetchSelectedClassDetail(selectedClassId);
+      await fetchClasses();
+      alert('Đã thêm giáo viên vào lớp thành công.');
+    } catch (err: any) {
+      alert(err?.message || 'Lỗi khi thêm giáo viên vào lớp.');
+    }
+  };
+
+  const handleRemoveTeacher = async (teacherId: number, teacherName: string | null) => {
+    if (!selectedClassId) return;
+    if (!window.confirm(`Bạn có chắc muốn gỡ giáo viên ${teacherName || `#${teacherId}`} ra khỏi lớp?`)) return;
+    try {
+      await removeTeacherFromAdminClass(selectedClassId, teacherId);
+      await fetchSelectedClassDetail(selectedClassId);
+      await fetchClasses();
+      alert('Đã gỡ giáo viên khỏi lớp.');
+    } catch (err: any) {
+      alert(err?.message || 'Lỗi khi gỡ giáo viên khỏi lớp.');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -602,6 +665,12 @@ export default function AdminClassesPage() {
                     Môn học ({classSubjects.length})
                   </button>
                   <button
+                    onClick={() => setActiveDetailTab('teachers')}
+                    className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all cursor-pointer ${activeDetailTab === 'teachers' ? 'bg-[#b20112] text-white shadow-md' : 'text-slate-500'}`}
+                  >
+                    Giáo viên ({classTeachers.length})
+                  </button>
+                  <button
                     onClick={() => setActiveDetailTab('students')}
                     className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all cursor-pointer ${activeDetailTab === 'students' ? 'bg-[#b20112] text-white shadow-md' : 'text-slate-500'}`}
                   >
@@ -623,15 +692,56 @@ export default function AdminClassesPage() {
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{subject.subject_code || '-'}</p>
                               </div>
                               <div className="flex items-center gap-2">
-                                <span className="px-3 py-1 rounded-full text-[9px] font-black bg-white border border-slate-100 text-slate-600">
-                                  {subject.assigned_teacher_name || 'Chưa gán'}
-                                </span>
-                                <button
-                                  onClick={() => handleRemoveSubject(subject.class_subject_id, subject.subject_name)}
-                                  className="w-8 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-[#b20112] hover:border-red-100 transition-all cursor-pointer flex items-center justify-center"
-                                >
-                                  <span className="material-symbols-outlined text-base">close</span>
-                                </button>
+                                {editingSubjectId === subject.class_subject_id ? (
+                                  <>
+                                    <select
+                                      value={editingTeacherId}
+                                      onChange={(e) => setEditingTeacherId(e.target.value)}
+                                      className="px-3 py-1.5 rounded-lg border border-slate-200 text-[11px] outline-none bg-white min-w-[140px]"
+                                    >
+                                      <option value="">-- Chọn GV --</option>
+                                      {teacherOptions.filter((item) => item.is_active).map((t) => (
+                                        <option key={t.user_id} value={t.user_id}>
+                                          {t.full_name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      onClick={() => handleUpdateSubjectTeacher(subject.class_subject_id)}
+                                      disabled={!editingTeacherId}
+                                      className="w-8 h-8 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-all cursor-pointer flex items-center justify-center disabled:opacity-40"
+                                      title="Lưu"
+                                    >
+                                      <span className="material-symbols-outlined text-base">check</span>
+                                    </button>
+                                    <button
+                                      onClick={() => { setEditingSubjectId(null); setEditingTeacherId(''); }}
+                                      className="w-8 h-8 rounded-lg bg-slate-200 text-slate-500 hover:bg-slate-300 transition-all cursor-pointer flex items-center justify-center"
+                                      title="Hủy"
+                                    >
+                                      <span className="material-symbols-outlined text-base">close</span>
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="px-3 py-1 rounded-full text-[9px] font-black bg-white border border-slate-100 text-slate-600">
+                                      {subject.assigned_teacher_name || 'Chưa gán'}
+                                    </span>
+                                    <button
+                                      onClick={() => { setEditingSubjectId(subject.class_subject_id); setEditingTeacherId(subject.assigned_teacher_id ? String(subject.assigned_teacher_id) : ''); }}
+                                      className="w-8 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-blue-500 hover:border-blue-100 transition-all cursor-pointer flex items-center justify-center"
+                                      title="Đổi giáo viên phụ trách"
+                                    >
+                                      <span className="material-symbols-outlined text-base">edit</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handleRemoveSubject(subject.class_subject_id, subject.subject_name)}
+                                      className="w-8 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-[#b20112] hover:border-red-100 transition-all cursor-pointer flex items-center justify-center"
+                                    >
+                                      <span className="material-symbols-outlined text-base">close</span>
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -670,6 +780,64 @@ export default function AdminClassesPage() {
                         </select>
                         <button type="submit" className="w-full py-3 bg-[#b20112] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-700 transition-colors cursor-pointer">
                           Xác nhận gán môn
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                ) : activeDetailTab === 'teachers' ? (
+                  <div className="space-y-6 flex-1 flex flex-col justify-between">
+                    <div className="space-y-3 overflow-y-auto max-h-[300px] flex-1">
+                      {classTeachers.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 font-medium italic border border-dashed border-slate-100 rounded-2xl">Lớp học hiện chưa có giáo viên nào.</div>
+                      ) : (
+                        classTeachers.map((teacher) => {
+                          const isHomeroom = selectedClass && teacher.teacher_id === selectedClass.teacher_id;
+                          return (
+                            <div key={teacher.class_teacher_id} className="flex items-center justify-between rounded-2xl bg-slate-50 px-5 py-4 border border-slate-100">
+                              <div className="flex items-center gap-3">
+                                <div>
+                                  <p className="text-sm font-black text-slate-900">{teacher.full_name || 'Unknown Teacher'}</p>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{teacher.username || '-'}</p>
+                                </div>
+                                {isHomeroom && (
+                                  <span className="px-2.5 py-1 rounded-full text-[9px] font-black bg-[#b20112]/10 text-[#b20112] border border-[#b20112]/20">
+                                    GVCN
+                                  </span>
+                                )}
+                              </div>
+                              {!isHomeroom && (
+                                <button
+                                  onClick={() => handleRemoveTeacher(teacher.teacher_id, teacher.full_name)}
+                                  className="w-8 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-[#b20112] hover:border-red-100 transition-all cursor-pointer flex items-center justify-center"
+                                  title="Gỡ giáo viên khỏi lớp"
+                                >
+                                  <span className="material-symbols-outlined text-base">close</span>
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <div className="border-t border-slate-50 pt-6 mt-6">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-[#b20112] mb-3">Thêm giáo viên vào lớp</p>
+                      <form onSubmit={handleAssignTeacher} className="flex gap-2">
+                        <select
+                          required
+                          value={selectedTeacherToAssign}
+                          onChange={(e) => setSelectedTeacherToAssign(e.target.value)}
+                          className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-xs outline-none bg-white"
+                        >
+                          <option value="">-- Chọn giáo viên --</option>
+                          {availableTeachersToAssign.map((t) => (
+                            <option key={t.user_id} value={t.user_id}>
+                              {t.full_name} ({t.username})
+                            </option>
+                          ))}
+                        </select>
+                        <button type="submit" className="px-5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-800 transition-colors cursor-pointer">
+                          Thêm
                         </button>
                       </form>
                     </div>
@@ -835,7 +1003,7 @@ export default function AdminClassesPage() {
             <h3 className="text-xl font-black text-slate-900 mb-2">Xác nhận xóa lớp học</h3>
             <p className="text-sm text-slate-500 mb-6 leading-relaxed">
               Bạn có chắc chắn muốn xóa lớp học <strong>{deleteTarget.class_name}</strong> ({deleteTarget.class_code})?
-              Nếu lớp đã phát sinh dữ liệu học sinh/giáo viên/môn học thì hệ thống sẽ tự chuyển sang trạng thái tạm khóa.
+              Nếu lớp đã phát sinh dữ liệu học sinh hoặc môn học thì hệ thống sẽ tự chuyển sang trạng thái tạm khóa.
             </p>
             <div className="flex gap-3 justify-center">
               <button

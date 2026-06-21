@@ -5,6 +5,7 @@ from middlewares.auth_middleware import CurrentUser, require_roles
 from schemas.document_schema import DocumentCreateRequest, DocumentUpdateRequest, DocumentUploadRequest
 from services.document_service import (
     DocumentAuthorizationError,
+    DocumentSubjectInactiveError,
     DocumentValidationError,
     create_document,
     delete_document,
@@ -41,6 +42,8 @@ async def upload_document_route(
             file_bytes=file_bytes,
         )
         return success_response(data=result, message="Document uploaded successfully", status_code=201)
+    except DocumentSubjectInactiveError as exc:
+        return error_response(message=str(exc), status_code=409, error_code="DOCUMENT_UPLOAD_SUBJECT_INACTIVE")
     except DocumentAuthorizationError as exc:
         return error_response(message=str(exc), status_code=403, error_code="DOCUMENT_UPLOAD_FORBIDDEN")
     except DocumentValidationError as exc:
@@ -54,6 +57,8 @@ async def post_document(payload: DocumentCreateRequest, current_user: CurrentUse
     try:
         result = await create_document(payload, current_user=current_user)
         return success_response(data=result, message="Document created successfully", status_code=201)
+    except DocumentSubjectInactiveError as exc:
+        return error_response(message=str(exc), status_code=409, error_code="DOCUMENT_CREATE_SUBJECT_INACTIVE")
     except DocumentAuthorizationError as exc:
         return error_response(message=str(exc), status_code=403, error_code="DOCUMENT_CREATE_FORBIDDEN")
     except ValueError as exc:

@@ -8,10 +8,21 @@ from repositories.ai_request_repository import (
     soft_delete_ai_request_by_id,
     update_ai_request_by_id,
 )
+from repositories.subject_repository import find_subject_by_document_topic_id
 from schemas.ai_request_schema import AiRequestCreateRequest, AiRequestUpdateRequest
 
 
+class AiRequestSubjectInactiveError(ValueError):
+    pass
+
+
 async def create_ai_request(payload: AiRequestCreateRequest) -> dict:
+    subject = await find_subject_by_document_topic_id(payload.document_topic_id)
+    if not subject:
+        raise ValueError("Document topic not found")
+    if subject.get("status") != "active":
+        raise AiRequestSubjectInactiveError("Subject is inactive and cannot be used to create new AI requests")
+
     created = await create_ai_request_record(
         {
             "document_topic_id": payload.document_topic_id,

@@ -309,7 +309,7 @@ async def list_ai_requests(
 ) -> list[dict]:
     supabase = SupabaseManager.get_client()
     query = supabase.table("ai_requests").select(
-        "request_id,document_topic_id,num_questions,difficulty,content_scope,status,generated_question_count,retry_count,error_message,is_reviewed,created_at,updated_at"
+        "request_id,document_topic_id,num_questions,content_scope,status,generated_question_count,retry_count,error_message,is_reviewed,created_at,updated_at"
     )
 
     if document_topic_ids is not None:

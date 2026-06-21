@@ -11,6 +11,7 @@ from repositories.topic_repository import (
     soft_delete_topic_by_id,
     update_topic_by_id,
 )
+from repositories.subject_repository import find_subject_by_class_subject_id
 from schemas.topic_schema import TopicCreateRequest, TopicUpdateRequest
 
 
@@ -19,6 +20,10 @@ class TopicValidationError(ValueError):
 
 
 class TopicAuthorizationError(ValueError):
+    pass
+
+
+class TopicSubjectInactiveError(TopicValidationError):
     pass
 
 
@@ -55,6 +60,12 @@ async def create_topic(payload: TopicCreateRequest, current_user: CurrentUser) -
         teacher_class_subject_ids = await _get_teacher_class_subject_ids(current_user)
         if payload.class_subject_id not in teacher_class_subject_ids:
             raise TopicAuthorizationError("You can only create topics for your assigned class subjects")
+
+    subject = await find_subject_by_class_subject_id(payload.class_subject_id)
+    if not subject:
+        raise TopicValidationError("Class subject not found")
+    if subject.get("status") != "active":
+        raise TopicSubjectInactiveError("Subject is inactive and cannot be used to create new topics")
 
     exists = await find_topic_by_name_and_class_subject(payload.topic_name, payload.class_subject_id)
     if exists:

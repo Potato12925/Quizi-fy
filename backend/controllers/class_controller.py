@@ -12,6 +12,7 @@ from schemas.class_schema import (
     UpdateClassSubjectRequest,
 )
 from services.class_service import (
+    SubjectInactiveError,
     assign_teacher_to_class,
     assign_student_to_class,
     assign_subject_to_class,
@@ -62,7 +63,7 @@ async def post_class(
 @router.get("", summary="List classes")
 async def get_class_list(
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=10000),
     search: str | None = Query(default=None),
     teacher_id: int | None = Query(default=None, ge=1),
     status: str = Query(default="all"),
@@ -275,6 +276,12 @@ async def post_assign_subject_to_class(
             data=result,
             message="Subject assigned to class successfully",
             status_code=201,
+        )
+    except SubjectInactiveError as exc:
+        return error_response(
+            message=str(exc),
+            status_code=409,
+            error_code="CLASS_SUBJECT_ASSIGN_SUBJECT_INACTIVE",
         )
     except ValueError as exc:
         status_code = 404 if str(exc) in {"Class not found", "Subject not found"} else 400

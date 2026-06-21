@@ -5,6 +5,7 @@ from middlewares.auth_middleware import CurrentUser, require_roles
 from schemas.topic_schema import TopicCreateRequest, TopicUpdateRequest
 from services.topic_service import (
     TopicAuthorizationError,
+    TopicSubjectInactiveError,
     TopicValidationError,
     create_topic,
     delete_topic,
@@ -21,6 +22,8 @@ async def post_topic(payload: TopicCreateRequest, current_user: CurrentUser = De
     try:
         result = await create_topic(payload, current_user=current_user)
         return success_response(data=result, message="Topic created successfully", status_code=201)
+    except TopicSubjectInactiveError as exc:
+        return error_response(message=str(exc), status_code=409, error_code="TOPIC_CREATE_SUBJECT_INACTIVE")
     except TopicAuthorizationError as exc:
         return error_response(message=str(exc), status_code=403, error_code="TOPIC_CREATE_FORBIDDEN")
     except (ValueError, TopicValidationError) as exc:

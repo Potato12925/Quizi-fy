@@ -8,15 +8,15 @@ from services.class_teacher_service import create_class_teacher, delete_class_te
 router = APIRouter(prefix="/class-teachers", tags=["ClassTeachers"])
 
 
-@router.post("", summary="Create class_teacher")
-async def post_class_teacher(payload: ClassTeacherCreateRequest, _: CurrentUser = Depends(require_roles("admin"))):
-    try:
-        result = await create_class_teacher(payload)
-        return success_response(data=result, message="ClassTeacher created successfully", status_code=201)
-    except ValueError as exc:
-        return error_response(message=str(exc), status_code=400, error_code="CLASSTEACHER_CREATE_INVALID")
-    except Exception:
-        return error_response(message="Unable to create class_teacher", status_code=500, error_code="CLASSTEACHER_CREATE_FAILED")
+# @router.post("", summary="Create class_teacher")
+# async def post_class_teacher(payload: ClassTeacherCreateRequest, _: CurrentUser = Depends(require_roles("admin"))):
+#     try:
+#         result = await create_class_teacher(payload)
+#         return success_response(data=result, message="ClassTeacher created successfully", status_code=201)
+#     except ValueError as exc:
+#         return error_response(message=str(exc), status_code=400, error_code="CLASSTEACHER_CREATE_INVALID")
+#     except Exception:
+#         return error_response(message="Unable to create class_teacher", status_code=500, error_code="CLASSTEACHER_CREATE_FAILED")
 
 
 @router.get("", summary="List class-teachers")
@@ -39,25 +39,25 @@ async def get_class_teacher_detail(record_id: int, _: CurrentUser = Depends(requ
         return error_response(message="Unable to load class_teacher", status_code=500, error_code="CLASSTEACHER_GET_FAILED")
 
 
-@router.put("/{record_id}", summary="Update class_teacher")
-async def put_class_teacher(record_id: int, payload: ClassTeacherUpdateRequest, _: CurrentUser = Depends(require_roles("admin"))):
-    try:
-        result = await update_class_teacher(record_id, payload)
-        return success_response(data=result, message="ClassTeacher updated successfully", status_code=200)
-    except ValueError as exc:
-        status_code = 404 if str(exc) == "ClassTeacher not found" else 400
-        return error_response(message=str(exc), status_code=status_code, error_code="CLASSTEACHER_UPDATE_INVALID")
-    except Exception:
-        return error_response(message="Unable to update class_teacher", status_code=500, error_code="CLASSTEACHER_UPDATE_FAILED")
-
-
-@router.delete("/{record_id}", summary="Delete class_teacher")
-async def delete_class_teacher_route(record_id: int, _: CurrentUser = Depends(require_roles("admin"))):
-    try:
-        result = await delete_class_teacher(record_id)
-        return success_response(data=result, message="ClassTeacher deleted successfully", status_code=200)
-    except ValueError as exc:
-        status_code = 404 if str(exc) == "ClassTeacher not found" else 400
-        return error_response(message=str(exc), status_code=status_code, error_code="CLASSTEACHER_DELETE_INVALID")
-    except Exception:
-        return error_response(message="Unable to delete class_teacher", status_code=500, error_code="CLASSTEACHER_DELETE_FAILED")
+# @router.put("/{record_id}", summary="Update class_teacher")
+# async def put_class_teacher(record_id: int, payload: ClassTeacherUpdateRequest, _: CurrentUser = Depends(require_roles("admin"))):
+#     try:
+#         result = await update_class_teacher(record_id, payload)
+#         return success_response(data=result, message="ClassTeacher updated successfully", status_code=200)
+#     except ValueError as exc:
+#         status_code = 404 if str(exc) == "ClassTeacher not found" else 400
+#         return error_response(message=str(exc), status_code=status_code, error_code="CLASSTEACHER_UPDATE_INVALID")
+#     except Exception:
+#         return error_response(message="Unable to update class_teacher", status_code=500, error_code="CLASSTEACHER_UPDATE_FAILED")
+# 
+# 
+# @router.delete("/{record_id}", summary="Delete class_teacher")
+# async def delete_class_teacher_route(record_id: int, _: CurrentUser = Depends(require_roles("admin"))):
+#     try:
+#         result = await delete_class_teacher(record_id)
+#         return success_response(data=result, message="ClassTeacher deleted successfully", status_code=200)
+#     except ValueError as exc:
+#         status_code = 404 if str(exc) == "ClassTeacher not found" else 400
+#         return error_response(message=str(exc), status_code=status_code, error_code="CLASSTEACHER_DELETE_INVALID")
+#     except Exception:
+#         return error_response(message="Unable to delete class_teacher", status_code=500, error_code="CLASSTEACHER_DELETE_FAILED")

@@ -117,11 +117,32 @@ async def soft_delete_class_by_id(class_id: int) -> bool:
     return len(rows) > 0
 
 
+async def hard_delete_class_teacher_mappings_by_class_id(class_id: int) -> None:
+    supabase = SupabaseManager.get_client()
+    await asyncio.to_thread(
+        lambda: supabase.table("class_teachers")
+        .delete()
+        .eq("class_id", class_id)
+        .execute()
+    )
+
+
+async def hard_delete_class_by_id(class_id: int) -> bool:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("classes")
+        .delete()
+        .eq("class_id", class_id)
+        .execute()
+    )
+    rows = response.data or []
+    return len(rows) > 0
+
+
 async def has_any_class_links(class_id: int) -> bool:
     supabase = SupabaseManager.get_client()
     checks = [
         ("class_students", "class_student_id"),
-        ("class_teachers", "class_teacher_id"),
         ("class_subjects", "class_subject_id"),
     ]
     for table_name, pk_name in checks:
@@ -339,6 +360,119 @@ async def soft_delete_class_subject_mapping_by_record_id(class_id: int, class_su
     )
     rows = response.data or []
     return len(rows) > 0
+
+
+async def summarize_class_subject_usage(class_id: int, class_subject_id: int, subject_id: int) -> dict[str, int]:
+    supabase = SupabaseManager.get_client()
+
+    # Count usage across all mappings of the same class+subject pair,
+    # including historical mappings that may have been soft-deleted.
+    class_subjects_resp = await asyncio.to_thread(
+        lambda: supabase.table("class_subjects")
+        .select("class_subject_id")
+        .eq("class_id", class_id)
+        .eq("subject_id", subject_id)
+        .execute()
+    )
+    related_class_subject_ids = sorted(
+        {
+            int(item["class_subject_id"])
+            for item in (class_subjects_resp.data or [])
+            if item.get("class_subject_id") is not None
+        }
+    )
+    if not related_class_subject_ids:
+        related_class_subject_ids = [class_subject_id]
+
+    topics_resp = await asyncio.to_thread(
+        lambda: supabase.table("topics")
+        .select("topic_id")
+        .in_("class_subject_id", related_class_subject_ids)
+        .execute()
+    )
+    topic_ids = [int(item["topic_id"]) for item in (topics_resp.data or []) if item.get("topic_id") is not None]
+
+    document_count = 0
+    question_count = 0
+    practice_set_ids: set[int] = set()
+
+    if topic_ids:
+        document_topics_resp = await asyncio.to_thread(
+            lambda: supabase.table("document_topics")
+            .select("document_id")
+            .in_("topic_id", topic_ids)
+            .execute()
+        )
+        document_ids = sorted(
+            {int(item["document_id"]) for item in (document_topics_resp.data or []) if item.get("document_id") is not None}
+        )
+        if document_ids:
+            documents_resp = await asyncio.to_thread(
+                lambda: supabase.table("documents")
+                .select("document_id", count="exact")
+                .in_("document_id", document_ids)
+                .execute()
+            )
+            document_count = int(documents_resp.count or 0)
+
+        questions_resp = await asyncio.to_thread(
+            lambda: supabase.table("questions")
+            .select("question_id", count="exact")
+            .in_("topic_id", topic_ids)
+            .execute()
+        )
+        question_count = int(questions_resp.count or 0)
+
+        topic_practice_sets_resp = await asyncio.to_thread(
+            lambda: supabase.table("practice_sets")
+            .select("practice_set_id")
+            .in_("topic_id", topic_ids)
+            .execute()
+        )
+        practice_set_ids.update(
+            int(item["practice_set_id"])
+            for item in (topic_practice_sets_resp.data or [])
+            if item.get("practice_set_id") is not None
+        )
+
+    class_students_resp = await asyncio.to_thread(
+        lambda: supabase.table("class_students")
+        .select("student_id")
+        .eq("class_id", class_id)
+        .execute()
+    )
+    student_ids = [int(item["student_id"]) for item in (class_students_resp.data or []) if item.get("student_id") is not None]
+    if student_ids:
+        subject_practice_sets_resp = await asyncio.to_thread(
+            lambda: supabase.table("practice_sets")
+            .select("practice_set_id")
+            .eq("subject_id", subject_id)
+            .in_("student_id", student_ids)
+            .execute()
+        )
+        practice_set_ids.update(
+            int(item["practice_set_id"])
+            for item in (subject_practice_sets_resp.data or [])
+            if item.get("practice_set_id") is not None
+        )
+
+    attempt_count = 0
+    if practice_set_ids:
+        attempts_resp = await asyncio.to_thread(
+            lambda: supabase.table("practice_attempts")
+            .select("attempt_id", count="exact")
+            .in_("practice_set_id", sorted(practice_set_ids))
+            .execute()
+        )
+        attempt_count = int(attempts_resp.count or 0)
+
+    return {
+        "topics": len(topic_ids),
+        "documents": document_count,
+        "questions": question_count,
+        "practice_sets": len(practice_set_ids),
+        "practice_attempts": attempt_count,
+    }
 
 
 async def find_class_student_mapping(class_id: int, student_id: int, include_deleted: bool = False) -> dict | None:

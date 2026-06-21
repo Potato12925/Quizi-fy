@@ -3,7 +3,14 @@ from fastapi import APIRouter, Depends, Query
 from core.responses import error_response, success_response
 from middlewares.auth_middleware import CurrentUser, require_roles
 from schemas.ai_request_schema import AiRequestCreateRequest, AiRequestUpdateRequest
-from services.ai_request_service import create_ai_request, delete_ai_request, get_ai_request_by_id, get_ai_requests, update_ai_request
+from services.ai_request_service import (
+    AiRequestSubjectInactiveError,
+    create_ai_request,
+    delete_ai_request,
+    get_ai_request_by_id,
+    get_ai_requests,
+    update_ai_request,
+)
 
 router = APIRouter(prefix="/ai-requests", tags=["AIRequests"])
 
@@ -13,6 +20,8 @@ async def post_ai_request(payload: AiRequestCreateRequest, _: CurrentUser = Depe
     try:
         result = await create_ai_request(payload)
         return success_response(data=result, message="AiRequest created successfully", status_code=201)
+    except AiRequestSubjectInactiveError as exc:
+        return error_response(message=str(exc), status_code=409, error_code="AIREQUEST_CREATE_SUBJECT_INACTIVE")
     except ValueError as exc:
         return error_response(message=str(exc), status_code=400, error_code="AIREQUEST_CREATE_INVALID")
     except Exception:

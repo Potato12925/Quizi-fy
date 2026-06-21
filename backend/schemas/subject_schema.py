@@ -18,7 +18,7 @@ class SubjectUpdateRequest(BaseModel):
 
 class SubjectListQueryParams(BaseModel):
     page: int = Field(default=1, ge=1)
-    limit: int = Field(default=20, ge=1, le=100)
+    limit: int = Field(default=20, ge=1, le=10000)
     search: str | None = None
     status: Literal["all", "active", "inactive"] = "all"
     sort_by: Literal["created_at", "subject_name", "subject_code"] = "created_at"

@@ -4,6 +4,7 @@ from core.responses import error_response, success_response
 from middlewares.auth_middleware import CurrentUser, require_roles
 from schemas.practice_set_schema import PracticeSetCreateRequest, PracticeSetUpdateRequest, PracticeSetGenerateRequest
 from services.practice_set_service import (
+    PracticeSetSubjectInactiveError,
     create_practice_set,
     delete_practice_set,
     get_practice_set_by_id,
@@ -20,6 +21,8 @@ async def post_practice_set(payload: PracticeSetCreateRequest, _: CurrentUser = 
     try:
         result = await create_practice_set(payload)
         return success_response(data=result, message="PracticeSet created successfully", status_code=201)
+    except PracticeSetSubjectInactiveError as exc:
+        return error_response(message=str(exc), status_code=409, error_code="PRACTICESET_CREATE_SUBJECT_INACTIVE")
     except ValueError as exc:
         return error_response(message=str(exc), status_code=400, error_code="PRACTICESET_CREATE_INVALID")
     except Exception:
@@ -40,6 +43,8 @@ async def generate_practice_set_route(payload: PracticeSetGenerateRequest, curre
     try:
         result = await generate_practice_set(current_user.user_id, payload)
         return success_response(data=result, message="Practice set generated successfully", status_code=201)
+    except PracticeSetSubjectInactiveError as exc:
+        return error_response(message=str(exc), status_code=409, error_code="PRACTICE_SET_GENERATE_SUBJECT_INACTIVE")
     except ValueError as exc:
         return error_response(message=str(exc), status_code=400, error_code="PRACTICE_SET_GENERATE_INVALID")
     except Exception:

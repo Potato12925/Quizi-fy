@@ -10,9 +10,17 @@ from repositories.practice_set_repository import (
 from schemas.practice_set_schema import PracticeSetCreateRequest, PracticeSetUpdateRequest, PracticeSetGenerateRequest
 from repositories.question_repository import get_random_question_ids
 from repositories.practice_set_question_repository import bulk_insert_practice_set_questions
+from repositories.subject_repository import is_subject_active
+
+
+class PracticeSetSubjectInactiveError(ValueError):
+    pass
 
 
 async def create_practice_set(payload: PracticeSetCreateRequest) -> dict:
+    if not await is_subject_active(payload.subject_id):
+        raise PracticeSetSubjectInactiveError("Subject is inactive and cannot be used to create new practice sets")
+
     return await create_practice_set_record({ 
         "student_id": payload.student_id, 
         "subject_id": payload.subject_id, 
@@ -31,6 +39,9 @@ async def get_practice_set_by_id(record_id: int) -> dict:
 
 
 async def generate_practice_set(student_id: int, payload: PracticeSetGenerateRequest) -> dict:
+    if not await is_subject_active(payload.subject_id):
+        raise PracticeSetSubjectInactiveError("Subject is inactive and cannot be used to create new practice sets")
+
     from repositories.class_subject_repository import list_my_subjects
     my_subjects = await list_my_subjects(student_id)
     allowed_subject_ids = {item["subject_id"] for item in my_subjects}

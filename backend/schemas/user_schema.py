@@ -18,7 +18,7 @@ class UserUpdateRequest(BaseModel):
 
 class UserListQuery(BaseModel):
     page: int = Field(default=1, ge=1)
-    limit: int = Field(default=20, ge=1, le=100)
+    limit: int = Field(default=20, ge=1, le=10000)
     role_code: Literal["teacher", "student", "all"] = "all"
     status: Literal["active", "inactive", "all"] = "all"
     search: str | None = None

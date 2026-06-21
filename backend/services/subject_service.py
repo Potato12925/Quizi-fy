@@ -2,6 +2,9 @@ from math import ceil
 
 from middlewares.auth_middleware import CurrentUser
 from repositories.subject_repository import (
+    count_class_assignments_by_subject,
+    count_practice_attempts_by_subject,
+    count_practice_sets_by_subject,
     create_subject_record,
     find_subject_by_code,
     find_subject_by_code_excluding_id,
@@ -16,6 +19,18 @@ from schemas.subject_schema import SubjectCreateRequest, SubjectListQueryParams,
 
 
 class SubjectAuthorizationError(ValueError):
+    pass
+
+
+class SubjectInUseError(ValueError):
+    pass
+
+
+class SubjectAssignedToClassError(SubjectInUseError):
+    pass
+
+
+class SubjectHasPracticeHistoryError(SubjectInUseError):
     pass
 
 
@@ -121,6 +136,19 @@ async def delete_subject(subject_id: int, current_user: CurrentUser) -> dict:
     if not existing_subject:
         raise ValueError("Subject not found")
     await _ensure_subject_access(subject_id, current_user)
+
+    class_assignment_count = await count_class_assignments_by_subject(subject_id)
+    if class_assignment_count > 0:
+        raise SubjectAssignedToClassError(
+            "Môn học đã được gán vào lớp và không thể xóa. Vui lòng chuyển sang trạng thái tạm khóa."
+        )
+
+    practice_set_count = await count_practice_sets_by_subject(subject_id)
+    practice_attempt_count = await count_practice_attempts_by_subject(subject_id)
+    if practice_set_count > 0 or practice_attempt_count > 0:
+        raise SubjectHasPracticeHistoryError(
+            "Môn học đã có dữ liệu practice/history nên không thể xóa. Vui lòng chuyển sang trạng thái tạm khóa."
+        )
 
     deleted = await soft_delete_subject_by_id(subject_id)
     if not deleted:

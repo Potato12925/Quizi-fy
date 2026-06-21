@@ -21,6 +21,77 @@ async def find_subject_by_id(subject_id: int) -> dict | None:
     return rows[0] if rows else None
 
 
+async def is_subject_active(subject_id: int) -> bool:
+    subject = await find_subject_by_id(subject_id)
+    return bool(subject and subject.get("status") == "active")
+
+
+async def find_subject_by_class_subject_id(class_subject_id: int) -> dict | None:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("class_subjects")
+        .select("class_subject_id,subjects!inner(subject_id,subject_code,subject_name,status,deleted_at)")
+        .eq("class_subject_id", class_subject_id)
+        .is_("deleted_at", None)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    if not rows:
+        return None
+
+    subject = rows[0].get("subjects") or {}
+    if subject.get("deleted_at") is not None:
+        return None
+    return subject
+
+
+async def find_subject_by_topic_id(topic_id: int) -> dict | None:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("topics")
+        .select(
+            "topic_id,class_subjects!inner(subjects!inner(subject_id,subject_code,subject_name,status,deleted_at))"
+        )
+        .eq("topic_id", topic_id)
+        .is_("deleted_at", None)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    if not rows:
+        return None
+
+    class_subject = rows[0].get("class_subjects") or {}
+    subject = class_subject.get("subjects") or {}
+    if subject.get("deleted_at") is not None:
+        return None
+    return subject
+
+
+async def find_subject_by_document_topic_id(document_topic_id: int) -> dict | None:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("document_topics")
+        .select(
+            "document_topic_id,topics!inner(class_subjects!inner(subjects!inner(subject_id,subject_code,subject_name,status,deleted_at)))"
+        )
+        .eq("document_topic_id", document_topic_id)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    if not rows:
+        return None
+
+    topic = rows[0].get("topics") or {}
+    class_subject = topic.get("class_subjects") or {}
+    subject = class_subject.get("subjects") or {}
+    if subject.get("deleted_at") is not None:
+        return None
+    return subject
+
+
 async def find_subject_by_code(subject_code: str) -> dict | None:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
@@ -177,6 +248,53 @@ async def list_assigned_subject_ids_by_teacher(teacher_id: int) -> list[int]:
     )
     rows = response.data or []
     return sorted({int(item["subject_id"]) for item in rows if item.get("subject_id") is not None})
+
+
+async def count_class_assignments_by_subject(subject_id: int) -> int:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("class_subjects")
+        .select("class_subject_id", count="exact")
+        .eq("subject_id", subject_id)
+        .execute()
+    )
+    return int(response.count or 0)
+
+
+async def count_practice_sets_by_subject(subject_id: int) -> int:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("practice_sets")
+        .select("practice_set_id", count="exact")
+        .eq("subject_id", subject_id)
+        .is_("deleted_at", None)
+        .execute()
+    )
+    return int(response.count or 0)
+
+
+async def count_practice_attempts_by_subject(subject_id: int) -> int:
+    supabase = SupabaseManager.get_client()
+    practice_sets_response = await asyncio.to_thread(
+        lambda: supabase.table("practice_sets")
+        .select("practice_set_id")
+        .eq("subject_id", subject_id)
+        .is_("deleted_at", None)
+        .execute()
+    )
+    practice_set_rows = practice_sets_response.data or []
+    practice_set_ids = [int(item["practice_set_id"]) for item in practice_set_rows if item.get("practice_set_id") is not None]
+    if not practice_set_ids:
+        return 0
+
+    attempts_response = await asyncio.to_thread(
+        lambda: supabase.table("practice_attempts")
+        .select("attempt_id", count="exact")
+        .in_("practice_set_id", practice_set_ids)
+        .is_("deleted_at", None)
+        .execute()
+    )
+    return int(attempts_response.count or 0)
 
 
 async def update_subject_by_id(subject_id: int, payload: dict) -> dict | None:

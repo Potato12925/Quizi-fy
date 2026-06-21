@@ -7,8 +7,13 @@ from repositories.question_repository import (
     soft_delete_question_by_id,
     update_question_by_id,
 )
+from repositories.subject_repository import find_subject_by_topic_id
 from schemas.question_schema import QuestionCreateRequest, QuestionUpdateRequest
 from utils.question_image_util import build_image_info, load_question_image_map, validate_question_image
+
+
+class QuestionSubjectInactiveError(ValueError):
+    pass
 
 
 def _serialize_question(item: dict, image_by_id: dict[int, dict] | None = None) -> dict:
@@ -21,6 +26,12 @@ def _serialize_question(item: dict, image_by_id: dict[int, dict] | None = None) 
 
 
 async def create_question(payload: QuestionCreateRequest) -> dict:
+    subject = await find_subject_by_topic_id(payload.topic_id)
+    if not subject:
+        raise ValueError("Topic not found")
+    if subject.get("status") != "active":
+        raise QuestionSubjectInactiveError("Subject is inactive and cannot be used to create new questions")
+
     image = await validate_question_image(payload.image_id)
     created = await create_question_record(
         {

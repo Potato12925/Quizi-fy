@@ -1,4 +1,4 @@
-﻿import { api } from './client';
+import { api } from './client';
 
 export type AdminCreatableRole = 'student' | 'teacher';
 
@@ -261,7 +261,7 @@ export const getAdminSubjects = async (
 export const getSubjects = async (): Promise<AdminSubject[]> => {
   const result = await getAdminSubjects({
     page: 1,
-    limit: 100,
+    limit: 9999,
     status: 'all',
     sort_by: 'created_at',
     sort_order: 'desc',
@@ -355,8 +355,9 @@ export const updateAdminUserStatus = async (
   return unwrapData(response);
 };
 
-export const softDeleteAdminUser = async (userId: number): Promise<void> => {
-  await api.delete<BackendSuccessEnvelope<{ user_id: number; deleted: boolean }>>(`/user/${userId}`);
+export const softDeleteAdminUser = async (userId: number): Promise<{ user_id: number; deleted: boolean; locked?: boolean }> => {
+  const response = await api.delete<BackendSuccessEnvelope<{ user_id: number; deleted: boolean; locked?: boolean }>>(`/user/${userId}`);
+  return response.data;
 };
 
 export const listAdminClasses = async (): Promise<AdminClassOption[]> => {

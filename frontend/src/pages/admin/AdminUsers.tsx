@@ -50,7 +50,7 @@ export default function AdminUsersPage() {
     setError(null);
     try {
       const [usersResult, classResult] = await Promise.all([
-        listAdminUsers({ role_code: 'all', status: 'all', page: 1, limit: 100 }),
+        listAdminUsers({ role_code: 'all', status: 'all', page: 1, limit: 9999 }),
         listAdminClasses(),
       ]);
       setAllUsers(usersResult.items);
@@ -142,11 +142,20 @@ export default function AdminUsersPage() {
   const handleDeleteUser = async () => {
     if (!deleteTarget) return;
     try {
-      await softDeleteAdminUser(deleteTarget.user_id);
+      const result = await softDeleteAdminUser(deleteTarget.user_id);
+      if (result.locked) {
+        alert('Tài khoản đã phát sinh dữ liệu trong hệ thống nên chỉ được khóa.');
+        setAllUsers((prev) =>
+          prev.map((item) =>
+            item.user_id === deleteTarget.user_id ? { ...item, is_active: false } : item
+          )
+        );
+      } else {
+        setAllUsers((prev) => prev.filter((item) => item.user_id !== deleteTarget.user_id));
+      }
       setDeleteTarget(null);
-      setAllUsers((prev) => prev.filter((item) => item.user_id !== deleteTarget.user_id));
-    } catch {
-      alert('Lỗi khi xóa người dùng.');
+    } catch (error: any) {
+      alert(error?.message || 'Lỗi khi xóa người dùng.');
     }
   };
 

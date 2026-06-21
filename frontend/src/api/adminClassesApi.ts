@@ -196,8 +196,9 @@ export const updateAdminClassSubjectById = async (
 export const removeSubjectFromAdminClassByClassSubjectId = async (
   classId: number,
   classSubjectId: number,
-): Promise<void> => {
-  await api.delete<BackendSuccessEnvelope<{ deleted: boolean }>>(`/classes/${classId}/subjects/${classSubjectId}`);
+): Promise<{ deleted: boolean; status?: string; reason?: string }> => {
+  const response = await api.delete<BackendSuccessEnvelope<{ deleted: boolean; status?: string; reason?: string }>>(`/classes/${classId}/subjects/${classSubjectId}`);
+  return response.data;
 };
 
 export const getAdminClassStudents = async (classId: number): Promise<AdminClassStudentRecord[]> => {
@@ -249,7 +250,7 @@ export const getAdminTeacherOptions = async (): Promise<AdminClassTeacherOption[
   const response = await api.get<BackendSuccessEnvelope<AdminClassTeacherOption[]>>('/user', {
     params: {
       page: '1',
-      limit: '100',
+      limit: '9999',
       role_code: 'teacher',
       status: 'all',
     },
@@ -261,7 +262,7 @@ export const getAdminStudentOptions = async (): Promise<AdminClassStudentOption[
   const response = await api.get<BackendSuccessEnvelope<AdminClassStudentOption[]>>('/user', {
     params: {
       page: '1',
-      limit: '100',
+      limit: '9999',
       role_code: 'student',
       status: 'all',
     },
@@ -273,7 +274,7 @@ export const getAdminSubjectOptions = async (): Promise<AdminSubjectOption[]> =>
   const response = await api.get<BackendSuccessEnvelope<AdminSubjectOption[]>>('/subjects', {
     params: {
       page: '1',
-      limit: '100',
+      limit: '9999',
     },
   });
   return response.data || [];

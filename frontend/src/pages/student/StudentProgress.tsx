@@ -1,6 +1,6 @@
 import React, { useId, useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getStudentHistory, getStudentProgress } from '@/api/studentApi';
+import { getStudentHistory, getStudentProgress, exportStudentHistoryPdf } from '@/api/studentApi';
 import type { HistoryItem, StudentProgressData } from '@/api/studentApi';
 
 import LoadingState from '@/components/common/LoadingState';
@@ -14,6 +14,18 @@ export default function ProgressPage() {
    const [historyAttempts, setHistoryAttempts] = useState<HistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      await exportStudentHistoryPdf();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
    const latestAttempts = useMemo(() => {
       return [...historyAttempts]
@@ -107,20 +119,28 @@ export default function ProgressPage() {
           <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Tiến độ <br/><span className="text-[#b20112]">Học tập</span></h1>
           <p className="text-slate-500 mt-4 font-medium uppercase text-[10px] tracking-widest">Phân tích dữ liệu ôn luyện từ 01/01/2026 - Nay</p>
         </div>
-        <div className="flex gap-4">
-           <button className="bg-white border border-slate-100 px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-sm flex items-center gap-2 hover:bg-slate-50">
-              <span className="material-symbols-outlined text-base">file_download</span> Xuất báo cáo
-           </button>
-        </div>
+         <div className="flex gap-4">
+            <button 
+               onClick={handleExport}
+               disabled={isExporting}
+               className="bg-white border border-slate-100 px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-sm flex items-center gap-2 hover:bg-slate-50 disabled:opacity-50 transition-opacity"
+            >
+               <span className={`material-symbols-outlined text-base ${isExporting ? 'animate-spin' : ''}`}>
+                  {isExporting ? 'sync' : 'file_download'}
+               </span> 
+               {isExporting ? 'Đang xuất...' : 'Xuất báo cáo'}
+            </button>
+         </div>
       </div>
 
       {/* Hero Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-6">
         {[
           { label: 'Điểm trung bình', value: stats.avgScore, icon: 'grade', color: 'text-[#b20112]', bg: 'bg-red-50' },
           { label: 'Số lượt ôn tập', value: stats.totalAttempts, icon: 'history_edu', color: 'text-emerald-600', bg: 'bg-emerald-50' },
           { label: 'Câu hỏi đã làm', value: stats.totalQuestions, icon: 'quiz', color: 'text-blue-600', bg: 'bg-blue-50' },
           { label: 'Thời gian học', value: stats.timeStudied, icon: 'schedule', color: 'text-amber-600', bg: 'bg-amber-50' },
+          { label: 'Streak ngày', value: `${stats.streak || 0} ngày`, icon: 'local_fire_department', color: 'text-orange-500', bg: 'bg-orange-50' },
         ].map((s, idx) => (
           <div key={idx} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm transition-all hover:scale-[1.02]">
              <div className={`w-12 h-12 rounded-2xl ${s.bg} ${s.color} flex items-center justify-center mb-6`}>

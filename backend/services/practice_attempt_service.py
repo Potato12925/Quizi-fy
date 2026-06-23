@@ -1,7 +1,7 @@
 import asyncio
 import os
 from math import ceil
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fpdf import FPDF
 from core.supabase import SupabaseManager
 from repositories.practice_attempt_repository import (
@@ -378,7 +378,8 @@ async def get_student_progress_stats(student_id: int) -> dict:
                 "totalAttempts": 0,
                 "totalQuestions": 0,
                 "timeStudied": "0h 0m",
-                "accuracy": 0
+                "accuracy": 0,
+                "streak": 0
             },
             "subjectPerformance": []
         }
@@ -397,7 +398,8 @@ async def get_student_progress_stats(student_id: int) -> dict:
                 "totalAttempts": 0,
                 "totalQuestions": 0,
                 "timeStudied": "0h 0m",
-                "accuracy": 0
+                "accuracy": 0,
+                "streak": 0
             },
             "subjectPerformance": []
         }
@@ -432,6 +434,36 @@ async def get_student_progress_stats(student_id: int) -> dict:
     minutes = int((total_seconds % 3600) // 60)
     time_studied = f"{hours}h {minutes}m"
     
+    # Calculate streak (relative to Vietnam timezone UTC+7)
+    vn_tz = timezone(timedelta(hours=7))
+    attempt_dates = []
+    for att in attempts:
+        started = att.get("started_at")
+        if started:
+            try:
+                s_str = started[:-1] + '+00:00' if started.endswith('Z') else started
+                dt = datetime.fromisoformat(s_str)
+                dt_local = dt.astimezone(vn_tz)
+                attempt_dates.append(dt_local.date())
+            except Exception:
+                pass
+                
+    streak = 0
+    if attempt_dates:
+        unique_dates = sorted(list(set(attempt_dates)), reverse=True)
+        local_today = datetime.now(vn_tz).date()
+        
+        # Check if the most recent practice was today or yesterday
+        if unique_dates[0] == local_today or unique_dates[0] == (local_today - timedelta(days=1)):
+            streak = 1
+            current_date = unique_dates[0]
+            for next_date in unique_dates[1:]:
+                if current_date - next_date == timedelta(days=1):
+                    streak += 1
+                    current_date = next_date
+                elif current_date - next_date > timedelta(days=1):
+                    break
+    
     # Subject performance grouping
     subject_groups = {}
     for att in attempts:
@@ -457,7 +489,8 @@ async def get_student_progress_stats(student_id: int) -> dict:
             "totalAttempts": total_attempts,
             "totalQuestions": total_questions,
             "timeStudied": time_studied,
-            "accuracy": accuracy
+            "accuracy": accuracy,
+            "streak": streak
         },
         "subjectPerformance": subject_performance
     }

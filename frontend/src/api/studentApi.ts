@@ -160,10 +160,11 @@ export const getStudentDashboard = async (forceRefresh = false): Promise<Student
     // 3. Map metrics from progress stats
     const stats = progress.stats;
     const metrics: Metric[] = [
-      { label: 'Số đề luyện', value: stats.totalAttempts.toString(), icon: 'local_fire_department', color: 'text-red-500', bg: 'bg-red-50' },
+      { label: 'Số đề luyện', value: stats.totalAttempts.toString(), icon: 'assignment', color: 'text-red-500', bg: 'bg-red-50' },
       { label: 'Điểm trung bình', value: stats.avgScore.toFixed(1), icon: 'star', color: 'text-amber-500', bg: 'bg-amber-50' },
       { label: 'Độ chính xác', value: `${stats.accuracy}%`, icon: 'task_alt', color: 'text-blue-500', bg: 'bg-blue-50' },
       { label: 'Thời gian học', value: stats.timeStudied || '0h', icon: 'timer', color: 'text-slate-400', bg: 'bg-slate-50' },
+      { label: 'Streak ngày', value: `${stats.streak || 0} ngày`, icon: 'local_fire_department', color: 'text-orange-500', bg: 'bg-orange-50' },
     ];
 
     // 4. Map recent activities (first 3 items from history)
@@ -430,6 +431,7 @@ export interface ProgressStats {
   totalQuestions: number;
   timeStudied: string;
   accuracy: number;
+  streak?: number;
 }
 
 export interface SubjectPerformance {

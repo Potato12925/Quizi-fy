@@ -55,7 +55,7 @@ export default function StudentDashboard() {
             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-900 flex items-center gap-3">
                Tiến độ của bạn
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                {metrics.map((s: any, idx: number) => (
                  <div key={idx} className="bg-white p-8 rounded-[2.5rem] border border-slate-50 shadow-sm flex flex-col items-center justify-center text-center transition-all hover:shadow-xl hover:shadow-red-900/5 group cursor-default">
                     <div className={`w-12 h-12 rounded-2xl ${s.bg} ${s.color} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>

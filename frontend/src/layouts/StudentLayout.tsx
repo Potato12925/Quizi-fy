@@ -3,6 +3,7 @@ import DashboardSidebar from '@/components/layout/DashboardSidebar';
 import LogoutButton from '@/components/auth/LogoutButton';
 import { useAuth } from '@/contexts/AuthContext';
 import NotificationBell from '@/layouts/NotificationBell';
+import StudentAiChatWidget from '@/components/student/StudentAiChatWidget';
 
 export default function StudentLayout() {
   const { user } = useAuth();
@@ -51,6 +52,7 @@ export default function StudentLayout() {
         <main className="flex-1 px-10 py-8">
           <Outlet />
         </main>
+        <StudentAiChatWidget />
       </div>
     </div>
   );

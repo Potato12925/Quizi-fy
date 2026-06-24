@@ -23,6 +23,7 @@ from controllers.question_option_controller import router as question_option_rou
 from controllers.role_controller import router as role_router
 from controllers.report_controller import router as report_router
 from controllers.student_answer_controller import router as student_answer_router
+from controllers.student_ai_chat_controller import router as student_ai_chat_router
 from controllers.subject_controller import router as subject_router
 from controllers.teacher_topic_management_controller import (
     router as teacher_topic_management_router,
@@ -140,6 +141,11 @@ def register_routes(app: FastAPI) -> None:
 
     app.include_router(
         student_answer_router,
+        prefix="/api/v1",
+    )
+
+    app.include_router(
+        student_ai_chat_router,
         prefix="/api/v1",
     )
 

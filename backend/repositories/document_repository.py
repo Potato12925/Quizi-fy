@@ -227,21 +227,44 @@ async def count_ai_requests_by_document(document_id: int) -> int:
 
 async def count_questions_by_document(document_id: int) -> int:
     supabase = SupabaseManager.get_client()
+
     dt_response = await asyncio.to_thread(
         lambda: supabase.table("document_topics")
         .select("document_topic_id")
         .eq("document_id", document_id)
-        .execute()
-    )
-    document_topic_ids = [int(item["document_topic_id"]) for item in (dt_response.data or [])]
-    if not document_topic_ids:
-        return 0
-
-    response = await asyncio.to_thread(
-        lambda: supabase.table("questions")
-        .select("question_id", count="exact")
-        .in_("document_topic_id", document_topic_ids)
         .is_("deleted_at", None)
         .execute()
     )
-    return int(response.count or 0)
+
+    document_topic_ids = [
+        int(item["document_topic_id"])
+        for item in (dt_response.data or [])
+    ]
+
+    if not document_topic_ids:
+        return 0
+
+    ai_response = await asyncio.to_thread(
+        lambda: supabase.table("ai_requests")
+        .select("request_id")
+        .in_("document_topic_id", document_topic_ids)
+        .execute()
+    )
+
+    request_ids = [
+        int(item["request_id"])
+        for item in (ai_response.data or [])
+    ]
+
+    if not request_ids:
+        return 0
+
+    q_response = await asyncio.to_thread(
+        lambda: supabase.table("questions")
+        .select("question_id", count="exact")
+        .in_("ai_request_id", request_ids)
+        .is_("deleted_at", None)
+        .execute()
+    )
+
+    return int(q_response.count or 0)

@@ -92,8 +92,8 @@ async def get_document_list(
             current_user=current_user,
         )
         return success_response(data=result["items"], meta=result["pagination"], message="Document loaded successfully", status_code=200)
-    except Exception:
-        return error_response(message="Unable to load documents", status_code=500, error_code="DOCUMENT_LIST_FAILED")
+    except Exception as exc:
+        return error_response(message=str(exc), status_code=500, error_code="DOCUMENT_LIST_FAILED")
 
 
 @router.get("/{record_id}", summary="Get document detail")

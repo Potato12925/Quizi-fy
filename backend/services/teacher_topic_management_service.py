@@ -29,51 +29,59 @@ class TeacherTopicValidationError(ValueError):
 
 async def get_teacher_subject_documents_topics(current_user: CurrentUser) -> list[dict]:
     documents = await list_teacher_documents_with_subjects(current_user.user_id)
-    document_ids = [int(item["document_id"]) for item in documents]
+    document_ids = [int(item["document_id"]) for item in documents if item.get("document_id") is not None]
     relations = await list_document_topics_with_topic(document_ids)
+    document_title_by_id = {
+        int(item["document_id"]): item["title"]
+        for item in documents
+        if item.get("document_id") is not None
+    }
 
-    topics_by_document: dict[int, list[dict]] = {}
-    subject_by_document: dict[int, tuple[int, str]] = {}
+    subjects_map: dict[int, dict] = {}
 
     for relation in relations:
         document_id = int(relation["document_id"])
         topic = relation.get("topics") or {}
         class_subject = topic.get("class_subjects") or {}
         subject = class_subject.get("subjects") or {}
-
-        if class_subject.get("subject_id") is not None:
-            subject_by_document[document_id] = (
-                int(class_subject["subject_id"]),
-                subject.get("subject_name") or "Unknown subject",
-            )
-
-        topics_by_document.setdefault(document_id, []).append(
-            {
-                "topic_id": topic.get("topic_id"),
-                "topic_name": topic.get("topic_name"),
-            }
-        )
-
-    subjects_map: dict[int, dict] = {}
-    for document in documents:
-        document_id = int(document["document_id"])
-        subject_info = subject_by_document.get(document_id)
-        if not subject_info:
+        if topic.get("deleted_at") is not None:
+            continue
+        if class_subject.get("subject_id") is None or class_subject.get("status") != "active" or class_subject.get("deleted_at") is not None:
             continue
 
-        subject_id, subject_name = subject_info
+        subject_id = int(class_subject["subject_id"])
         if subject_id not in subjects_map:
             subjects_map[subject_id] = {
                 "subject_id": subject_id,
-                "subject_name": subject_name,
+                "subject_name": subject.get("subject_name") or "Unknown subject",
                 "documents": [],
             }
 
-        subjects_map[subject_id]["documents"].append(
-            {
+        document_entry = next(
+            (
+                item
+                for item in subjects_map[subject_id]["documents"]
+                if int(item["document_id"]) == document_id
+            ),
+            None,
+        )
+        if document_entry is None:
+            document_entry = {
                 "document_id": document_id,
-                "title": document["title"],
-                "topics": topics_by_document.get(document_id, []),
+                "title": document_title_by_id.get(document_id, ""),
+                "topics": [],
+            }
+            subjects_map[subject_id]["documents"].append(document_entry)
+
+        topic_id = topic.get("topic_id")
+        if topic_id is None:
+            continue
+        if any(int(item["topic_id"]) == int(topic_id) for item in document_entry["topics"]):
+            continue
+        document_entry["topics"].append(
+            {
+                "topic_id": topic_id,
+                "topic_name": topic.get("topic_name"),
             }
         )
 

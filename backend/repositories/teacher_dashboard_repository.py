@@ -129,25 +129,19 @@ async def list_teacher_document_topic_context(teacher_id: int) -> list[dict]:
     response = await asyncio.to_thread(
         lambda: supabase.table("document_topics")
         .select(
-            "document_topic_id,document_id,topic_id,"
-            "documents!inner(document_id,teacher_id,title,status,created_at,updated_at,deleted_at,file_type,file_size),"
-            "topics!inner(topic_id,topic_name,class_subject_id,deleted_at,"
-            "class_subjects!inner(class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
-            "classes!inner(class_id,class_name,status,deleted_at),"
-            "subjects!inner(subject_id,subject_name,status,deleted_at)))"
+            "document_topic_id,document_id,topic_id,deleted_at,"
+            "documents!inner(document_id,teacher_id,title,file_url,file_type,file_size,status,created_at,updated_at,deleted_at),"
+            "topics(topic_id,topic_name,class_subject_id,deleted_at,"
+            "class_subjects!topics_class_subject_id_fkey("
+            "class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
+            "classes(class_id,class_name,status,deleted_at),"
+            "subjects!class_subjects_subject_id_fkey(subject_id,subject_name,status,deleted_at)"
+            "))"
         )
         .eq("documents.teacher_id", teacher_id)
         .eq("documents.status", "active")
         .is_("documents.deleted_at", None)
         .is_("deleted_at", None)
-        .is_("topics.deleted_at", None)
-        .eq("topics.class_subjects.assigned_teacher_id", teacher_id)
-        .eq("topics.class_subjects.status", "active")
-        .is_("topics.class_subjects.deleted_at", None)
-        .eq("topics.class_subjects.classes.status", "active")
-        .is_("topics.class_subjects.classes.deleted_at", None)
-        .eq("topics.class_subjects.subjects.status", "active")
-        .is_("topics.class_subjects.subjects.deleted_at", None)
         .order("document_topic_id", desc=True)
         .execute()
     )
@@ -177,7 +171,11 @@ async def list_ai_requests_by_document_topic_ids_for_stats(document_topic_ids: l
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("ai_requests")
-        .select("request_id,document_topic_id,status,created_at")
+        .select(
+            "request_id,document_topic_id,num_questions,content_scope,status,"
+            "generated_question_count,retry_count,error_message,is_reviewed,"
+            "created_at,updated_at"
+        )
         .in_("document_topic_id", document_topic_ids)
         .order("created_at", desc=True)
         .execute()
@@ -216,20 +214,14 @@ async def list_questions_by_document_topic_ids_for_stats(
     teacher_id: int,
     document_topic_ids: list[int],
 ) -> list[dict]:
-    if not document_topic_ids:
-        return []
-
     supabase = SupabaseManager.get_client()
-    topic_ids = await _list_topic_ids_by_document_topic_ids(supabase, teacher_id, document_topic_ids)
-
-    if not topic_ids:
-        return []
-
     response = await asyncio.to_thread(
         lambda: supabase.table("questions")
-        .select("question_id,topic_id,status,difficulty")
+        .select(
+            "question_id,teacher_id,topic_id,ai_request_id,difficulty,source,status,deleted_at,"
+            "ai_requests!questions_ai_request_id_fkey(request_id,document_topic_id)"
+        )
         .eq("teacher_id", teacher_id)
-        .in_("topic_id", topic_ids)
         .is_("deleted_at", None)
         .execute()
     )
@@ -310,10 +302,15 @@ async def list_recent_approved_questions_by_teacher(teacher_id: int, limit: int)
         lambda: supabase.table("questions")
         .select(
             "question_id,topic_id,ai_request_id,content,difficulty,source,status,created_at,updated_at,"
-            "ai_requests!questions_ai_request_id_fkey(request_id,document_topic_id)"
+            "ai_requests!questions_ai_request_id_fkey(request_id,document_topic_id),"
+            "topics(topic_id,topic_name,class_subject_id,deleted_at,"
+            "class_subjects!topics_class_subject_id_fkey("
+            "class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
+            "classes(class_id,class_name,status,deleted_at),"
+            "subjects!class_subjects_subject_id_fkey(subject_id,subject_name,status,deleted_at)"
+            "))"
         )
         .eq("teacher_id", teacher_id)
-        .eq("source", "ai")
         .eq("status", "approved")
         .is_("deleted_at", None)
         .order("updated_at", desc=True)

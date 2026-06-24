@@ -146,6 +146,29 @@ Table document_topics {
   deleted_at timestamp
 }
 
+Table document_chunks {
+  chunk_id bigint [pk]
+  document_id bigint [not null]
+  chunk_index int [not null]
+  chunk_title text
+  chunk_text text [not null]
+  embedding text [note: 'pgvector vector(1536) in SQL schema']
+  chunk_hash varchar
+  start_char int
+  end_char int
+  page_from int
+  page_to int
+  token_count int
+  created_at timestamp
+  deleted_at timestamp
+
+  indexes {
+    document_id
+    chunk_hash
+    (document_id, chunk_index) [name: 'uq_document_chunks_document_chunk_index_active']
+  }
+}
+
 Table ai_requests {
   request_id bigint [pk]
   document_topic_id bigint [not null]
@@ -196,6 +219,20 @@ Table question_options {
   option_text text [not null]
   is_correct boolean
   order_num int [not null]
+}
+
+Table question_sources {
+  question_source_id bigint [pk]
+  question_id bigint [not null]
+  chunk_id bigint [not null]
+  relevance_score numeric
+  created_at timestamp
+
+  indexes {
+    question_id
+    chunk_id
+    (question_id, chunk_id) [unique]
+  }
 }
 
 Table question_history {
@@ -302,6 +339,7 @@ Ref: documents.teacher_id > users.user_id
 
 Ref: document_topics.document_id > documents.document_id
 Ref: document_topics.topic_id > topics.topic_id
+Ref: document_chunks.document_id > documents.document_id
 
 Ref: ai_requests.document_topic_id > document_topics.document_topic_id
 Ref: ai_request_difficulty_distribution.request_id > ai_requests.request_id
@@ -311,6 +349,8 @@ Ref: questions.topic_id > topics.topic_id
 Ref: questions.ai_request_id > ai_requests.request_id
 
 Ref: question_options.question_id > questions.question_id
+Ref: question_sources.question_id > questions.question_id
+Ref: question_sources.chunk_id > document_chunks.chunk_id
 
 Ref: question_history.question_id > questions.question_id
 Ref: question_history.changed_by > users.user_id

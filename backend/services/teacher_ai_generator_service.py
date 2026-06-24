@@ -2,6 +2,11 @@ import logging
 from math import ceil
 
 from middlewares.auth_middleware import CurrentUser
+from repositories.document_chunk_repository import (
+    create_document_chunks,
+    list_document_chunks,
+)
+from repositories.question_source_repository import create_question_sources
 from repositories.subject_repository import list_assigned_subject_ids_by_teacher
 from repositories.teacher_ai_generator_repository import (
     bulk_create_ai_request_difficulty_distribution,
@@ -16,6 +21,7 @@ from repositories.teacher_ai_generator_repository import (
     find_teacher_question_by_id,
     find_teacher_topic_row,
     list_ai_requests_by_document_topic_ids,
+    list_teacher_document_topic_rows_for_ai_history,
     list_existing_question_contents,
     list_questions_by_ai_request_id,
     list_teacher_document_topic_rows,
@@ -34,8 +40,13 @@ from schemas.teacher_ai_generator_schema import (
     TeacherManualQuestionPayload,
     TeacherQuestionUpdatePayload,
 )
+from services.document_chunk_service import (
+    backfill_document_chunk_embeddings,
+    select_relevant_document_chunks,
+)
+from utils.document_chunking_util import build_document_chunks
+from utils.document_extract_util import extract_document_content
 from utils.question_image_util import build_image_info, load_question_image_map, validate_question_image
-from utils.document_extract_util import extract_document_text
 from utils.openai_util import generate_mcq_questions_with_ai
 
 logger = logging.getLogger(__name__)
@@ -56,7 +67,6 @@ def _normalize_question_content(value: str) -> str:
 def _emit_ai_job_log(request_id: int, level: int, message: str) -> None:
     formatted = f"[teacher_ai_generation][request_id={request_id}] {message}"
     logger.log(level, formatted)
-    print(formatted, flush=True)
 
 
 def _serialize_difficulty_distribution(items: list[dict] | None) -> list[dict]:
@@ -314,13 +324,10 @@ async def create_teacher_ai_request(current_user: CurrentUser, payload: TeacherA
 
 
 async def list_teacher_ai_requests(current_user: CurrentUser, page: int, limit: int) -> dict:
-    doc_topic_rows = await list_teacher_document_topic_rows(current_user.user_id)
-    allowed_subject_ids = set(await list_assigned_subject_ids_by_teacher(current_user.user_id))
-    serialized_doc_topics = [
-        _serialize_document_topic_row(item)
-        for item in doc_topic_rows
-        if _is_allowed_active_doc_topic(item, allowed_subject_ids)
-    ]
+    # AI request history uses document ownership scope, not the stricter active-assignment scope
+    # that is still required for create/options flows.
+    doc_topic_rows = await list_teacher_document_topic_rows_for_ai_history(current_user.user_id)
+    serialized_doc_topics = [_serialize_document_topic_row(item) for item in doc_topic_rows]
     doc_topic_ids = [int(item["document_topic_id"]) for item in serialized_doc_topics]
 
     items, total = await list_ai_requests_by_document_topic_ids(
@@ -714,6 +721,105 @@ async def create_teacher_manual_question(current_user: CurrentUser, payload: Tea
     )
 
 
+def _prepare_prompt_chunks(chunks: list[dict], *, attempt_index: int, limit: int = 6, max_chars: int = 14000) -> list[dict]:
+    if not chunks:
+        return []
+
+    usable_limit = min(max(1, limit), len(chunks))
+    start_index = (attempt_index * usable_limit) % len(chunks)
+    ordered = chunks[start_index:] + chunks[:start_index]
+    selected: list[dict] = []
+    total_chars = 0
+
+    for chunk in ordered:
+        chunk_text = str(chunk.get("chunk_text") or "").strip()
+        if not chunk_text:
+            continue
+        chunk_length = len(chunk_text)
+        if selected and total_chars + chunk_length > max_chars:
+            break
+        selected.append(chunk)
+        total_chars += chunk_length
+        if len(selected) >= usable_limit:
+            break
+
+    if not selected:
+        selected = [ordered[0]]
+
+    return [
+        {
+            **chunk,
+            "prompt_chunk_index": prompt_index,
+        }
+        for prompt_index, chunk in enumerate(selected, start=1)
+    ]
+
+
+async def _ensure_document_chunks_for_generation(
+    *,
+    request_id: int,
+    document_id: int,
+    file_url: str,
+    file_type: str,
+) -> list[dict]:
+    chunks = await list_document_chunks(document_id=document_id, include_deleted=False)
+    if chunks:
+        return chunks
+
+    extracted = await extract_document_content(file_url=file_url, file_type=file_type)
+    created_chunks = build_document_chunks(extracted)
+    if not created_chunks:
+        raise TeacherAiValidationError("Document could not be chunked for AI generation")
+    stored_chunks = await create_document_chunks(document_id=document_id, chunks=created_chunks)
+    if stored_chunks:
+        try:
+            updated_count = await backfill_document_chunk_embeddings(document_id=document_id)
+            _emit_ai_job_log(
+                request_id,
+                logging.INFO,
+                f"Backfilled chunk embeddings for new chunks | document_id={document_id} | embedded_count={updated_count}",
+            )
+        except Exception as exc:
+            _emit_ai_job_log(
+                request_id,
+                logging.WARNING,
+                f"Chunk embedding backfill failed after lazy chunk creation | document_id={document_id} | error={str(exc)[:300]}",
+            )
+    _emit_ai_job_log(
+        request_id,
+        logging.INFO,
+        f"Created document chunks lazily | document_id={document_id} | chunk_count={len(created_chunks)}",
+    )
+    return await list_document_chunks(document_id=document_id, include_deleted=False)
+
+
+def _resolve_chunk_ids_for_question(item: dict, prompt_chunks: list[dict]) -> tuple[list[int], dict[int, float | None]]:
+    chunk_by_prompt_index = {
+        int(chunk["prompt_chunk_index"]): chunk
+        for chunk in prompt_chunks
+        if chunk.get("prompt_chunk_index") is not None and chunk.get("chunk_id") is not None
+    }
+    source_indexes = [
+        int(index)
+        for index in item.get("source_chunk_indexes") or []
+        if int(index) in chunk_by_prompt_index
+    ]
+    chosen_chunks = [chunk_by_prompt_index[index] for index in source_indexes] if source_indexes else prompt_chunks
+    chunk_ids = [int(chunk["chunk_id"]) for chunk in chosen_chunks if chunk.get("chunk_id") is not None]
+    relevance_by_chunk_id = {
+        int(chunk["chunk_id"]): float(chunk["relevance_score"]) if chunk.get("relevance_score") is not None else None
+        for chunk in chosen_chunks
+        if chunk.get("chunk_id") is not None
+    }
+    return chunk_ids, relevance_by_chunk_id
+
+
+def _count_for_attempt(missing_count: int) -> int:
+    if missing_count <= 1:
+        return 1
+    return missing_count + max(1, ceil(missing_count * 0.2))
+
+
 async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
     request = await find_ai_request_by_id(request_id)
     if not request:
@@ -766,21 +872,66 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
             raise TeacherAiAuthorizationError("Document topic is not accessible for this teacher")
 
         serialized_doc_topic = _serialize_document_topic_row(doc_topic)
-        document_text = await extract_document_text(
-            file_url=str(serialized_doc_topic.get("file_url") or ""),
-            file_type=str(serialized_doc_topic.get("file_type") or ""),
+        document_id = int(serialized_doc_topic["document_id"])
+        document_topic_id = int(serialized_doc_topic["document_topic_id"])
+        topic_id = int(serialized_doc_topic["topic_id"])
+        file_url = str(serialized_doc_topic.get("file_url") or "")
+        file_type = str(serialized_doc_topic.get("file_type") or "")
+
+        chunks = await _ensure_document_chunks_for_generation(
+            request_id=request_id,
+            document_id=document_id,
+            file_url=file_url,
+            file_type=file_type,
         )
         _emit_ai_job_log(
             request_id,
             logging.INFO,
             (
-                "Document extracted "
-                f"| file_type={serialized_doc_topic.get('file_type')} "
-                f"| text_length={len(document_text)}"
+                "Document chunks ready "
+                f"| teacher_id={teacher_id} "
+                f"| document_id={document_id} "
+                f"| document_topic_id={document_topic_id} "
+                f"| chunk_count={len(chunks)}"
             ),
         )
 
-        existing_contents = await list_existing_question_contents(int(request["document_topic_id"]))
+        retrieval_result = await select_relevant_document_chunks(
+            document_id=document_id,
+            content_scope=request.get("content_scope"),
+            limit=12,
+        )
+        selected_chunks = retrieval_result["chunks"]
+        retrieval_mode = retrieval_result["retrieval_mode"]
+        fallback_reason = retrieval_result.get("fallback_reason")
+        if not selected_chunks:
+            raise TeacherAiValidationError("No document chunks are available for this AI request")
+        _emit_ai_job_log(
+            request_id,
+            logging.INFO,
+            (
+                "Selected chunks for generation "
+                f"| document_id={document_id} "
+                f"| request_id={request_id} "
+                f"| content_scope={request.get('content_scope')!r} "
+                f"| retrieval_mode={retrieval_mode} "
+                f"| selected_chunk_count={len(selected_chunks)} "
+                f"| fallback_reason={fallback_reason or 'none'}"
+            ),
+        )
+
+        _emit_ai_job_log(
+            request_id,
+            logging.INFO,
+            (
+                "Using RAG generation context "
+                f"| document_id={document_id} "
+                f"| document_topic_id={document_topic_id} "
+                f"| file_type={file_type}"
+            ),
+        )
+
+        existing_contents = await list_existing_question_contents(topic_id)
         difficulty_distribution = _serialize_difficulty_distribution(
             request.get("ai_request_difficulty_distribution")
         )
@@ -800,116 +951,103 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
         inserted_count = 0
         batch_norms: set[str] = set()
         batch_contents: list[str] = []
+        skipped_duplicate_or_invalid = 0
 
         for distribution_item in difficulty_distribution:
             expected_difficulty = distribution_item["difficulty"]
             expected_question_count = int(distribution_item["question_count"])
-            _emit_ai_job_log(
-                request_id,
-                logging.INFO,
-                (
-                    "Generating difficulty batch "
-                    f"| difficulty={expected_difficulty} "
-                    f"| expected_question_count={expected_question_count} "
-                    f"| accumulated_batch_question_count={len(batch_contents)}"
-                ),
-            )
-            generated_items = generate_mcq_questions_with_ai(
-                document_text=document_text,
-                difficulty=expected_difficulty,
-                num_questions=expected_question_count,
-                content_scope=request.get("content_scope"),
-                existing_question_contents=existing_contents + batch_contents,
-            )
-            _emit_ai_job_log(
-                request_id,
-                logging.INFO,
-                (
-                    "AI returned batch "
-                    f"| difficulty={expected_difficulty} "
-                    f"| generated_count={len(generated_items)} "
-                    f"| expected_count={expected_question_count}"
-                ),
-            )
-            if len(generated_items) != expected_question_count:
-                raise TeacherAiValidationError(
-                    f"AI returned {len(generated_items)} questions for {expected_difficulty}, expected {expected_question_count}"
+            missing_count = expected_question_count
+            attempt_index = 0
+            while missing_count > 0 and attempt_index < 3:
+                prompt_chunks = _prepare_prompt_chunks(selected_chunks, attempt_index=attempt_index)
+                generated_items = generate_mcq_questions_with_ai(
+                    selected_chunks=prompt_chunks,
+                    difficulty=expected_difficulty,
+                    num_questions=_count_for_attempt(missing_count),
+                    content_scope=request.get("content_scope"),
+                    existing_question_contents=existing_contents + batch_contents,
                 )
-
-            for index, item in enumerate(generated_items, start=1):
-                if item["difficulty"] != expected_difficulty:
-                    raise TeacherAiValidationError(
-                        f"AI returned difficulty {item['difficulty']} but expected {expected_difficulty}"
-                    )
-                normalized = _normalize_question_content(item["content"])
-                if not normalized:
-                    _emit_ai_job_log(
-                        request_id,
-                        logging.WARNING,
-                        (
-                            "Skipping generated question with empty normalized content "
-                            f"| difficulty={expected_difficulty} "
-                            f"| batch_index={index}"
-                        ),
-                    )
-                    continue
-                if normalized in batch_norms:
-                    _emit_ai_job_log(
-                        request_id,
-                        logging.WARNING,
-                        (
-                            "Skipping duplicate generated question inside current batch "
-                            f"| difficulty={expected_difficulty} "
-                            f"| batch_index={index} "
-                            f"| content_preview={item['content'][:200]!r}"
-                        ),
-                    )
-                    continue
-                if normalized in existing_norms:
-                    _emit_ai_job_log(
-                        request_id,
-                        logging.WARNING,
-                        (
-                            "Skipping generated question because it already exists "
-                            f"| difficulty={expected_difficulty} "
-                            f"| batch_index={index} "
-                            f"| content_preview={item['content'][:200]!r}"
-                        ),
-                    )
-                    continue
-                batch_norms.add(normalized)
-                existing_norms.add(normalized)
-                batch_contents.append(item["content"])
-
-                created_question = await create_question_record(
-                    {
-                        "teacher_id": teacher_id,
-                        "topic_id": int(serialized_doc_topic["topic_id"]),
-                        "ai_request_id": request_id,
-                        "image_id": None,
-                        "content": item["content"],
-                        "difficulty": item["difficulty"],
-                        "source": "ai",
-                        "status": "inactive",
-                        "explanation": item["explanation"],
-                    }
-                )
-                await create_question_options(
-                    question_id=int(created_question["question_id"]),
-                    options=item["options"],
-                    correct_option_index=int(item["correct_option_index"]),
-                )
-                inserted_count += 1
                 _emit_ai_job_log(
                     request_id,
                     logging.INFO,
                     (
-                        "Inserted generated question "
+                        "AI returned batch "
                         f"| difficulty={expected_difficulty} "
-                        f"| batch_index={index} "
-                        f"| question_id={created_question.get('question_id')} "
-                        f"| inserted_count={inserted_count}"
+                        f"| attempt={attempt_index + 1} "
+                        f"| generated_count={len(generated_items)} "
+                        f"| missing_count_before={missing_count} "
+                        f"| selected_prompt_chunks={len(prompt_chunks)}"
                     ),
+                )
+
+                for index, item in enumerate(generated_items, start=1):
+                    if missing_count <= 0:
+                        break
+                    if item["difficulty"] != expected_difficulty:
+                        skipped_duplicate_or_invalid += 1
+                        continue
+                    normalized = _normalize_question_content(item["content"])
+                    if not normalized:
+                        skipped_duplicate_or_invalid += 1
+                        continue
+                    if len(item.get("options") or []) != 4:
+                        skipped_duplicate_or_invalid += 1
+                        continue
+                    if normalized in batch_norms or normalized in existing_norms:
+                        skipped_duplicate_or_invalid += 1
+                        continue
+
+                    batch_norms.add(normalized)
+                    existing_norms.add(normalized)
+                    batch_contents.append(item["content"])
+
+                    created_question = await create_question_record(
+                        {
+                            "teacher_id": teacher_id,
+                            "topic_id": topic_id,
+                            "ai_request_id": request_id,
+                            "image_id": None,
+                            "content": item["content"],
+                            "difficulty": item["difficulty"],
+                            "source": "ai",
+                            "status": "inactive",
+                            "explanation": item["explanation"],
+                        }
+                    )
+                    question_id = int(created_question["question_id"])
+                    await create_question_options(
+                        question_id=question_id,
+                        options=item["options"],
+                        correct_option_index=int(item["correct_option_index"]),
+                    )
+                    chunk_ids, relevance_by_chunk_id = _resolve_chunk_ids_for_question(item, prompt_chunks)
+                    await create_question_sources(
+                        question_id=question_id,
+                        chunk_ids=chunk_ids,
+                        relevance_score_by_chunk_id=relevance_by_chunk_id,
+                    )
+                    inserted_count += 1
+                    missing_count -= 1
+                    _emit_ai_job_log(
+                        request_id,
+                        logging.INFO,
+                        (
+                            "Inserted generated question "
+                            f"| difficulty={expected_difficulty} "
+                            f"| attempt={attempt_index + 1} "
+                            f"| batch_index={index} "
+                            f"| question_id={question_id} "
+                            f"| source_chunk_count={len(chunk_ids)} "
+                            f"| inserted_count={inserted_count}"
+                        ),
+                    )
+
+                attempt_index += 1
+
+            if missing_count > 0:
+                raise TeacherAiValidationError(
+                    f"Generated {expected_question_count - missing_count}/{expected_question_count} "
+                    f"{expected_difficulty} questions after retries"
                 )
 
             _emit_ai_job_log(
@@ -919,7 +1057,7 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
                     "Finished difficulty batch "
                     f"| difficulty={expected_difficulty} "
                     f"| inserted_count_so_far={inserted_count} "
-                    f"| unique_batch_question_count={len(batch_contents)}"
+                    f"| skipped_duplicate_or_invalid={skipped_duplicate_or_invalid}"
                 ),
             )
 
@@ -950,7 +1088,14 @@ async def process_ai_request_job(request_id: int, teacher_id: int) -> None:
         _emit_ai_job_log(
             request_id,
             logging.INFO,
-            f"AI generation job completed successfully | inserted_count={inserted_count}",
+            (
+                "AI generation job completed successfully "
+                f"| teacher_id={teacher_id} "
+                f"| document_id={document_id} "
+                f"| document_topic_id={document_topic_id} "
+                f"| inserted_count={inserted_count} "
+                f"| skipped_duplicate_or_invalid={skipped_duplicate_or_invalid}"
+            ),
         )
     except Exception as exc:
         await _mark_failed(str(exc), retry_count + 1)

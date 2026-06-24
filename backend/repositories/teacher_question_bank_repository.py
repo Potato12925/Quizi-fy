@@ -36,10 +36,6 @@ async def list_teacher_topic_options(
         .is_("deleted_at", None)
         .eq("class_subjects.status", "active")
         .is_("class_subjects.deleted_at", None)
-        .eq("class_subjects.classes.status", "active")
-        .is_("class_subjects.classes.deleted_at", None)
-        .eq("class_subjects.subjects.status", "active")
-        .is_("class_subjects.subjects.deleted_at", None)
     )
     if class_subject_id is not None:
         query = query.eq("class_subject_id", class_subject_id)
@@ -65,12 +61,14 @@ async def list_teacher_document_topic_options(
             "classes!class_subjects_class_id_fkey!inner(class_id,class_name,status,deleted_at),"
             "subjects!class_subjects_subject_id_fkey!inner(subject_id,subject_name,status,deleted_at)))"
         )
+        .is_("deleted_at", None)
         .eq("documents.teacher_id", teacher_id)
         .eq("documents.status", "active")
         .is_("documents.deleted_at", None)
         .is_("topics.deleted_at", None)
-        .eq("topics.class_subjects.subjects.status", "active")
-        .is_("topics.class_subjects.subjects.deleted_at", None)
+        .eq("topics.class_subjects.assigned_teacher_id", teacher_id)
+        .eq("topics.class_subjects.status", "active")
+        .is_("topics.class_subjects.deleted_at", None)
     )
     if class_subject_id is not None:
         query = query.eq("topics.class_subject_id", class_subject_id)
@@ -105,6 +103,10 @@ async def list_teacher_questions(
         .eq("teacher_id", teacher_id)
         .in_("topic_id", topic_ids)
         .is_("deleted_at", None)
+        .eq("topics.class_subjects.assigned_teacher_id", teacher_id)
+        .eq("topics.class_subjects.status", "active")
+        .is_("topics.class_subjects.deleted_at", None)
+        .is_("topics.deleted_at", None)
     )
 
     if difficulty:
@@ -128,6 +130,10 @@ async def find_teacher_question_by_id(question_id: int, teacher_id: int) -> dict
         .eq("question_id", question_id)
         .eq("teacher_id", teacher_id)
         .is_("deleted_at", None)
+        .eq("topics.class_subjects.assigned_teacher_id", teacher_id)
+        .eq("topics.class_subjects.status", "active")
+        .is_("topics.class_subjects.deleted_at", None)
+        .is_("topics.deleted_at", None)
         .limit(1)
         .execute()
     )

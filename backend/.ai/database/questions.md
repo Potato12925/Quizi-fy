@@ -28,6 +28,7 @@ Stores the question bank, including AI-generated and manually created questions.
 - `topic_id -> topics.topic_id`
 - `ai_request_id -> ai_requests.request_id`
 - `question_options.question_id -> questions.question_id`
+- `question_sources.question_id -> questions.question_id`
 - `question_history.question_id -> questions.question_id`
 - `practice_set_questions.question_id -> questions.question_id`
 - `student_answers.question_id -> questions.question_id`
@@ -40,3 +41,4 @@ Stores the question bank, including AI-generated and manually created questions.
 - Manual questions are classified directly by `topic_id`.
 - AI-generated questions keep their generation source through `ai_request_id`.
 - The original AI document source can be traced through `ai_request_id -> ai_requests.document_topic_id -> document_topics.document_id`.
+- Chunk-level provenance is stored in `question_sources` and may reference soft-deleted `document_chunks` from older document versions.

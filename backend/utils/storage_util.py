@@ -9,34 +9,50 @@ async def _upload_file_to_bucket(
     bucket_name: str,
     object_path: str,
     file_bytes: bytes,
+    file_content_type: str,
 ) -> str:
     supabase = SupabaseManager.get_client()
+
     await asyncio.to_thread(
         lambda: supabase.storage.from_(bucket_name).upload(
             path=object_path,
             file=file_bytes,
-            file_options={"upsert": "false"},
+            file_options={
+                "upsert": "false",
+                "content-type": file_content_type,
+            },
         )
     )
-    return supabase.storage.from_(bucket_name).get_public_url(object_path)
 
+    return supabase.storage.from_(bucket_name).get_public_url(object_path)
 
 async def upload_document_file(
     teacher_id: int,
     subject_id: int,
     file_name: str,
     file_bytes: bytes,
+    file_content_type: str,
 ) -> str:
     bucket_name = Config.SUPABASE_DOCUMENT_BUCKET
     object_path = f"teacher-{teacher_id}/subject-{subject_id}/{uuid.uuid4()}-{file_name}"
-    return await _upload_file_to_bucket(bucket_name, object_path, file_bytes)
-
+    return await _upload_file_to_bucket(
+        bucket_name=bucket_name,
+        object_path=object_path,
+        file_bytes=file_bytes,
+        file_content_type=file_content_type,
+    )
 
 async def upload_question_image_file(
     teacher_id: int,
     file_name: str,
     file_bytes: bytes,
+    file_content_type: str,
 ) -> str:
     bucket_name = Config.SUPABASE_IMAGE_BUCKET
     object_path = f"teacher-{teacher_id}/questions/{uuid.uuid4()}-{file_name}"
-    return await _upload_file_to_bucket(bucket_name, object_path, file_bytes)
+    return await _upload_file_to_bucket(
+        bucket_name=bucket_name,
+        object_path=object_path,
+        file_bytes=file_bytes,
+        file_content_type=file_content_type,
+    )

@@ -157,6 +157,7 @@ async def upload_image_service(
         teacher_id=current_user.user_id,
         file_name=file_name,
         file_bytes=file_bytes,
+        file_content_type=file_content_type,
     )
     created = await create_image_record(
         {

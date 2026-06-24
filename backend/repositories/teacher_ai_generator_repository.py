@@ -40,10 +40,6 @@ async def find_teacher_topic_row(teacher_id: int, topic_id: int) -> dict | None:
         .is_("deleted_at", None)
         .eq("class_subjects.status", "active")
         .is_("class_subjects.deleted_at", None)
-        .eq("class_subjects.classes.status", "active")
-        .is_("class_subjects.classes.deleted_at", None)
-        .eq("class_subjects.subjects.status", "active")
-        .is_("class_subjects.subjects.deleted_at", None)
         .limit(1)
         .execute()
     )
@@ -63,10 +59,34 @@ async def list_teacher_document_topic_rows(teacher_id: int) -> list[dict]:
             "classes!inner(class_id,class_name,status,deleted_at),"
             "subjects!class_subjects_subject_id_fkey!inner(subject_id,subject_name,status,deleted_at)))"
         )
+        .is_("deleted_at", None)
         .eq("documents.teacher_id", teacher_id)
         .eq("documents.status", "active")
         .is_("documents.deleted_at", None)
         .is_("topics.deleted_at", None)
+        .eq("topics.class_subjects.status", "active")
+        .is_("topics.class_subjects.deleted_at", None)
+        .order("document_topic_id", desc=True)
+        .execute()
+    )
+    return response.data or []
+
+
+async def list_teacher_document_topic_rows_for_ai_history(teacher_id: int) -> list[dict]:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("document_topics")
+        .select(
+            "document_topic_id,document_id,topic_id,deleted_at,"
+            "documents!inner(document_id,teacher_id,title,file_url,file_type,status,deleted_at),"
+            "topics(topic_id,topic_name,class_subject_id,deleted_at,"
+            "class_subjects!topics_class_subject_id_fkey("
+            "class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
+            "classes(class_id,class_name,status,deleted_at),"
+            "subjects!class_subjects_subject_id_fkey(subject_id,subject_name,status,deleted_at)"
+            "))"
+        )
+        .eq("documents.teacher_id", teacher_id)
         .order("document_topic_id", desc=True)
         .execute()
     )
@@ -86,10 +106,14 @@ async def find_teacher_document_topic_row(teacher_id: int, document_topic_id: in
             "subjects!class_subjects_subject_id_fkey!inner(subject_id,subject_name,status,deleted_at)))"
         )
         .eq("document_topic_id", document_topic_id)
+        .is_("deleted_at", None)
         .eq("documents.teacher_id", teacher_id)
         .eq("documents.status", "active")
         .is_("documents.deleted_at", None)
         .is_("topics.deleted_at", None)
+        .eq("topics.class_subjects.assigned_teacher_id", teacher_id)
+        .eq("topics.class_subjects.status", "active")
+        .is_("topics.class_subjects.deleted_at", None)
         .limit(1)
         .execute()
     )
@@ -178,12 +202,12 @@ async def update_ai_request_by_id(request_id: int, payload: dict) -> dict | None
     return rows[0] if rows else None
 
 
-async def list_existing_question_contents(document_topic_id: int) -> list[str]:
+async def list_existing_question_contents(topic_id: int) -> list[str]:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("questions")
-        .select("content,ai_requests!inner(document_topic_id)")
-        .eq("ai_requests.document_topic_id", document_topic_id)
+        .select("content")
+        .eq("topic_id", topic_id)
         .is_("deleted_at", None)
         .execute()
     )

@@ -8,11 +8,13 @@ DROP TABLE IF EXISTS student_answers CASCADE;
 DROP TABLE IF EXISTS practice_attempts CASCADE;
 DROP TABLE IF EXISTS practice_set_questions CASCADE;
 DROP TABLE IF EXISTS practice_sets CASCADE;
+DROP TABLE IF EXISTS question_sources CASCADE;
 DROP TABLE IF EXISTS question_options CASCADE;
 DROP TABLE IF EXISTS question_history CASCADE;
 DROP TABLE IF EXISTS questions CASCADE;
 DROP TABLE IF EXISTS ai_request_difficulty_distribution CASCADE;
 DROP TABLE IF EXISTS ai_requests CASCADE;
+DROP TABLE IF EXISTS document_chunks CASCADE;
 DROP TABLE IF EXISTS document_topics CASCADE;
 DROP TABLE IF EXISTS documents CASCADE;
 DROP TABLE IF EXISTS topics CASCADE;
@@ -36,6 +38,7 @@ DROP TYPE IF EXISTS question_status CASCADE;
 DROP TYPE IF EXISTS practice_attempt_status CASCADE;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TYPE active_status AS ENUM ('active', 'inactive');
 CREATE TYPE difficulty_level AS ENUM ('recognition', 'comprehension', 'application', 'advanced');
@@ -198,6 +201,76 @@ CREATE TABLE document_topics (
 CREATE INDEX idx_document_topics_document ON document_topics(document_id);
 CREATE INDEX idx_document_topics_topic ON document_topics(topic_id);
 
+CREATE TABLE document_chunks (
+    chunk_id BIGSERIAL PRIMARY KEY,
+    document_id BIGINT NOT NULL REFERENCES documents(document_id),
+    chunk_index INT NOT NULL,
+    chunk_title TEXT,
+    chunk_text TEXT NOT NULL,
+    embedding vector(1536),
+    chunk_hash VARCHAR(255),
+    start_char INT,
+    end_char INT,
+    page_from INT,
+    page_to INT,
+    token_count INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
+);
+
+CREATE INDEX idx_document_chunks_document ON document_chunks(document_id);
+CREATE UNIQUE INDEX uq_document_chunks_document_chunk_index_active
+ON document_chunks(document_id, chunk_index)
+WHERE deleted_at IS NULL;
+CREATE INDEX idx_document_chunks_chunk_hash ON document_chunks(chunk_hash);
+
+CREATE OR REPLACE FUNCTION match_document_chunks(
+    p_document_id BIGINT,
+    p_query_embedding vector(1536),
+    p_limit INT
+)
+RETURNS TABLE (
+    chunk_id BIGINT,
+    document_id BIGINT,
+    chunk_index INT,
+    chunk_title TEXT,
+    chunk_text TEXT,
+    chunk_hash VARCHAR,
+    start_char INT,
+    end_char INT,
+    page_from INT,
+    page_to INT,
+    token_count INT,
+    created_at TIMESTAMP,
+    deleted_at TIMESTAMP,
+    similarity_score DOUBLE PRECISION
+)
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT
+        dc.chunk_id,
+        dc.document_id,
+        dc.chunk_index,
+        dc.chunk_title,
+        dc.chunk_text,
+        dc.chunk_hash,
+        dc.start_char,
+        dc.end_char,
+        dc.page_from,
+        dc.page_to,
+        dc.token_count,
+        dc.created_at,
+        dc.deleted_at,
+        1 - (dc.embedding <=> p_query_embedding) AS similarity_score
+    FROM document_chunks dc
+    WHERE dc.document_id = p_document_id
+      AND dc.deleted_at IS NULL
+      AND dc.embedding IS NOT NULL
+    ORDER BY dc.embedding <=> p_query_embedding, dc.chunk_index ASC
+    LIMIT GREATEST(COALESCE(p_limit, 12), 1);
+$$;
+
 CREATE TABLE ai_requests (
     request_id BIGSERIAL PRIMARY KEY,
     document_topic_id BIGINT NOT NULL REFERENCES document_topics(document_topic_id) ON DELETE CASCADE,
@@ -256,6 +329,18 @@ CREATE TABLE question_options (
     order_num INT NOT NULL,
     CONSTRAINT uq_question_option_order UNIQUE(question_id, order_num)
 );
+
+CREATE TABLE question_sources (
+    question_source_id BIGSERIAL PRIMARY KEY,
+    question_id BIGINT NOT NULL REFERENCES questions(question_id),
+    chunk_id BIGINT NOT NULL REFERENCES document_chunks(chunk_id),
+    relevance_score NUMERIC,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_question_source_question_chunk UNIQUE(question_id, chunk_id)
+);
+
+CREATE INDEX idx_question_sources_question ON question_sources(question_id);
+CREATE INDEX idx_question_sources_chunk ON question_sources(chunk_id);
 
 CREATE TABLE question_history (
     history_id BIGSERIAL PRIMARY KEY,
@@ -331,12 +416,14 @@ CREATE TABLE notifications (
 -- classes 1---n class_students n---1 users
 -- users 1---n documents
 -- documents 1---n document_topics n---1 topics
+-- documents 1---n document_chunks
 -- document_topics 1---n ai_requests
 -- ai_requests 1---n ai_request_difficulty_distribution
 -- users 1---n questions
 -- topics 1---n questions
 -- ai_requests 1---n questions
 -- questions 1---n question_options
+-- questions 1---n question_sources n---1 document_chunks
 -- questions 1---n question_history
 -- users 1---n question_history
 -- users 1---n practice_sets

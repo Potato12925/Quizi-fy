@@ -31,6 +31,8 @@ class Config:
     # OPENAI
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+    OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+    DOCUMENT_CHUNK_EMBEDDING_DIMENSION = int(os.getenv("DOCUMENT_CHUNK_EMBEDDING_DIMENSION", 1536))
 
     # CELERY
     CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")

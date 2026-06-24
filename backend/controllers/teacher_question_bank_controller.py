@@ -28,7 +28,7 @@ async def get_teacher_question_bank_route(
     status: str | None = Query(default=None),
     source: str | None = Query(default=None),
     keyword: str | None = Query(default=None),
-    current_user: CurrentUser = Depends(require_roles("teacher", "admin")),
+    current_user: CurrentUser = Depends(require_roles("teacher")),
 ):
     try:
         result = await get_teacher_question_bank(
@@ -62,7 +62,7 @@ async def get_teacher_document_topic_options_route(
     class_subject_id: int | None = Query(default=None, ge=1),
     subject_id: int | None = Query(default=None, ge=1),
     topic_id: int | None = Query(default=None, ge=1),
-    current_user: CurrentUser = Depends(require_roles("teacher", "admin")),
+    current_user: CurrentUser = Depends(require_roles("teacher")),
 ):
     try:
         result = await get_teacher_document_topic_options(
@@ -87,7 +87,7 @@ async def get_teacher_document_topic_options_route(
 @router.post("/manual", summary="Create manual question")
 async def create_manual_question_route(
     payload: ManualQuestionPayload,
-    current_user: CurrentUser = Depends(require_roles("teacher", "admin")),
+    current_user: CurrentUser = Depends(require_roles("teacher")),
 ):
     try:
         result = await create_teacher_manual_question(current_user=current_user, payload=payload)
@@ -118,7 +118,7 @@ async def create_manual_question_route(
 async def update_teacher_question_route(
     question_id: int,
     payload: ManualQuestionPayload,
-    current_user: CurrentUser = Depends(require_roles("teacher", "admin")),
+    current_user: CurrentUser = Depends(require_roles("teacher")),
 ):
     try:
         result = await update_teacher_question(current_user=current_user, question_id=question_id, payload=payload)
@@ -150,7 +150,7 @@ async def update_teacher_question_route(
 async def update_teacher_question_status_route(
     question_id: int,
     payload: QuestionStatusUpdatePayload,
-    current_user: CurrentUser = Depends(require_roles("teacher", "admin")),
+    current_user: CurrentUser = Depends(require_roles("teacher")),
 ):
     try:
         result = await update_teacher_question_status(current_user=current_user, question_id=question_id, status=payload.status)
@@ -173,7 +173,7 @@ async def update_teacher_question_status_route(
 @router.delete("/{question_id}", summary="Soft delete teacher question")
 async def delete_teacher_question_route(
     question_id: int,
-    current_user: CurrentUser = Depends(require_roles("teacher", "admin")),
+    current_user: CurrentUser = Depends(require_roles("teacher")),
 ):
     try:
         result = await delete_teacher_question(current_user=current_user, question_id=question_id)

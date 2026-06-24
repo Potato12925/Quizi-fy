@@ -163,6 +163,7 @@ async def get_teacher_stats(
     debug_info["filtered_topic_ids"] = filtered_topic_ids
 
     practice_sets = await list_scoped_practice_sets(
+        teacher_id=current_user.user_id,
         assigned_subject_ids=teacher_subject_ids if subject_id is None else [subject_id],
         scoped_topic_ids=filtered_topic_ids if topic_id is not None else [],
     )

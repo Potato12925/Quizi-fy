@@ -19,6 +19,8 @@ export interface ResourceCardProps {
   resource: TeacherDocument;
   onDelete: (resource: TeacherDocument) => void | Promise<void>;
   onEdit: (resource: TeacherDocument) => void | Promise<void>;
+  isLocked?: boolean;
+  lockedReason?: string;
 }
 
 export interface ResourceFormProps {

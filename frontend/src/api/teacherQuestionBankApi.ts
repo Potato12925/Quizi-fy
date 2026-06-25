@@ -7,6 +7,13 @@ interface ApiEnvelope<T> {
   meta?: Record<string, unknown> | null;
 }
 
+interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+}
+
 export type QuestionDifficulty =
   | 'recognition'
   | 'comprehension'
@@ -22,9 +29,15 @@ export type QuestionImageInfo = {
 };
 
 export interface AssignedSubject {
+  class_subject_id: number;
+  class_id: number;
+  class_code?: string | null;
+  class_name?: string | null;
   subject_id: number;
-  subject_code: string;
+  subject_code?: string | null;
   subject_name: string;
+  assigned_teacher_id?: number | null;
+  topics: TopicItem[];
 }
 
 export interface TopicItem {
@@ -32,6 +45,13 @@ export interface TopicItem {
   class_subject_id: number;
   subject_id: number;
   topic_name: string;
+  description?: string | null;
+  class_id?: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
+  subject_code?: string | null;
+  subject_name?: string | null;
+  assigned_teacher_id?: number | null;
 }
 
 export interface QuestionOptionItem {
@@ -56,7 +76,12 @@ export interface TeacherQuestionBankItem {
   image?: QuestionImageInfo | null;
   topic_id: number;
   topic_name: string;
+  class_subject_id: number;
+  class_id?: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
   subject_id: number;
+  subject_code?: string | null;
   subject_name: string;
   document_id?: number | null;
   document_title?: string | null;
@@ -102,18 +127,65 @@ export const getTeacherQuestionImageErrorMessage = (
     : fallback;
 };
 
-export const getAssignedSubjects = async (): Promise<AssignedSubject[]> => {
-  const res = await api.get<ApiEnvelope<AssignedSubject[]>>('/subjects', {
-    params: { page: '1', limit: '100' },
-  });
-  return res.data || [];
+const fetchAllPaginated = async <T>(
+  endpoint: string,
+  limit: number,
+  params: Record<string, string> = {},
+): Promise<T[]> => {
+  let page = 1;
+  let totalPages = 1;
+  const items: T[] = [];
+
+  while (page <= totalPages) {
+    const res = await api.get<ApiEnvelope<T[]>>(endpoint, {
+      params: {
+        page: String(page),
+        limit: String(limit),
+        ...params,
+      },
+    });
+    items.push(...(res.data || []));
+    totalPages = Math.max(Number((res.meta as PaginationMeta | null | undefined)?.total_pages || 1), 1);
+    page += 1;
+  }
+
+  return items;
 };
 
-export const getTopicsBySubjectId = async (subjectId: number): Promise<TopicItem[]> => {
-  const res = await api.get<ApiEnvelope<TopicItem[]>>('/topics', {
-    params: { page: '1', limit: '100', subject_id: String(subjectId) },
+export const getAssignedSubjects = async (): Promise<AssignedSubject[]> => {
+  const items = await fetchAllPaginated<AssignedSubject>('/subjects', 200, {
+    include_topics: 'true',
   });
-  return res.data || [];
+
+  return items.map((item) => ({
+    class_subject_id: item.class_subject_id,
+    class_id: item.class_id,
+    class_code: item.class_code ?? null,
+    class_name: item.class_name ?? null,
+    subject_id: item.subject_id,
+    subject_code: item.subject_code ?? null,
+    subject_name: item.subject_name,
+    assigned_teacher_id: item.assigned_teacher_id ?? null,
+    topics: (item.topics || []).map((topic) => ({
+      topic_id: topic.topic_id,
+      class_subject_id: topic.class_subject_id,
+      subject_id: topic.subject_id,
+      topic_name: topic.topic_name,
+      description: topic.description ?? null,
+      class_id: topic.class_id ?? null,
+      class_code: topic.class_code ?? null,
+      class_name: topic.class_name ?? null,
+      subject_code: topic.subject_code ?? null,
+      subject_name: topic.subject_name ?? null,
+      assigned_teacher_id: topic.assigned_teacher_id ?? null,
+    })),
+  }));
+};
+
+export const getTopicsByClassSubjectId = async (classSubjectId: number): Promise<TopicItem[]> => {
+  return fetchAllPaginated<TopicItem>('/topics', 200, {
+    class_subject_id: String(classSubjectId),
+  });
 };
 
 export const getTeacherQuestionBank = async (

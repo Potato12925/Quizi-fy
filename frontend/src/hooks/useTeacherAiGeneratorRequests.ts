@@ -42,9 +42,9 @@ export const useTeacherAiGeneratorRequests = () => {
     try {
       await retryTeacherAiRequest(requestId);
       await loadRequests(true);
-      setSuccess(`Đã gửi retry cho job #${requestId}.`);
+      setSuccess(`Đã gửi thử lại cho mã công việc tạo AI #${requestId}.`);
     } catch (caught: unknown) {
-      setError(caught instanceof Error ? caught.message : 'Không thể retry job AI.');
+      setError(caught instanceof Error ? caught.message : 'Không thể retry việc tạo bằng AI.');
       throw caught;
     } finally {
       setRetryingRequestId(null);
@@ -58,7 +58,7 @@ export const useTeacherAiGeneratorRequests = () => {
       try {
         await loadRequests(true);
       } catch (caught: unknown) {
-        setError(caught instanceof Error ? caught.message : 'Không thể tải danh sách job AI.');
+        setError(caught instanceof Error ? caught.message : 'Không thể tải danh sách công việc AI.');
       } finally {
         setLoadingRequests(false);
       }

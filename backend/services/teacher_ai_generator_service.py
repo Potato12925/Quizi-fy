@@ -7,7 +7,6 @@ from repositories.document_chunk_repository import (
     list_document_chunks,
 )
 from repositories.question_source_repository import create_question_sources
-from repositories.subject_repository import list_assigned_subject_ids_by_teacher
 from repositories.teacher_ai_generator_repository import (
     bulk_create_ai_request_difficulty_distribution,
     bulk_update_question_status,
@@ -113,11 +112,16 @@ def _serialize_document_topic_row(row: dict) -> dict:
         "topic_name": topic.get("topic_name"),
         "class_subject_id": int(topic["class_subject_id"]) if topic.get("class_subject_id") is not None else None,
         "class_id": int(class_subject["class_id"]) if class_subject.get("class_id") is not None else None,
+        "class_code": class_ref.get("class_code"),
         "class_name": class_ref.get("class_name"),
         "subject_id": int(class_subject["subject_id"]) if class_subject.get("subject_id") is not None else None,
+        "subject_code": subject.get("subject_code"),
         "subject_name": subject.get("subject_name"),
         "file_url": document.get("file_url"),
         "file_type": document.get("file_type"),
+        "file_size": document.get("file_size"),
+        "status": document.get("status"),
+        "created_at": document.get("created_at"),
     }
 
 
@@ -138,7 +142,11 @@ def _serialize_question_item(item: dict, document_topic_map: dict[int, dict]) ->
             "topic_id": topic.get("topic_id") or nested_document_topic.get("topic_id"),
             "topic_name": topic.get("topic_name"),
             "class_subject_id": topic.get("class_subject_id"),
+            "class_id": class_subject.get("class_id"),
+            "class_code": (class_subject.get("classes") or {}).get("class_code"),
+            "class_name": (class_subject.get("classes") or {}).get("class_name"),
             "subject_id": class_subject.get("subject_id"),
+            "subject_code": subject.get("subject_code"),
             "subject_name": subject.get("subject_name"),
         }
     options = sorted(item.get("question_options") or [], key=lambda opt: int(opt.get("order_num") or 0))
@@ -163,7 +171,11 @@ def _serialize_question_item(item: dict, document_topic_map: dict[int, dict]) ->
         "topic_id": doc_topic.get("topic_id"),
         "topic_name": doc_topic.get("topic_name"),
         "class_subject_id": doc_topic.get("class_subject_id"),
+        "class_id": doc_topic.get("class_id"),
+        "class_code": doc_topic.get("class_code"),
+        "class_name": doc_topic.get("class_name"),
         "subject_id": doc_topic.get("subject_id"),
+        "subject_code": doc_topic.get("subject_code"),
         "subject_name": doc_topic.get("subject_name"),
         "options": options,
     }
@@ -217,60 +229,57 @@ def _normalize_review_option_payload(options: list[TeacherAiReviewOptionPayload]
     return result
 
 
-def _is_allowed_active_doc_topic(item: dict, allowed_subject_ids: set[int]) -> bool:
-    topic = item.get("topics") or {}
-    class_subject = topic.get("class_subjects") or {}
-    subject = class_subject.get("subjects") or {}
-    subject_id = int(class_subject.get("subject_id") or 0)
-    return subject_id in allowed_subject_ids and subject.get("status") == "active" and subject.get("deleted_at") is None
-
-
 async def get_teacher_ai_generator_options(current_user: CurrentUser) -> dict:
     rows = await list_teacher_document_topic_rows(current_user.user_id)
-    allowed_subject_ids = set(await list_assigned_subject_ids_by_teacher(current_user.user_id))
-    filtered = []
-    for row in rows:
-        topic = row.get("topics") or {}
-        class_subject = topic.get("class_subjects") or {}
-        subject = class_subject.get("subjects") or {}
-        subject_id = class_subject.get("subject_id")
-        if subject_id is None:
-            continue
-        if int(subject_id) not in allowed_subject_ids:
-            continue
-        if subject.get("deleted_at") is not None:
-            continue
-        if subject.get("status") != "active":
-            continue
-        filtered.append(row)
+    serialized = [_serialize_document_topic_row(item) for item in rows]
 
-    serialized = [_serialize_document_topic_row(item) for item in filtered]
-
-    subject_map: dict[int, dict] = {}
+    class_subject_map: dict[int, dict] = {}
     topic_map: dict[int, dict] = {}
+    document_topic_map: dict[int, dict] = {}
     document_map: dict[int, dict] = {}
     for item in serialized:
-        subject_id = int(item["subject_id"])
+        class_subject_id = int(item["class_subject_id"])
         topic_id = int(item["topic_id"])
+        document_topic_id = int(item["document_topic_id"])
         document_id = int(item["document_id"])
-        subject_map[subject_id] = {"subject_id": subject_id, "subject_name": item["subject_name"]}
+        class_subject_map[class_subject_id] = {
+            "class_subject_id": class_subject_id,
+            "class_id": item["class_id"],
+            "class_code": item["class_code"],
+            "class_name": item["class_name"],
+            "subject_id": item["subject_id"],
+            "subject_code": item["subject_code"],
+            "subject_name": item["subject_name"],
+            "status": item["status"],
+        }
         topic_map[topic_id] = {
             "topic_id": topic_id,
             "topic_name": item["topic_name"],
-            "subject_id": subject_id,
+            "class_subject_id": class_subject_id,
+            "class_id": item["class_id"],
+            "class_code": item["class_code"],
+            "class_name": item["class_name"],
+            "subject_id": item["subject_id"],
+            "subject_code": item["subject_code"],
             "subject_name": item["subject_name"],
+        }
+        document_topic_map[document_topic_id] = {
+            **item,
         }
         document_map[document_id] = {
             "document_id": document_id,
             "document_title": item["document_title"],
-            "subject_id": subject_id,
+            "file_type": item["file_type"],
+            "file_size": item["file_size"],
+            "status": item["status"],
+            "created_at": item["created_at"],
         }
 
     return {
-        "subjects": list(subject_map.values()),
+        "class_subjects": list(class_subject_map.values()),
         "topics": list(topic_map.values()),
         "documents": list(document_map.values()),
-        "document_topics": serialized,
+        "document_topics": list(document_topic_map.values()),
     }
 
 
@@ -324,8 +333,6 @@ async def create_teacher_ai_request(current_user: CurrentUser, payload: TeacherA
 
 
 async def list_teacher_ai_requests(current_user: CurrentUser, page: int, limit: int) -> dict:
-    # AI request history uses document ownership scope, not the stricter active-assignment scope
-    # that is still required for create/options flows.
     doc_topic_rows = await list_teacher_document_topic_rows_for_ai_history(current_user.user_id)
     serialized_doc_topics = [_serialize_document_topic_row(item) for item in doc_topic_rows]
     doc_topic_ids = [int(item["document_topic_id"]) for item in serialized_doc_topics]

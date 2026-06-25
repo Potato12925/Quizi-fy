@@ -5,6 +5,7 @@ import {
   badgeClass,
   formatDateTime,
   formatDifficultyDistribution,
+  formatDocumentTopicContext,
   getRequestProgressDetail,
   getRequestStatusBadge,
   pageCardClass,
@@ -130,9 +131,7 @@ export default function TeacherAIGeneratorLayout() {
                         <span className={`${badgeClass} ${badge.cls}`}>{badge.label}</span>
                       </div>
 
-                      <p className="text-xs font-black text-slate-700">
-                        {item.document_topic.subject_name} - {item.document_topic.topic_name}
-                      </p>
+                      <p className="text-xs font-black text-slate-700">{formatDocumentTopicContext(item.document_topic)}</p>
                       <p className="mt-1 text-xs font-bold text-slate-600">{item.document_topic.document_title}</p>
                       <p className="mt-2 text-[11px] font-bold text-slate-500">
                         {item.num_questions} câu | Sinh được: {item.generated_question_count}

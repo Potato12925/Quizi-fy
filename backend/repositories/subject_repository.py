@@ -181,17 +181,18 @@ async def list_subjects_by_teacher(
         supabase.table("class_subjects")
         .select(
             "class_subject_id,class_id,subject_id,assigned_teacher_id,status,created_at,updated_at,"
-            "classes!inner(class_id,class_code,class_name),"
+            "classes!inner(class_id,class_code,class_name,status,deleted_at),"
             "subjects!inner(subject_id,subject_code,subject_name,description,status,created_at,updated_at,deleted_at)",
             count="exact",
         )
         .eq("assigned_teacher_id", teacher_id)
         .eq("status", "active")
         .is_("deleted_at", None)
+        .eq("classes.status", "active")
+        .is_("classes.deleted_at", None)
+        .eq("subjects.status", "active")
         .is_("subjects.deleted_at", None)
     )
-    if status in {"active", "inactive"}:
-        query = query.eq("subjects.status", status)
     if search:
         search_text = search.strip()
         if search_text:

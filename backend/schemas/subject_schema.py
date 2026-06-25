@@ -23,4 +23,5 @@ class SubjectListQueryParams(BaseModel):
     status: Literal["all", "active", "inactive"] = "all"
     sort_by: Literal["created_at", "subject_name", "subject_code"] = "created_at"
     sort_order: Literal["asc", "desc"] = "desc"
+    include_topics: bool = False
 

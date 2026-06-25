@@ -15,6 +15,7 @@ import {
   DIFFICULTY_ORDER,
   formatDateTime,
   formatDifficultyDistribution,
+  formatDocumentTopicContext,
   getQuestionStatusBadge,
   getRequestProgressDetail,
   getRequestStatusBadge,
@@ -196,7 +197,7 @@ export default function TeacherAIGeneratorRequestPage() {
   if (!request) {
     return (
       <div className={`${pageCardClass} p-10 text-center`}>
-        <p className="text-sm font-black tracking-widest uppercase text-slate-400">Đang tải thông tin tiến trình...</p>
+        <p className="text-sm font-black uppercase tracking-widest text-slate-400">Đang tải thông tin tiến trình...</p>
       </div>
     );
   }
@@ -210,11 +211,11 @@ export default function TeacherAIGeneratorRequestPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Chi tiết tiến trình AI</p>
-            <h2 className="mt-3 text-3xl italic font-black tracking-tight uppercase text-slate-900">
+            <h2 className="mt-3 text-3xl font-black uppercase tracking-tight text-slate-900 italic">
               Tiến trình #{request.request_id}
             </h2>
             <p className="mt-3 text-sm font-bold text-slate-500">
-              {request.document_topic.subject_name} → {request.document_topic.topic_name}
+              {formatDocumentTopicContext(request.document_topic)}
             </p>
             <p className="mt-1 text-sm font-bold text-slate-500">{request.document_topic.document_title}</p>
           </div>
@@ -226,25 +227,25 @@ export default function TeacherAIGeneratorRequestPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 mt-8 md:grid-cols-3">
-          <div className="p-4 border rounded-2xl border-slate-100 bg-slate-50">
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Số lượng</p>
             <p className="mt-2 text-lg font-black text-slate-900">{request.generated_question_count}/{request.num_questions} câu</p>
           </div>
-          <div className="p-4 border rounded-2xl border-slate-100 bg-slate-50">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Phân phối độ khó</p>
             <p className="mt-2 text-sm font-bold text-slate-700">{formatDifficultyDistribution(request.difficulty_distribution)}</p>
           </div>
-          <div className="p-4 border rounded-2xl border-slate-100 bg-slate-50">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Phạm vi nội dung</p>
             <p className="mt-2 text-sm font-bold text-slate-700">{request.content_scope || 'Toàn bộ tài liệu đã chọn'}</p>
           </div>
         </div>
 
-        <div className="p-5 mt-6 border rounded-2xl border-slate-100 bg-slate-50">
+        <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-5">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{progress.stepLabel}</p>
           <p className="mt-2 text-sm font-bold text-slate-600">{progress.detail}</p>
-          <div className="w-full h-3 mt-4 bg-white rounded-full">
+          <div className="mt-4 h-3 w-full rounded-full bg-white">
             <div
               className="h-full rounded-full bg-[var(--color-primary)] transition-all"
               style={{ width: `${progress.progressPercent}%` }}
@@ -264,11 +265,11 @@ export default function TeacherAIGeneratorRequestPage() {
 
       {request.status !== 'completed' ? (
         <section className={`${pageCardClass} p-8 text-center`}>
-          <p className="text-sm font-black tracking-widest uppercase text-slate-400">Tiến trình chưa sẵn sàng để rà soát</p>
+          <p className="text-sm font-black uppercase tracking-widest text-slate-400">Tiến trình chưa sẵn sàng để rà soát</p>
           <p className="mt-3 text-sm font-bold text-slate-500">Trang này sẽ tự cập nhật khi tiến trình chuyển trạng thái hoàn tất.</p>
           <Link
             to="/teacher/ai-generator"
-            className="inline-flex mt-6 rounded-2xl border border-slate-200 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:border-slate-300 hover:text-slate-800"
+            className="mt-6 inline-flex rounded-2xl border border-slate-200 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:border-slate-300 hover:text-slate-800"
           >
             Quay lại tạo tiến trình
           </Link>
@@ -278,7 +279,7 @@ export default function TeacherAIGeneratorRequestPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Rà soát câu hỏi</p>
-              <h3 className="mt-2 text-2xl font-black tracking-tight uppercase text-slate-900">
+              <h3 className="mt-2 text-2xl font-black uppercase tracking-tight text-slate-900">
                 {reviewReadOnly ? 'Chế độ chỉ xem' : 'Chế độ chỉnh sửa'}
               </h3>
             </div>
@@ -302,18 +303,18 @@ export default function TeacherAIGeneratorRequestPage() {
 
           <div className="mt-6 space-y-4">
             {loadingQuestions ? (
-              <div className="border-4 border-dashed border-slate-100 rounded-[2rem] p-12 text-center">
-                <p className="text-sm font-black tracking-widest uppercase text-slate-400">Đang tải câu hỏi...</p>
+              <div className="rounded-[2rem] border-4 border-dashed border-slate-100 p-12 text-center">
+                <p className="text-sm font-black uppercase tracking-widest text-slate-400">Đang tải câu hỏi...</p>
               </div>
             ) : reviewQuestions.length === 0 ? (
-              <div className="border-4 border-dashed border-slate-100 rounded-[2rem] p-12 text-center">
-                <p className="text-sm font-black tracking-widest uppercase text-slate-400">Tiến trình này chưa có câu hỏi khả dụng.</p>
+              <div className="rounded-[2rem] border-4 border-dashed border-slate-100 p-12 text-center">
+                <p className="text-sm font-black uppercase tracking-widest text-slate-400">Tiến trình này chưa có câu hỏi khả dụng.</p>
               </div>
             ) : (
               reviewQuestions.map((question, questionIndex) => {
                 const statusBadge = getQuestionStatusBadge(question.status);
                 return (
-                  <article key={question.question_id} className="rounded-[1.75rem] border border-slate-100 bg-slate-50/60 p-5 space-y-4">
+                  <article key={question.question_id} className="space-y-4 rounded-[1.75rem] border border-slate-100 bg-slate-50/60 p-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-black text-slate-700">#{question.question_id}</span>
@@ -394,7 +395,7 @@ export default function TeacherAIGeneratorRequestPage() {
                     <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Đáp án</label>
                       {question.options.map((option, optionIndex) => (
-                        <div key={`${question.question_id}-${option.order_num}`} className="p-3 bg-white border rounded-xl border-slate-200">
+                        <div key={`${question.question_id}-${option.order_num}`} className="rounded-xl border border-slate-200 bg-white p-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
@@ -419,7 +420,7 @@ export default function TeacherAIGeneratorRequestPage() {
                                 type="button"
                                 disabled={reviewReadOnly || optionIndex === 0}
                                 onClick={() => moveOption(question.question_id, optionIndex, -1)}
-                                className="w-8 h-8 border rounded-lg border-slate-200 text-slate-600 disabled:opacity-40"
+                                className="h-8 w-8 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40"
                               >
                                 ↑
                               </button>
@@ -427,7 +428,7 @@ export default function TeacherAIGeneratorRequestPage() {
                                 type="button"
                                 disabled={reviewReadOnly || optionIndex === question.options.length - 1}
                                 onClick={() => moveOption(question.question_id, optionIndex, 1)}
-                                className="w-8 h-8 border rounded-lg border-slate-200 text-slate-600 disabled:opacity-40"
+                                className="h-8 w-8 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40"
                               >
                                 ↓
                               </button>

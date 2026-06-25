@@ -6,10 +6,16 @@ const getClassLabel = (classCode?: string | null, className?: string | null) =>
 
 const getSubjectLabel = (
   classCode?: string | null,
+  className?: string | null,
   subjectCode?: string | null,
   subjectName?: string | null,
 ) =>
-  [classCode, subjectCode, subjectName].filter(Boolean).join(' - ') || 'Mon hoc chua xac dinh';
+  [
+    [subjectCode, subjectName].filter(Boolean).join(' / '),
+    [classCode, className].filter(Boolean).join(' / '),
+  ]
+    .filter(Boolean)
+    .join(' - ') || 'Mon hoc chua xac dinh';
 
 export default function ResourceForm({
   fileInputRef,
@@ -85,7 +91,7 @@ export default function ResourceForm({
             key={subject.class_subject_id ?? `${subject.class_id}-${subject.subject_id}`}
             value={String(subject.class_subject_id ?? '')}
           >
-            {getSubjectLabel(subject.class_code, subject.subject_code, subject.subject_name)}
+            {getSubjectLabel(subject.class_code, subject.class_name, subject.subject_code, subject.subject_name)}
           </option>
         ))}
       </select>

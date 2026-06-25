@@ -30,8 +30,10 @@ def _serialize_topic_context(topic_row: dict) -> dict:
         "topic_name": topic_row.get("topic_name"),
         "class_subject_id": topic_row.get("class_subject_id"),
         "class_id": class_subject.get("class_id"),
+        "class_code": class_ref.get("class_code"),
         "class_name": class_ref.get("class_name"),
         "subject_id": class_subject.get("subject_id"),
+        "subject_code": subject.get("subject_code"),
         "subject_name": subject.get("subject_name"),
     }
 
@@ -72,8 +74,10 @@ def _serialize_question(item: dict, image_by_id: dict[int, dict] | None = None) 
         "topic_name": topic.get("topic_name"),
         "class_subject_id": topic.get("class_subject_id"),
         "class_id": class_subject.get("class_id"),
+        "class_code": class_ref.get("class_code"),
         "class_name": class_ref.get("class_name"),
         "subject_id": class_subject.get("subject_id"),
+        "subject_code": subject.get("subject_code"),
         "subject_name": subject.get("subject_name"),
         "document_id": document.get("document_id"),
         "document_title": document.get("title"),
@@ -174,8 +178,10 @@ async def get_teacher_document_topic_options(
                 "topic_name": topic.get("topic_name"),
                 "class_subject_id": topic.get("class_subject_id"),
                 "class_id": class_subject.get("class_id"),
+                "class_code": class_ref.get("class_code"),
                 "class_name": class_ref.get("class_name"),
                 "subject_id": class_subject.get("subject_id"),
+                "subject_code": subject.get("subject_code"),
                 "subject_name": subject.get("subject_name"),
             }
         )

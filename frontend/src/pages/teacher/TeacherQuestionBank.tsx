@@ -13,7 +13,6 @@ import {
   getAssignedSubjects,
   getTeacherQuestionBank,
   getTeacherQuestionImageErrorMessage,
-  getTopicsBySubjectId,
   softDeleteTeacherQuestion,
   type AssignedSubject,
   type ManualQuestionPayloadV2,
@@ -27,7 +26,7 @@ import {
 type ModalMode = 'create' | 'edit' | 'view';
 
 type FormState = {
-  subjectId: string;
+  classSubjectId: string;
   topicId: string;
   imageId: string;
   imageUrl: string;
@@ -54,7 +53,7 @@ const DIFFICULTY_LABELS: Record<QuestionDifficulty, string> = {
 };
 
 const buildInitialFormState = (overrides: Partial<FormState> = {}): FormState => ({
-  subjectId: '',
+  classSubjectId: '',
   topicId: '',
   imageId: '',
   imageUrl: '',
@@ -72,6 +71,14 @@ const getQuestionDocumentTitle = (question: TeacherQuestionBankItem) => question
 
 const getDifficultyLabel = (difficulty: QuestionDifficulty) => DIFFICULTY_LABELS[difficulty] || difficulty;
 
+const formatAssignmentLabel = (subject: AssignedSubject) =>
+  [
+    [subject.subject_code, subject.subject_name].filter(Boolean).join(' / '),
+    [subject.class_code, subject.class_name].filter(Boolean).join(' / '),
+  ]
+    .filter(Boolean)
+    .join(' - ');
+
 const formatFileSize = (bytes?: number | null) => {
   if (!bytes || bytes <= 0) return null;
   if (bytes < 1024) return `${bytes} B`;
@@ -85,7 +92,7 @@ export default function QuestionBankPage() {
   const [modalTopics, setModalTopics] = useState<TopicItem[]>([]);
   const [questions, setQuestions] = useState<TeacherQuestionBankItem[]>([]);
 
-  const [activeSubject, setActiveSubject] = useState('');
+  const [activeClassSubjectId, setActiveClassSubjectId] = useState('');
   const [activeTopic, setActiveTopic] = useState<'all' | string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<'all' | QuestionDifficulty>('all');
@@ -124,10 +131,10 @@ export default function QuestionBankPage() {
     setIsModalOpen(false);
   };
 
-  const loadQuestions = async (subjectIdArg?: string, topicIdArg?: string) => {
-    const subjectId = subjectIdArg || activeSubject;
+  const loadQuestions = async (classSubjectIdArg?: string, topicIdArg?: string) => {
+    const classSubjectId = classSubjectIdArg || activeClassSubjectId;
     const topicId = topicIdArg || activeTopic;
-    if (!subjectId) return;
+    if (!classSubjectId) return;
 
     setIsLoading(true);
     setError('');
@@ -135,7 +142,7 @@ export default function QuestionBankPage() {
       const result = await getTeacherQuestionBank({
         page: 1,
         limit: 100,
-        subject_id: Number(subjectId),
+        class_subject_id: Number(classSubjectId),
         topic_id: topicId !== 'all' ? Number(topicId) : undefined,
         difficulty: difficultyFilter !== 'all' ? difficultyFilter : undefined,
         status: statusFilter !== 'all' ? statusFilter : undefined,
@@ -163,7 +170,7 @@ export default function QuestionBankPage() {
     const initialTopicId = topics[0] ? String(topics[0].topic_id) : '';
     setFormData(
       buildInitialFormState({
-        subjectId: activeSubject,
+        classSubjectId: activeClassSubjectId,
         topicId: initialTopicId,
       }),
     );
@@ -179,8 +186,10 @@ export default function QuestionBankPage() {
     setModalMode(mode);
     setSelectedQuestionId(question.question_id);
 
-    const subjectId = String(question.subject_id);
-    const loadedTopics = await getTopicsBySubjectId(Number(subjectId));
+    const classSubjectId = String(question.class_subject_id);
+    const loadedTopics =
+      subjects.find((subject) => String(subject.class_subject_id) === classSubjectId)?.topics
+      || [];
     setModalTopics(loadedTopics);
 
     const sortedOptions = [...question.options].sort((left, right) => left.order_num - right.order_num);
@@ -188,7 +197,7 @@ export default function QuestionBankPage() {
 
     setFormData(
       buildInitialFormState({
-        subjectId,
+        classSubjectId,
         topicId: String(question.topic_id),
         imageId: question.image_id != null ? String(question.image_id) : '',
         imageUrl: getQuestionImageUrl(question),
@@ -276,8 +285,8 @@ export default function QuestionBankPage() {
 
     setFormError('');
 
-    if (!formData.subjectId) {
-      setFormError('Vui lòng chọn môn học');
+    if (!formData.classSubjectId) {
+      setFormError('Vui lòng chọn lớp - môn học');
       return;
     }
     if (!formData.topicId) {
@@ -355,11 +364,11 @@ export default function QuestionBankPage() {
         setSubjects(subjectList);
         if (subjectList.length === 0) return;
 
-        const firstSubjectId = String(subjectList[0].subject_id);
-        setActiveSubject(firstSubjectId);
-        const initialTopics = await getTopicsBySubjectId(Number(firstSubjectId));
+        const firstClassSubjectId = String(subjectList[0].class_subject_id);
+        setActiveClassSubjectId(firstClassSubjectId);
+        const initialTopics = subjectList[0].topics || [];
         setTopics(initialTopics);
-        await loadQuestions(firstSubjectId, 'all');
+        await loadQuestions(firstClassSubjectId, 'all');
       } catch {
         setError('Không thể tải dữ liệu ban đầu');
       } finally {
@@ -377,26 +386,20 @@ export default function QuestionBankPage() {
   }, []);
 
   useEffect(() => {
-    if (!activeSubject) return;
-    const loadSubjectTopics = async () => {
-      try {
-        const nextTopics = await getTopicsBySubjectId(Number(activeSubject));
-        setTopics(nextTopics);
-        setActiveTopic('all');
-      } catch {
-        setTopics([]);
-      }
-    };
-    loadSubjectTopics();
-  }, [activeSubject]);
+    const activeAssignment = subjects.find(
+      (subject) => String(subject.class_subject_id) === activeClassSubjectId,
+    );
+    setTopics(activeAssignment?.topics || []);
+    setActiveTopic('all');
+  }, [activeClassSubjectId, subjects]);
 
   useEffect(() => {
-    if (!activeSubject) return;
+    if (!activeClassSubjectId) return;
     const timer = setTimeout(() => {
       loadQuestions();
     }, 250);
     return () => clearTimeout(timer);
-  }, [activeSubject, activeTopic, difficultyFilter, statusFilter, sourceFilter, searchQuery]);
+  }, [activeClassSubjectId, activeTopic, difficultyFilter, statusFilter, sourceFilter, searchQuery]);
 
   if (isLoading && subjects.length === 0) return <LoadingState />;
   if (error && subjects.length === 0) return <ErrorState message={error} />;
@@ -435,15 +438,15 @@ export default function QuestionBankPage() {
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-3">
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-            Danh sách môn học
+            Danh sách lớp - môn
           </h3>
           <div className="space-y-2">
             {subjects.map((subject) => (
               <button
-                key={subject.subject_id}
-                onClick={() => setActiveSubject(String(subject.subject_id))}
+                key={subject.class_subject_id}
+                onClick={() => setActiveClassSubjectId(String(subject.class_subject_id))}
                 className={`w-full p-6 rounded-3xl border-2 transition-all text-left flex justify-between items-center group ${
-                  activeSubject === String(subject.subject_id)
+                  activeClassSubjectId === String(subject.class_subject_id)
                     ? 'border-[#b20112] bg-red-50/20 shadow-lg shadow-red-900/5'
                     : 'border-slate-50 bg-white hover:border-slate-200'
                 }`}
@@ -451,17 +454,17 @@ export default function QuestionBankPage() {
                 <div>
                   <p
                     className={`text-sm font-black transition-colors ${
-                      activeSubject === String(subject.subject_id)
+                      activeClassSubjectId === String(subject.class_subject_id)
                         ? 'text-[#b20112]'
                         : 'text-slate-600'
                     }`}
                   >
-                    {subject.subject_name}
+                    {formatAssignmentLabel(subject)}
                   </p>
                 </div>
                 <span
                   className={`material-symbols-outlined text-xl transition-all ${
-                    activeSubject === String(subject.subject_id)
+                    activeClassSubjectId === String(subject.class_subject_id)
                       ? 'text-[#b20112] translate-x-1'
                       : 'text-slate-200 opacity-0 group-hover:opacity-100'
                   }`}
@@ -706,27 +709,30 @@ export default function QuestionBankPage() {
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                      Môn học
+                      Lớp - môn học
                     </label>
                     <select
                       disabled={modalMode === 'view'}
-                      value={formData.subjectId}
+                      value={formData.classSubjectId}
                       onChange={async (event) => {
-                        const nextSubjectId = event.target.value;
-                        const nextTopics = await getTopicsBySubjectId(Number(nextSubjectId));
+                        const nextClassSubjectId = event.target.value;
+                        const nextTopics =
+                          subjects.find(
+                            (subject) => String(subject.class_subject_id) === nextClassSubjectId,
+                          )?.topics || [];
                         const nextTopicId = nextTopics[0] ? String(nextTopics[0].topic_id) : '';
                         setModalTopics(nextTopics);
                         setFormData((prev) => ({
                           ...prev,
-                          subjectId: nextSubjectId,
+                          classSubjectId: nextClassSubjectId,
                           topicId: nextTopicId,
                         }));
                       }}
                       className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50"
                     >
                       {subjects.map((subject) => (
-                        <option key={subject.subject_id} value={subject.subject_id}>
-                          {subject.subject_name}
+                        <option key={subject.class_subject_id} value={subject.class_subject_id}>
+                          {formatAssignmentLabel(subject)}
                         </option>
                       ))}
                     </select>

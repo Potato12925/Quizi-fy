@@ -84,6 +84,27 @@ async def list_topics_by_class_subject_ids(
     return response.data or [], int(response.count or 0)
 
 
+async def list_topics_by_class_subject_ids_unpaginated(
+    class_subject_ids: list[int],
+    subject_id: int | None = None,
+) -> list[dict]:
+    if not class_subject_ids:
+        return []
+
+    supabase = SupabaseManager.get_client()
+    query = (
+        supabase.table("topics")
+        .select(SELECT_FIELDS)
+        .in_("class_subject_id", class_subject_ids)
+        .is_("deleted_at", None)
+    )
+    if subject_id is not None:
+        query = query.eq("class_subjects.subject_id", subject_id)
+
+    response = await asyncio.to_thread(lambda: query.order("topic_id").execute())
+    return response.data or []
+
+
 async def list_assigned_class_subject_ids_by_teacher(teacher_id: int) -> list[int]:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(

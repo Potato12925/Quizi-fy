@@ -8,7 +8,7 @@ import {
 } from '@/api/teacherDocumentApi';
 import {
   getTeacherSubjectsWithTopics,
-  type TeacherSubjectItem,
+  type TeacherClassSubjectItem,
   type TeacherTopicItem,
 } from '@/api/teacherTopicManagementApi';
 import ErrorState from '@/components/common/ErrorState';
@@ -32,7 +32,7 @@ const initialFormState: ResourceFormState = {
   description: '',
 };
 
-const normalizeTeacherSubject = (subject: TeacherSubjectItem): TeacherSubjectItem => ({
+const normalizeTeacherSubject = (subject: TeacherClassSubjectItem): TeacherClassSubjectItem => ({
   subject_id: subject.subject_id,
   subject_name: subject.subject_name,
   subject_code: subject.subject_code ?? null,
@@ -41,7 +41,16 @@ const normalizeTeacherSubject = (subject: TeacherSubjectItem): TeacherSubjectIte
   class_code: subject.class_code ?? null,
   class_name: subject.class_name ?? null,
   assigned_teacher_id: subject.assigned_teacher_id ?? null,
+  topics: subject.topics,
 });
+
+const formatAssignmentLabel = (subject: TeacherClassSubjectItem) =>
+  [
+    [subject.subject_code, subject.subject_name].filter(Boolean).join(' / '),
+    [subject.class_code, subject.class_name].filter(Boolean).join(' / '),
+  ]
+    .filter(Boolean)
+    .join(' - ');
 
 const dedupeTopics = (topics: TeacherTopicItem[]) => {
   const seen = new Set<number>();
@@ -69,10 +78,30 @@ const getDocumentTopicClassIds = (resource: TeacherDocument) =>
         .filter((value): value is number => typeof value === 'number'),
     ),
   );
+const getResourceLockReason = (
+  resource: TeacherDocument,
+  activeClassSubjectIds: Set<number>,
+) => {
+  const documentClassSubjectIds = getDocumentTopicClassSubjectIds(resource);
+
+  if (documentClassSubjectIds.length === 0) {
+    return 'Tài liệu chưa xác định được lớp-môn hợp lệ';
+  }
+
+  const hasInactiveClassSubject = documentClassSubjectIds.some(
+    (classSubjectId) => !activeClassSubjectIds.has(classSubjectId),
+  );
+
+  if (hasInactiveClassSubject) {
+    return 'Tài liệu thuộc môn học hoặc lớp-môn đã bị khóa';
+  }
+
+  return '';
+};
 
 export default function TeacherResourcesPage() {
   const [resources, setResources] = useState<TeacherDocument[]>([]);
-  const [subjects, setSubjects] = useState<TeacherSubjectItem[]>([]);
+  const [subjects, setSubjects] = useState<TeacherClassSubjectItem[]>([]);
   const [topicsByClassSubject, setTopicsByClassSubject] = useState<Record<number, TeacherTopicItem[]>>(
     {},
   );
@@ -97,7 +126,16 @@ export default function TeacherResourcesPage() {
   const [isModalTopicsLoading, setIsModalTopicsLoading] = useState(false);
   const [modalTopicError, setModalTopicError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-
+  
+  const activeClassSubjectIds = useMemo(
+  () =>
+    new Set(
+      subjects
+        .map((subject) => subject.class_subject_id)
+        .filter((value): value is number => typeof value === 'number'),
+    ),
+  [subjects],
+);
   const fetchData = async () => {
     setIsLoading(true);
     setError('');
@@ -490,9 +528,7 @@ export default function TeacherResourcesPage() {
               key={subject.class_subject_id ?? `${subject.class_id}-${subject.subject_id}`}
               value={String(subject.class_subject_id ?? '')}
             >
-              {[subject.class_code, subject.subject_code, subject.subject_name]
-                .filter(Boolean)
-                .join(' - ')}
+              {formatAssignmentLabel(subject)}
             </option>
           ))}
         </select>
@@ -512,14 +548,20 @@ export default function TeacherResourcesPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {filteredResources.length > 0 ? (
-          filteredResources.map((resource) => (
-            <ResourceCard
-              key={resource.document_id}
-              resource={resource}
-              onDelete={handleDelete}
-              onEdit={handleOpenEdit}
-            />
-          ))
+          filteredResources.map((resource) => {
+            const lockedReason = getResourceLockReason(resource, activeClassSubjectIds);
+
+            return (
+              <ResourceCard
+                key={resource.document_id}
+                resource={resource}
+                isLocked={!!lockedReason}
+                lockedReason={lockedReason}
+                onDelete={handleDelete}
+                onEdit={handleOpenEdit}
+              />
+            );
+          })
         ) : (
           <div className="col-span-full border-4 border-dashed border-slate-100 rounded-[3rem] p-20 flex flex-col items-center text-center">
             <span className="mb-6 text-6xl material-symbols-outlined text-slate-100">
@@ -560,4 +602,5 @@ export default function TeacherResourcesPage() {
       />
     </div>
   );
+  
 }

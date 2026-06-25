@@ -6,27 +6,30 @@ import {
   createTopicForTeacherSubject,
   getTeacherSubjectsWithTopics,
   softDeleteTeacherSubjectTopic,
-  type SubjectWithTopicsViewModel,
+  type TeacherClassSubjectItem,
   type TeacherTopicItem,
   updateTeacherSubjectTopic,
 } from '@/api/teacherTopicManagementApi';
 
-const formatSubjectAssignment = (subject: SubjectWithTopicsViewModel) => {
-  const subjectLabel = subject.subject_code || subject.subject_name;
-  const classLabel = subject.class_code || subject.class_name;
+const formatAssignmentPart = (code?: string | null, name?: string | null) =>
+  [code, name].filter(Boolean).join(' / ');
+
+const formatSubjectAssignment = (subject: TeacherClassSubjectItem) => {
+  const subjectLabel = formatAssignmentPart(subject.subject_code, subject.subject_name);
+  const classLabel = formatAssignmentPart(subject.class_code, subject.class_name);
 
   if (subjectLabel && classLabel) {
     return `${subjectLabel} - ${classLabel}`;
   }
 
-  return subject.subject_name;
+  return subjectLabel || classLabel || subject.subject_name;
 };
 
-const formatSubjectAssignmentDetail = (subject: SubjectWithTopicsViewModel) =>
+const formatSubjectAssignmentDetail = (subject: TeacherClassSubjectItem) =>
   [subject.subject_name, subject.class_name].filter(Boolean).join(' | ');
 
 export default function TeacherSubjectsPage() {
-  const [subjects, setSubjects] = useState<SubjectWithTopicsViewModel[]>([]);
+  const [subjects, setSubjects] = useState<TeacherClassSubjectItem[]>([]);
   const [activeClassSubjectId, setActiveClassSubjectId] = useState<number | null>(null);
   const [selectedClassId, setSelectedClassId] = useState('all');
   const [isLoading, setIsLoading] = useState(true);

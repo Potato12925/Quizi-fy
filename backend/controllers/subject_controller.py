@@ -52,6 +52,7 @@ async def get_subject_list(
     status: str = Query(default="all"),
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc"),
+    include_topics: bool = Query(default=False),
     current_user: CurrentUser = Depends(require_roles("admin", "teacher")),
 ):
     try:
@@ -62,6 +63,7 @@ async def get_subject_list(
             status=status,  # type: ignore[arg-type]
             sort_by=sort_by,  # type: ignore[arg-type]
             sort_order=sort_order,  # type: ignore[arg-type]
+            include_topics=include_topics,
         )
         result = await get_subjects(params=params, current_user=current_user)
         return success_response(

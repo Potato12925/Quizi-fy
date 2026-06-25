@@ -18,7 +18,7 @@ SUPPORTED_TOOLS = {
     "get_learning_progress",
 }
 
-UNSUPPORTED_MESSAGE = "M\u00ecnh ch\u1ec9 c\u00f3 th\u1ec3 h\u1ed7 tr\u1ee3 c\u00e1c v\u1ea5n \u0111\u1ec1 li\u00ean quan \u0111\u1ebfn qu\u00e1 tr\u00ecnh h\u1ecdc t\u1eadp c\u1ee7a ch\u00ednh b\u1ea1n trong h\u1ec7 th\u1ed1ng."
+UNSUPPORTED_MESSAGE = "Mình chỉ có thể hỗ trợ các vấn đề liên quan đến quá trình học tập của chính bạn trong hệ thống"
 
 
 def classify_student_ai_chat_intent(message: str) -> dict:
@@ -125,35 +125,38 @@ def _tool_choice_system_prompt() -> str:
         """
     ).strip()
 
-def generate_student_ai_chat_answer(message: str, learning_data: dict) -> str:
+def generate_student_ai_chat_answer(message: str, learning_data: dict, recent_history: list[dict] | None = None) -> str:
     if not _has_learning_data(learning_data):
         return (
-            "Hi\u1ec7n t\u1ea1i m\u00ecnh ch\u01b0a c\u00f3 \u0111\u1ee7 d\u1eef li\u1ec7u h\u1ecdc t\u1eadp c\u1ee7a b\u1ea1n \u0111\u1ec3 ph\u00e2n t\u00edch ch\u00ednh x\u00e1c. "
-            "B\u1ea1n h\u00e3y ho\u00e0n th\u00e0nh th\u00eam m\u1ed9t v\u00e0i b\u00e0i luy\u1ec7n t\u1eadp ho\u1eb7c b\u00e0i ki\u1ec3m tra, sau \u0111\u00f3 m\u00ecnh c\u00f3 th\u1ec3 gi\u00fap b\u1ea1n xem b\u1ea1n \u0111ang y\u1ebfu ph\u1ea7n n\u00e0o v\u00e0 n\u00ean \u00f4n g\u00ec tr\u01b0\u1edbc."
+            "Hiện tại mình chưa có đủ dữ liệu học tập của bạn để phân tích chính xác. "
+            "Bạn hãy thử lại sau ít phút nhé."
         )
     if not Config.OPENAI_API_KEY:
         return _fallback_answer(learning_data)
 
     client = OpenAI(api_key=Config.OPENAI_API_KEY)
     try:
-        response = client.chat.completions.create(
+        messages = [
+            {"role":"system", "content": _answer_system_prompt()},
+        ]
+        for item in recent_history:
+            messages.append({"role":item["role"], "content":item["content"]})
+        messages.append(
+            {"role":"user", "content": textwrap.dedent(
+                    f"""
+                    Câu hỏi của học sinh:
+                    {message}
+
+                    Dữ liệu học tập do backend cung cấp dưới dạng JSON:
+                    {json.dumps(learning_data, ensure_ascii=False)}
+                    """
+                ).strip()
+            },
+        )
+        response=client.chat.completions.create(
             model=Config.OPENAI_MODEL,
             temperature=0.2,
-            messages=[
-                {"role": "system", "content": _answer_system_prompt()},
-                {
-                    "role": "user",
-                    "content": textwrap.dedent(
-                        f"""
-                        C\u00e2u h\u1ecfi c\u1ee7a h\u1ecdc sinh:
-                        {message}
-
-                        D\u1eef li\u1ec7u h\u1ecdc t\u1eadp do backend cung c\u1ea5p d\u01b0\u1edbi d\u1ea1ng JSON:
-                        {json.dumps(learning_data, ensure_ascii=False)}
-                        """
-                    ).strip(),
-                },
-            ],
+            messages=messages,
         )
     except Exception as exc:
         raise StudentAiChatOpenAiError("AI answer generation failed") from exc

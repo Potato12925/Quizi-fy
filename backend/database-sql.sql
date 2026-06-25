@@ -322,6 +322,23 @@ CREATE TABLE notifications (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE student_ai_chat_messages (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id   BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  role         VARCHAR(20) NOT NULL,
+  content      TEXT NOT NULL,
+  tools_used   JSONB,
+  cached       BOOLEAN DEFAULT FALSE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at   TIMESTAMPTZ
+);
+CREATE INDEX idx_ai_chat_student_created
+  ON student_ai_chat_messages(student_id, created_at DESC)
+  WHERE deleted_at IS NULL;
+
+
+
+
 -- ================= RELATIONSHIP SUMMARY =================
 -- users 1---n user_roles n---1 roles
 -- users 1---n classes (teacher_id)
@@ -351,6 +368,7 @@ CREATE TABLE notifications (
 -- users 1---n images
 -- images 1---n questions
 -- questions n---1 images
+-- users 1---n student_ai_chat_messages
 -- ================= SEED DATA =================
 -- Seed data is generated separately by:
 -- python database/generate_seed_sql.py

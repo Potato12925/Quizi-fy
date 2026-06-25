@@ -280,7 +280,9 @@ class  StudentAiChatServiceFunctionToolExecutionTest(unittest.TestCase):
                 patch.object(student_ai_chat_service, "find_wrong_question_summary_by_topic", new=AsyncMock(return_value=[{"topic_name": "Hàm số", "wrong_rate": 75}])), \
                 patch.object(student_ai_chat_service, "find_recent_wrong_questions", new=AsyncMock(return_value=[{"question_id": 1}])), \
                 patch.object(student_ai_chat_service, "find_recent_exam_results", new=AsyncMock(return_value=[])), \
-                patch.object(student_ai_chat_service, "generate_student_ai_chat_answer", return_value="AI answer") as answer_mock:
+                patch.object(student_ai_chat_service, "generate_student_ai_chat_answer", return_value="AI answer") as answer_mock, \
+                patch.object(student_ai_chat_service, "create_chat_message_record", new=AsyncMock(return_value={"id": 1})), \
+                patch.object(student_ai_chat_service, "find_chat_messages_by_student", new=AsyncMock(return_value=[])):
                 config_mock.OPENAI_API_KEY = "fake-key"
                 result = await student_ai_chat_service.send_student_ai_chat_message(
                     10,
@@ -302,7 +304,9 @@ class  StudentAiChatServiceFunctionToolExecutionTest(unittest.TestCase):
         async def run_test():
             with patch.object(student_ai_chat_service, "Config") as config_mock, \
                 patch.object(student_ai_chat_service, "find_student_learning_data_version", new=AsyncMock()) as version_mock, \
-                patch.object(student_ai_chat_service, "find_learning_progress", new=AsyncMock()) as progress_mock:
+                patch.object(student_ai_chat_service, "find_learning_progress", new=AsyncMock()) as progress_mock, \
+                patch.object(student_ai_chat_service, "create_chat_message_record", new=AsyncMock(return_value={"id": 1})), \
+                patch.object(student_ai_chat_service, "find_chat_messages_by_student", new=AsyncMock(return_value=[])):
                 config_mock.OPENAI_API_KEY = ""
                 result = await student_ai_chat_service.send_student_ai_chat_message(
                     11,
@@ -322,7 +326,9 @@ class  StudentAiChatServiceFunctionToolExecutionTest(unittest.TestCase):
                 patch.object(student_ai_chat_service, "find_student_learning_data_version", new=AsyncMock(return_value="v1")), \
                 patch.object(student_ai_chat_service, "find_learning_progress", new=AsyncMock(return_value={"total_attempts": 1})) as progress_mock, \
                 patch.object(student_ai_chat_service, "find_recent_exam_results", new=AsyncMock(return_value=[])), \
-                patch.object(student_ai_chat_service, "generate_student_ai_chat_answer", return_value="cached answer"):
+                patch.object(student_ai_chat_service, "generate_student_ai_chat_answer", return_value="cached answer"), \
+                patch.object(student_ai_chat_service, "create_chat_message_record", new=AsyncMock(return_value={"id": 1})), \
+                patch.object(student_ai_chat_service, "find_chat_messages_by_student", new=AsyncMock(return_value=[])):
                 config_mock.OPENAI_API_KEY = ""
                 first = await student_ai_chat_service.send_student_ai_chat_message(12, "Ket qua hoc tap cua toi?")
                 second = await student_ai_chat_service.send_student_ai_chat_message(12, "Ket qua hoc tap cua toi?")
@@ -373,7 +379,9 @@ class StudentAiChatFunctionCallingFlowTest(unittest.TestCase):
 
     def test_service_falls_back_to_rule_based_on_openai_error(self):
         async def run_test():
-            with patch.object(student_ai_chat_service, "Config") as config_mock,                 patch.object(student_ai_chat_service, "classify_student_ai_chat_intent_with_tools", side_effect=StudentAiChatOpenAiError("down")),                 patch.object(student_ai_chat_service, "classify_student_ai_chat_intent", return_value={"intent": "learning_analysis", "tools": ["get_learning_progress"]}) as rule_mock,                 patch.object(student_ai_chat_service, "find_student_learning_data_version", new=AsyncMock(return_value="v1")),                 patch.object(student_ai_chat_service, "find_learning_progress", new=AsyncMock(return_value={"total_attempts": 1})),                 patch.object(student_ai_chat_service, "generate_student_ai_chat_answer", return_value="ok"):
+            with patch.object(student_ai_chat_service, "Config") as config_mock,                 patch.object(student_ai_chat_service, "classify_student_ai_chat_intent_with_tools", side_effect=StudentAiChatOpenAiError("down")),                 patch.object(student_ai_chat_service, "classify_student_ai_chat_intent", return_value={"intent": "learning_analysis", "tools": ["get_learning_progress"]}) as rule_mock,                 patch.object(student_ai_chat_service, "find_student_learning_data_version", new=AsyncMock(return_value="v1")),                 patch.object(student_ai_chat_service, "find_learning_progress", new=AsyncMock(return_value={"total_attempts": 1})),                 patch.object(student_ai_chat_service, "generate_student_ai_chat_answer", return_value="ok"), \
+                patch.object(student_ai_chat_service, "create_chat_message_record", new=AsyncMock(return_value={"id": 1})), \
+                patch.object(student_ai_chat_service, "find_chat_messages_by_student", new=AsyncMock(return_value=[])):
                 config_mock.OPENAI_API_KEY = "fake-key"
                 result = await student_ai_chat_service.send_student_ai_chat_message(20, "Tôi nên ôn gì?")
 

@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { StudentAiChatMessage } from '@/api/student_ai_chat_api';
+import type { StudentAiChatAction, StudentAiChatMessage } from '@/api/student_ai_chat_api';
 import {
   clearStudentAiChatHistory,
   getStudentAiChatHistory,
   sendStudentAiChatMessage,
 } from '@/api/student_ai_chat_api';
 
-const createLocalMessage = (role: StudentAiChatMessage['role'], content: string): StudentAiChatMessage => ({
+const createLocalMessage = (
+  role: StudentAiChatMessage['role'],
+  content: string,
+  actions: StudentAiChatAction[] = [],
+): StudentAiChatMessage => ({
   role,
   content,
   created_at: new Date().toISOString(),
+  actions,
 });
 
 export const useStudentAiChat = () => {
@@ -23,7 +28,7 @@ export const useStudentAiChat = () => {
   const loadHistory = useCallback(async () => {
     try {
       const history = await getStudentAiChatHistory();
-      setMessages(history);
+      setMessages([...history].reverse());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải lịch sử chat');
     }
@@ -43,7 +48,7 @@ export const useStudentAiChat = () => {
     try {
       const response = await sendStudentAiChatMessage(trimmed);
       setRateLimit(response.rate_limit_remaining);
-      setMessages((current) => [...current, createLocalMessage('assistant', response.message)]);
+      setMessages((current) => [...current, createLocalMessage('assistant', response.message, response.actions)]);
     } catch (err: any) {
       const message = err?.data?.message || err?.message || 'Không thể gửi tin nhắn';
       setError(message);

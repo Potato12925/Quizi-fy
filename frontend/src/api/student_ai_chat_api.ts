@@ -4,12 +4,20 @@ export interface StudentAiChatMessage {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  actions?: StudentAiChatAction[];
+}
+
+export interface StudentAiChatAction {
+  label: string;
+  type: 'review_topic' | 'review_wrong_questions' | 'view_progress';
+  target: string | null;
 }
 
 export interface StudentAiChatSendResponse {
   message: string;
   cached: boolean;
   rate_limit_remaining: number;
+  actions: StudentAiChatAction[];
 }
 
 export const sendStudentAiChatMessage = async (message: string): Promise<StudentAiChatSendResponse> => {

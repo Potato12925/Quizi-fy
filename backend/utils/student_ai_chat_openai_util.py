@@ -22,37 +22,108 @@ UNSUPPORTED_MESSAGE = "M\u00ecnh ch\u1ec9 c\u00f3 th\u1ec3 h\u1ed7 tr\u1ee3 c\u0
 
 
 def classify_student_ai_chat_intent(message: str) -> dict:
-    deterministic = _rule_based_classification(message)
-    if deterministic["intent"] == "learning_analysis":
-        return deterministic
-    if deterministic["intent"] == "unsupported" and _is_clearly_unsupported(message):
-        return deterministic
+    """Deterministic rule-based tool selection.
+
+    Used as offline fallback when there is no OpenAI key or when function calling fails.
+    Tool selection via OpenAI is handled separately by classify_student_ai_chat_intent_with_tools.
+    """
+    return _rule_based_classification(message)
+
+
+STUDENT_AI_CHAT_TOOLS_SCHEMA = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_learning_progress",
+            "description": "Lấy tổng quan tiến độ học tập của học sinh: số lượt luyện tập, điểm trung bình, độ chính xác, xu hướng điểm, xu hướng độ chính xác, thống kê theo môn và theo độ khó.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_wrong_question_summary_by_topic",
+            "description": "Tổng hợp các chủ đề học sinh còn yếu dựa trên tỷ lệ sai trên tổng số câu đã trả lời theo từng chủ đề.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_recent_wrong_questions",
+            "description": "Liệt kê chi tiết các câu sai gần nhất của học sinh: nội dung câu hỏi, chủ đề, đáp án đã chọn, đáp án đúng, giải thích.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_recent_exam_results",
+            "description": "Lấy kết quả làm bài gần nhất của học sinh: điểm, số câu đúng, số câu sai, môn học, thời điểm nộp bài.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+]
+
+
+def classify_student_ai_chat_intent_with_tools(message: str) -> dict:
+    """Use OpenAI function calling to decide which tools to call. Falls back to rule-based on error."""
     if not Config.OPENAI_API_KEY:
-        return deterministic
+        return _rule_based_classification(message)
 
     client = OpenAI(api_key=Config.OPENAI_API_KEY)
     try:
         response = client.chat.completions.create(
             model=Config.OPENAI_MODEL,
             temperature=0,
-            response_format={"type": "json_object"},
+            tools=STUDENT_AI_CHAT_TOOLS_SCHEMA,
+            tool_choice="auto",
             messages=[
-                {"role": "system", "content": _classifier_system_prompt()},
+                {"role": "system", "content": _tool_choice_system_prompt()},
                 {"role": "user", "content": message},
             ],
         )
     except Exception as exc:
-        raise StudentAiChatOpenAiError("AI classification failed") from exc
+        raise StudentAiChatOpenAiError("AI tool selection failed") from exc
 
-    content = response.choices[0].message.content if response.choices else None
-    if not content:
-        raise StudentAiChatOpenAiError("AI classification returned empty content")
-    try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError as exc:
-        raise StudentAiChatOpenAiError("AI classification returned invalid JSON") from exc
-    return _normalize_classification(parsed)
+    message_obj = response.choices[0].message if response.choices else None
+    if not message_obj:
+        raise StudentAiChatOpenAiError("AI tool selection returned empty message")
 
+    tool_calls = getattr(message_obj, "tool_calls", None)
+    if not tool_calls:
+        # No tool chosen. If clearly unsupported, return unsupported; otherwise default learning analysis.
+        return {"intent": "unsupported", "tools": []}
+
+    tools = []
+    for call in tool_calls:
+        name = getattr(call.function, "name", None)
+        if name and name in SUPPORTED_TOOLS:
+            tools.append(name)
+    if not tools:
+        return {"intent": "unsupported", "tools": []}
+    return {"intent": "learning_analysis", "tools": list(dict.fromkeys(tools))}
+
+
+def _tool_choice_system_prompt() -> str:
+    return textwrap.dedent(
+        """
+        Ban la bo chon tool cho chatbot hoc tap ca nhan.
+
+        Nhiem vu:
+        - Chon mot hoac nhieu tool phu hop de tra loi cau hoi cua hoc sinh.
+        - Chi chon tool khi cau hoi lien quan den qua trinh hoc tap ca nhan cua hoc sinh dang dang nhap.
+        - Neu cau hoi ngoai pham vi hoc tap ca nhan, KHONG chon bat ky tool nao.
+
+        Tool duoc phep:
+        - get_learning_progress: tong quan tien do hoc tap.
+        - get_wrong_question_summary_by_topic: chu de yeu theo ti le sai.
+        - get_recent_wrong_questions: liet ke chi tiet cac cau sai gan nhat.
+        - get_recent_exam_results: ket qua lam bai gan nhat.
+
+        Chi tra tool_calls, khong can tra loi bang text.
+        """
+    ).strip()
 
 def generate_student_ai_chat_answer(message: str, learning_data: dict) -> str:
     if not _has_learning_data(learning_data):
@@ -93,28 +164,6 @@ def generate_student_ai_chat_answer(message: str, learning_data: dict) -> str:
     return content.strip()
 
 
-def _classifier_system_prompt() -> str:
-    return textwrap.dedent(
-        """
-        Bạn là bộ phân loại yêu cầu cho chatbot học tập cá nhân.
-
-        Nhiệm vụ:
-        - Xác định câu hỏi có liên quan đến quá trình học tập của chính học sinh không.
-        - Nếu có, chọn các tool cần gọi.
-        - Nếu không, trả intent = "unsupported".
-        - Chỉ trả JSON hợp lệ, không giải thích thêm.
-
-        Tool được phép:
-        - get_recent_wrong_questions
-        - get_wrong_question_summary_by_topic
-        - get_recent_exam_results
-        - get_learning_progress
-
-        Schema:
-        {"intent":"learning_analysis|unsupported","tools":["tool_name"]}
-        """
-    ).strip()
-
 
 def _answer_system_prompt() -> str:
     return textwrap.dedent(
@@ -146,16 +195,6 @@ def _answer_system_prompt() -> str:
         """
     ).strip()
 
-
-def _normalize_classification(parsed: dict) -> dict:
-    intent = parsed.get("intent")
-    if intent != "learning_analysis":
-        return {"intent": "unsupported", "tools": []}
-    tools = parsed.get("tools") if isinstance(parsed.get("tools"), list) else []
-    allowed_tools = [tool for tool in tools if tool in SUPPORTED_TOOLS]
-    if not allowed_tools:
-        allowed_tools = ["get_learning_progress", "get_wrong_question_summary_by_topic"]
-    return {"intent": "learning_analysis", "tools": allowed_tools[:4]}
 
 
 
@@ -306,11 +345,11 @@ def _fallback_answer(learning_data: dict) -> str:
     if wrong_questions:
         lines.extend(["", "📝 10 câu sai gần nhất"])
         for index, item in enumerate(wrong_questions[:10], start=1):
-            lines.append(f"{index}. Câu hỏi: {item.get('content') or 'Kh?ng c? n?i dung'}")
+            lines.append(f"{index}. Câu hỏi: {item.get('content') or 'Kh\u00f4ng c\u00f3 n\u1ed9i dung'}")
             if item.get("topic_name"):
                 lines.append(f"   Chủ đề: {item.get('topic_name')}")
-            lines.append(f"   Bạn chọn: {item.get('selected_answer') or 'Ch?a c? d? li?u'}")
-            lines.append(f"   Đáp án đúng: {item.get('correct_answer') or 'Ch?a c? d? li?u'}")
+            lines.append(f"   Bạn chọn: {item.get('selected_answer') or 'Ch\u01b0a c\u00f3 d\u1eef li\u1ec7u'}")
+            lines.append(f"   Đáp án đúng: {item.get('correct_answer') or 'Ch\u01b0a c\u00f3 d\u1eef li\u1ec7u'}")
             if item.get("explanation"):
                 lines.append(f"   Giải thích: {item.get('explanation')}")
 

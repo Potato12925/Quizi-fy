@@ -2,6 +2,8 @@ import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
 
+from core.config import Config
+
 from repositories.student_ai_chat_repository import (
     find_learning_progress,
     find_recent_exam_results,
@@ -13,6 +15,7 @@ from utils.student_ai_chat_openai_util import (
     UNSUPPORTED_MESSAGE,
     StudentAiChatOpenAiError,
     classify_student_ai_chat_intent,
+    classify_student_ai_chat_intent_with_tools,
     generate_student_ai_chat_answer,
 )
 
@@ -34,7 +37,7 @@ class StudentAiChatRateLimitError(ValueError):
 async def send_student_ai_chat_message(student_id: int, message: str) -> dict:
     normalized_message = normalize_message(message)
     remaining = _check_rate_limit(student_id)
-    classification = classify_student_ai_chat_intent(normalized_message)
+    classification = _select_tools(student_id, normalized_message)
     if classification["intent"] == "unsupported":
         _append_history(student_id, "user", normalized_message)
         _append_history(student_id, "assistant", UNSUPPORTED_MESSAGE)
@@ -133,3 +136,19 @@ def _append_history(student_id: int, role: str, content: str) -> None:
     )
     if len(messages) > MAX_HISTORY_ITEMS:
         del messages[:-MAX_HISTORY_ITEMS]
+
+
+def _select_tools(student_id: int, message: str) -> dict:
+    """Hybrid tool selection.
+
+    When an OpenAI API key is available, prefer function calling for better intent understanding.
+    On any OpenAI error, fall back to the deterministic rule-based classifier so the chatbot still works.
+    When there is no key, use the rule-based classifier directly (offline demo friendly).
+    """
+    if not Config.OPENAI_API_KEY:
+        return classify_student_ai_chat_intent(message)
+    try:
+        return classify_student_ai_chat_intent_with_tools(message)
+    except StudentAiChatOpenAiError as exc:
+        logger.warning("Student AI chat tool selection via function calling failed: %s", exc)
+        return classify_student_ai_chat_intent(message)

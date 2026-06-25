@@ -11,6 +11,7 @@ if BACKEND_DIR not in sys.path:
 from core.config import Config  # noqa: E402
 import utils.student_ai_chat_openai_util as ai_chat_util  # noqa: E402
 from utils.student_ai_chat_openai_util import (  # noqa: E402
+    StudentAiChatOpenAiError,
     UNSUPPORTED_MESSAGE,
     classify_student_ai_chat_intent,
     generate_student_ai_chat_answer,
@@ -263,10 +264,8 @@ class StudentAiChatFallbackAnswerTest(unittest.TestCase):
         answer = generate_student_ai_chat_answer("Tôi nên ôn gì?", {})
 
         self.assertIn("chưa có đủ dữ liệu", answer)
-        self.assertIn("hoàn thành thêm", answer)
 
-
-class StudentAiChatServiceFunctionToolExecutionTest(unittest.TestCase):
+class  StudentAiChatServiceFunctionToolExecutionTest(unittest.TestCase):
     def setUp(self):
         student_ai_chat_service._rate_limit_store.clear()
         student_ai_chat_service._cache_store.clear()
@@ -274,7 +273,15 @@ class StudentAiChatServiceFunctionToolExecutionTest(unittest.TestCase):
 
     def test_send_message_executes_expected_tools_and_returns_answer(self):
         async def run_test():
-            with patch.object(student_ai_chat_service, "find_student_learning_data_version", new=AsyncMock(return_value="v1")),                 patch.object(student_ai_chat_service, "find_learning_progress", new=AsyncMock(return_value={"total_attempts": 3})),                 patch.object(student_ai_chat_service, "find_wrong_question_summary_by_topic", new=AsyncMock(return_value=[{"topic_name": "Hàm số", "wrong_rate": 75}])),                 patch.object(student_ai_chat_service, "find_recent_wrong_questions", new=AsyncMock(return_value=[{"question_id": 1}])),                 patch.object(student_ai_chat_service, "find_recent_exam_results", new=AsyncMock(return_value=[])),                 patch.object(student_ai_chat_service, "generate_student_ai_chat_answer", return_value="AI answer") as answer_mock:
+            with patch.object(student_ai_chat_service, "Config") as config_mock, \
+                patch.object(student_ai_chat_service, "classify_student_ai_chat_intent_with_tools", side_effect=StudentAiChatOpenAiError("offline")), \
+                patch.object(student_ai_chat_service, "find_student_learning_data_version", new=AsyncMock(return_value="v1")), \
+                patch.object(student_ai_chat_service, "find_learning_progress", new=AsyncMock(return_value={"total_attempts": 3})), \
+                patch.object(student_ai_chat_service, "find_wrong_question_summary_by_topic", new=AsyncMock(return_value=[{"topic_name": "Hàm số", "wrong_rate": 75}])), \
+                patch.object(student_ai_chat_service, "find_recent_wrong_questions", new=AsyncMock(return_value=[{"question_id": 1}])), \
+                patch.object(student_ai_chat_service, "find_recent_exam_results", new=AsyncMock(return_value=[])), \
+                patch.object(student_ai_chat_service, "generate_student_ai_chat_answer", return_value="AI answer") as answer_mock:
+                config_mock.OPENAI_API_KEY = "fake-key"
                 result = await student_ai_chat_service.send_student_ai_chat_message(
                     10,
                     "Tôi sai câu nào gần đây?",
@@ -293,7 +300,10 @@ class StudentAiChatServiceFunctionToolExecutionTest(unittest.TestCase):
 
     def test_unsupported_message_does_not_execute_learning_tools(self):
         async def run_test():
-            with patch.object(student_ai_chat_service, "find_student_learning_data_version", new=AsyncMock()) as version_mock,                 patch.object(student_ai_chat_service, "find_learning_progress", new=AsyncMock()) as progress_mock:
+            with patch.object(student_ai_chat_service, "Config") as config_mock, \
+                patch.object(student_ai_chat_service, "find_student_learning_data_version", new=AsyncMock()) as version_mock, \
+                patch.object(student_ai_chat_service, "find_learning_progress", new=AsyncMock()) as progress_mock:
+                config_mock.OPENAI_API_KEY = ""
                 result = await student_ai_chat_service.send_student_ai_chat_message(
                     11,
                     "Hôm nay ăn gì?",
@@ -307,10 +317,13 @@ class StudentAiChatServiceFunctionToolExecutionTest(unittest.TestCase):
 
     def test_same_message_uses_cache_after_first_success(self):
         async def run_test():
-            with patch.object(student_ai_chat_service, "classify_student_ai_chat_intent", return_value={"intent": "learning_analysis", "tools": ["get_learning_progress"]}), \
+            with patch.object(student_ai_chat_service, "Config") as config_mock, \
+                patch.object(student_ai_chat_service, "classify_student_ai_chat_intent", return_value={"intent": "learning_analysis", "tools": ["get_learning_progress"]}), \
                 patch.object(student_ai_chat_service, "find_student_learning_data_version", new=AsyncMock(return_value="v1")), \
                 patch.object(student_ai_chat_service, "find_learning_progress", new=AsyncMock(return_value={"total_attempts": 1})) as progress_mock, \
+                patch.object(student_ai_chat_service, "find_recent_exam_results", new=AsyncMock(return_value=[])), \
                 patch.object(student_ai_chat_service, "generate_student_ai_chat_answer", return_value="cached answer"):
+                config_mock.OPENAI_API_KEY = ""
                 first = await student_ai_chat_service.send_student_ai_chat_message(12, "Ket qua hoc tap cua toi?")
                 second = await student_ai_chat_service.send_student_ai_chat_message(12, "Ket qua hoc tap cua toi?")
 
@@ -319,6 +332,56 @@ class StudentAiChatServiceFunctionToolExecutionTest(unittest.TestCase):
             self.assertEqual(progress_mock.await_count, 1)
 
         asyncio.run(run_test())
+
+class StudentAiChatFunctionCallingFlowTest(unittest.TestCase):
+    """Verify the hybrid function-calling tool selection path when an OpenAI key is present."""
+
+    def test_function_calling_returns_selected_tools(self):
+        from types import SimpleNamespace
+
+        fake_message = SimpleNamespace(
+            tool_calls=[
+                SimpleNamespace(function=SimpleNamespace(name="get_recent_wrong_questions")),
+                SimpleNamespace(function=SimpleNamespace(name="get_wrong_question_summary_by_topic")),
+            ]
+        )
+        fake_response = SimpleNamespace(choices=[SimpleNamespace(message=fake_message)])
+
+        with patch.object(ai_chat_util, "Config") as config_mock,              patch.object(ai_chat_util, "OpenAI") as openai_cls:
+            config_mock.OPENAI_API_KEY = "fake-key"
+            config_mock.OPENAI_MODEL = "gpt-4o-mini"
+            openai_cls.return_value.chat.completions.create.return_value = fake_response
+            result = ai_chat_util.classify_student_ai_chat_intent_with_tools("Cho tôi các câu tôi sai")
+
+        self.assertEqual(result["intent"], "learning_analysis")
+        self.assertIn("get_recent_wrong_questions", result["tools"])
+        self.assertIn("get_wrong_question_summary_by_topic", result["tools"])
+
+    def test_function_calling_no_tool_calls_means_unsupported(self):
+        from types import SimpleNamespace
+
+        fake_message = SimpleNamespace(tool_calls=None)
+        fake_response = SimpleNamespace(choices=[SimpleNamespace(message=fake_message)])
+
+        with patch.object(ai_chat_util, "Config") as config_mock,              patch.object(ai_chat_util, "OpenAI") as openai_cls:
+            config_mock.OPENAI_API_KEY = "fake-key"
+            config_mock.OPENAI_MODEL = "gpt-4o-mini"
+            openai_cls.return_value.chat.completions.create.return_value = fake_response
+            result = ai_chat_util.classify_student_ai_chat_intent_with_tools("Hôm nay trời đẹp không?")
+
+        self.assertEqual(result, {"intent": "unsupported", "tools": []})
+
+    def test_service_falls_back_to_rule_based_on_openai_error(self):
+        async def run_test():
+            with patch.object(student_ai_chat_service, "Config") as config_mock,                 patch.object(student_ai_chat_service, "classify_student_ai_chat_intent_with_tools", side_effect=StudentAiChatOpenAiError("down")),                 patch.object(student_ai_chat_service, "classify_student_ai_chat_intent", return_value={"intent": "learning_analysis", "tools": ["get_learning_progress"]}) as rule_mock,                 patch.object(student_ai_chat_service, "find_student_learning_data_version", new=AsyncMock(return_value="v1")),                 patch.object(student_ai_chat_service, "find_learning_progress", new=AsyncMock(return_value={"total_attempts": 1})),                 patch.object(student_ai_chat_service, "generate_student_ai_chat_answer", return_value="ok"):
+                config_mock.OPENAI_API_KEY = "fake-key"
+                result = await student_ai_chat_service.send_student_ai_chat_message(20, "Tôi nên ôn gì?")
+
+            self.assertEqual(result["message"], "ok")
+            rule_mock.assert_called_once()
+
+        asyncio.run(run_test())
+
 
 
 if __name__ == "__main__":

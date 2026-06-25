@@ -129,6 +129,14 @@ def _answer_system_prompt() -> str:
         - Nếu dữ liệu chưa đủ, hãy nói rõ rằng chưa đủ dữ liệu để phân tích chính xác.
         - Trả lời bằng tiếng Việt, thân thiện, dễ hiểu, phù hợp với học sinh.
 
+        Quy tắc riêng cho câu hỏi về câu sai:
+        - Khi học sinh hỏi về câu sai và dữ liệu có get_recent_wrong_questions không rỗng, BẮT BUỘC phải liệt kê các câu sai được cung cấp.
+        - Tuyệt đối không được nói "hệ thống chưa cung cấp chi tiết" khi dữ liệu get_recent_wrong_questions có mặn.
+        - Mỗi câu sai phải có: nội dung câu hỏi, chủ đề nếu có, đáp án bạn đã chọn, đáp án đúng.
+        - Nếu có giải thích, thêm dòng "Giải thích:" ngắn gọn.
+        - Không được tự bịa đáp án nếu backend không cung cấp.
+        - Nếu get_recent_wrong_questions rỗng hoặc không có trong dữ liệu, mới được nói chưa có câu sai để hiển thị.
+
         Giới hạn:
         - Không trả lời các câu hỏi không liên quan đến học tập cá nhân của học sinh.
         - Không phân tích dữ liệu của học sinh khác.
@@ -156,7 +164,7 @@ def _normalize_for_keyword_matching(message: str) -> str:
     without_accents = "".join(
         char for char in normalized if unicodedata.category(char) != "Mn"
     )
-    return without_accents.replace("?", "d").replace("?", "D")
+    return without_accents.replace("đ", "d").replace("Đ", "D")
 
 
 def _is_clearly_unsupported(message: str) -> bool:
@@ -178,50 +186,145 @@ def _rule_based_classification(message: str) -> dict:
         return {"intent": "unsupported", "tools": []}
 
     learning_keywords = [
-        "sai",
-        "diem",
-        "ket qua",
-        "on",
-        "hoc",
-        "tien bo",
-        "yeu",
-        "cau",
-        "luyen",
-        "chu de",
-        "bai",
-        "mon",
-        "nen on",
+        "sai", "diem", "diem so", "ket qua", "on", "on tap", "hoc", "hoc tap",
+        "tien bo", "yeu", "cau", "luyen", "luyen tap", "chu de", "chuong",
+        "phan nao", "bai", "mon", "nen on", "dap an", "phan tich", "thong ke",
+        "lich su", "xu huong", "ky nang", "goi y", "de xuat", "can cai thien",
+        "do kho", "lam bai",
     ]
     if not any(keyword in normalized for keyword in learning_keywords):
         return {"intent": "unsupported", "tools": []}
 
     tools = ["get_learning_progress"]
-    if any(keyword in normalized for keyword in ["sai", "yeu", "on", "chu de", "mon", "bai", "nen on"]):
+
+    # Heuristic: if question mentions both "cau" and "sai", treat as detailed wrong-question request.
+    mentions_cau = "cau" in normalized
+    mentions_sai = "sai" in normalized
+    wrong_detail_keywords = [
+        "sai cau nao", "cau sai", "lam sai cau", "dap an dung",
+        "dap an nao dung", "ban chon", "toi sai cau", "loi sai",
+        "xem cau sai", "liet ke cau sai", "danh sach cau sai",
+        "cac cau sai", "nhung cau sai", "cai cau sai",
+    ]
+    if (mentions_cau and mentions_sai) or any(keyword in normalized for keyword in wrong_detail_keywords):
         tools.append("get_wrong_question_summary_by_topic")
         tools.append("get_recent_wrong_questions")
-    if any(keyword in normalized for keyword in ["diem", "ket qua", "tien bo"]):
+    else:
+        weak_topic_keywords = [
+            "sai nhieu", "sai o dau", "yeu", "on", "on tap", "nen on",
+            "chu de", "chuong", "phan nao", "mon", "bai", "goi y",
+            "de xuat", "can cai thien", "do kho",
+        ]
+        if any(keyword in normalized for keyword in weak_topic_keywords):
+            tools.append("get_wrong_question_summary_by_topic")
+
+    result_keywords = [
+        "diem", "diem so", "ket qua", "tien bo", "thong ke",
+        "lich su", "xu huong",
+    ]
+    if any(keyword in normalized for keyword in result_keywords):
         tools.append("get_recent_exam_results")
+
     return {"intent": "learning_analysis", "tools": list(dict.fromkeys(tools))}
 
 def _has_learning_data(learning_data: dict) -> bool:
     return any(bool(value) for value in learning_data.values())
 
 
+
+def _no_data_answer() -> str:
+    return "\n".join(
+        [
+            "📌 Nhận xét chung",
+            "- Hiện tại mình chưa có đủ dữ liệu học tập của bạn để phân tích chính xác.",
+            "",
+            "👉 Gợi ý tiếp theo",
+            "- Bạn hãy hoàn thành thêm một vài bài luyện tập hoặc bài kiểm tra.",
+            "- Sau đó mình có thể giúp bạn xem bạn đang yếu phần nào và nên ôn gì trước.",
+        ]
+    )
+
 def _fallback_answer(learning_data: dict) -> str:
     progress = learning_data.get("get_learning_progress") or {}
     topics = learning_data.get("get_wrong_question_summary_by_topic") or []
     wrong_questions = learning_data.get("get_recent_wrong_questions") or []
     if progress.get("total_attempts", 0) == 0 and not topics and not wrong_questions:
-        return (
-            "Hi\u1ec7n t\u1ea1i m\u00ecnh ch\u01b0a c\u00f3 \u0111\u1ee7 d\u1eef li\u1ec7u h\u1ecdc t\u1eadp c\u1ee7a b\u1ea1n \u0111\u1ec3 ph\u00e2n t\u00edch ch\u00ednh x\u00e1c. "
-            "B\u1ea1n h\u00e3y ho\u00e0n th\u00e0nh th\u00eam m\u1ed9t v\u00e0i b\u00e0i luy\u1ec7n t\u1eadp ho\u1eb7c b\u00e0i ki\u1ec3m tra nh\u00e9."
-        )
-    parts = [
-        f"B\u1ea1n \u0111\u00e3 ho\u00e0n th\u00e0nh {progress.get('total_attempts', 0)} l\u01b0\u1ee3t luy\u1ec7n t\u1eadp, \u0111i\u1ec3m trung b\u00ecnh kho\u1ea3ng {progress.get('avg_score', 0)}/10 v\u00e0 \u0111\u1ed9 ch\u00ednh x\u00e1c {progress.get('accuracy', 0)}%."
+        return _no_data_answer()
+
+
+    lines = [
+        "📌 Nhận xét chung",
+        f"- Bạn đã hoàn thành {progress.get('total_attempts', 0)} lượt luyện tập.",
+        f"- Điểm trung bình khoảng {progress.get('avg_score', 0)}/10.",
+        f"- Độ chính xác hiện tại khoảng {progress.get('accuracy', 0)}%.",
     ]
+
+    score_trend = progress.get("score_trend") or progress.get("trend")
+    accuracy_trend = progress.get("accuracy_trend")
+    if score_trend == "improving":
+        lines.append("- Điểm số gần đây đang có xu hướng cải thiện.")
+    elif score_trend == "declining":
+        lines.append("- Điểm số gần đây có dấu hiệu giảm, bạn nên ôn lại các phần sai nhiều.")
+    elif score_trend == "stable":
+        lines.append("- Điểm số gần đây khá ổn định.")
+    if accuracy_trend == "improving":
+        lines.append("- Tỷ lệ làm đúng cũng đang tăng lên.")
+    elif accuracy_trend == "declining":
+        lines.append("- Tỷ lệ làm đúng đang giảm, cần luyện lại theo chủ đề yếu.")
+
     if topics:
-        weakest = topics[0]
-        parts.append(f"Ch\u1ee7 \u0111\u1ec1 c\u1ea7n \u01b0u ti\u00ean \u00f4n l\u00e0 {weakest.get('topic_name')} v\u00ec c\u00f3 {weakest.get('wrong_count')} c\u00e2u sai g\u1ea7n \u0111\u00e2y.")
+        lines.extend(["", "🎯 Chủ đề cần ưu tiên ôn"])
+        for topic in topics[:5]:
+            lines.append(
+                f"- {topic.get('topic_name', 'Chưa phân loại')}: "
+                f"sai {topic.get('wrong_count', 0)}/{topic.get('total_answered', 0)} câu "
+                f"({topic.get('wrong_rate', 0)}%)."
+            )
+    elif wrong_questions:
+        lines.extend(["", "🎯 Chủ đề cần ưu tiên ôn", "- Bạn nên xem lại các câu sai gần nhất."])
+
+    by_subject = progress.get("by_subject") or []
+    if by_subject:
+        lines.extend(["", "📚 Môn học cần chú ý"])
+        for subject in by_subject[:3]:
+            lines.append(
+                f"- {subject.get('subject_name', 'Môn học khác')}: "
+                f"độ chính xác {subject.get('accuracy', 0)}%, "
+                f"điểm trung bình {subject.get('avg_score', 0)}/10."
+            )
+
+    by_difficulty = progress.get("by_difficulty") or []
+    if by_difficulty:
+        lines.extend(["", "🧩 Mức độ câu hỏi cần luyện thêm"])
+        for item in by_difficulty[:3]:
+            lines.append(
+                f"- {item.get('difficulty', 'unknown')}: "
+                f"đúng {item.get('correct_count', 0)}/{item.get('total_answered', 0)} câu "
+                f"({item.get('accuracy', 0)}%)."
+            )
+
     if wrong_questions:
-        parts.append("B\u1ea1n n\u00ean xem l\u1ea1i c\u00e1c c\u00e2u sai g\u1ea7n nh\u1ea5t, \u0111\u1ecdc k\u1ef9 l\u1eddi gi\u1ea3i v\u00e0 l\u00e0m l\u1ea1i c\u00e1c c\u00e2u c\u00f9ng ch\u1ee7 \u0111\u1ec1.")
-    return " ".join(parts)
+        lines.extend(["", "📝 10 câu sai gần nhất"])
+        for index, item in enumerate(wrong_questions[:10], start=1):
+            lines.append(f"{index}. Câu hỏi: {item.get('content') or 'Kh?ng c? n?i dung'}")
+            if item.get("topic_name"):
+                lines.append(f"   Chủ đề: {item.get('topic_name')}")
+            lines.append(f"   Bạn chọn: {item.get('selected_answer') or 'Ch?a c? d? li?u'}")
+            lines.append(f"   Đáp án đúng: {item.get('correct_answer') or 'Ch?a c? d? li?u'}")
+            if item.get("explanation"):
+                lines.append(f"   Giải thích: {item.get('explanation')}")
+
+    lines.extend(["", "✅ Điểm tích cực"])
+    if score_trend == "improving" or accuracy_trend == "improving":
+        lines.append("- Kết quả gần đây có dấu hiệu cải thiện, bạn nên duy trì nhịp luyện tập hiện tại.")
+    else:
+        lines.append("- Bạn đã có dữ liệu luyện tập để hệ thống bắt đầu theo dõi tiến bộ chi tiết hơn.")
+
+    lines.extend([
+        "",
+        "👉 Gợi ý tiếp theo",
+        "- Ưu tiên ôn các chủ đề có tỷ lệ sai cao, không chỉ nhìn số câu sai tuyệt đối.",
+        "- Đọc kỹ lời giải và làm lại các câu cùng dạng ở mức độ còn yếu.",
+        "- Sau khi ôn, hãy làm thêm một lượt luyện tập để kiểm tra xu hướng điểm và độ chính xác.",
+    ])
+    return "\n".join(lines)

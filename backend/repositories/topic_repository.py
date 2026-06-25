@@ -7,7 +7,7 @@ from core.supabase import SupabaseManager
 SELECT_FIELDS = (
     "topic_id,topic_name,description,class_subject_id,created_at,updated_at,deleted_at,"
     "class_subjects!inner(class_subject_id,class_id,subject_id,assigned_teacher_id,"
-    "classes!inner(class_id,class_name),subjects!inner(subject_id,subject_name))"
+    "classes!inner(class_id,class_code,class_name),subjects!inner(subject_id,subject_code,subject_name))"
 )
 
 

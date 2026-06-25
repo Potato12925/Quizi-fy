@@ -3,8 +3,12 @@ import { api } from './client';
 export interface TeacherSubjectItem {
   subject_id: number;
   subject_name: string;
-  subject_code?: string;
-  class_subject_id?: number | null;
+  subject_code?: string | null;
+  class_subject_id: number | null;
+  class_id?: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
+  assigned_teacher_id?: number | null;
 }
 
 export interface TeacherTopicItem {
@@ -13,12 +17,23 @@ export interface TeacherTopicItem {
   subject_id: number;
   topic_name: string;
   description?: string | null;
+  class_id?: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
+  subject_code?: string | null;
+  subject_name?: string | null;
+  assigned_teacher_id?: number | null;
 }
 
 export interface SubjectWithTopicsViewModel {
   subject_id: number;
   subject_name: string;
+  subject_code?: string | null;
   class_subject_id: number | null;
+  class_id?: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
+  assigned_teacher_id?: number | null;
   topics: TeacherTopicItem[];
 }
 
@@ -68,20 +83,24 @@ const fetchAllTeacherTopics = async (): Promise<TeacherTopicItem[]> => {
 
 export const getTeacherSubjectsWithTopics = async (): Promise<SubjectWithTopicsViewModel[]> => {
   const [subjects, topics] = await Promise.all([fetchTeacherSubjects(), fetchAllTeacherTopics()]);
-  const topicsBySubjectId = new Map<number, TeacherTopicItem[]>();
+  const topicsByClassSubjectId = new Map<number, TeacherTopicItem[]>();
 
   for (const topic of topics) {
-    const topicSubjectId = Number(topic.subject_id);
-    const existing = topicsBySubjectId.get(topicSubjectId) || [];
+    const existing = topicsByClassSubjectId.get(topic.class_subject_id) || [];
     existing.push(topic);
-    topicsBySubjectId.set(topicSubjectId, existing);
+    topicsByClassSubjectId.set(topic.class_subject_id, existing);
   }
 
   return subjects.map((subject) => ({
     subject_id: subject.subject_id,
     subject_name: subject.subject_name,
-    class_subject_id: subject.class_subject_id ?? null,
-    topics: topicsBySubjectId.get(subject.subject_id) || [],
+    subject_code: subject.subject_code ?? null,
+    class_subject_id: subject.class_subject_id,
+    class_id: subject.class_id ?? null,
+    class_code: subject.class_code ?? null,
+    class_name: subject.class_name ?? null,
+    assigned_teacher_id: subject.assigned_teacher_id ?? null,
+    topics: subject.class_subject_id ? (topicsByClassSubjectId.get(subject.class_subject_id) || []) : [],
   }));
 };
 

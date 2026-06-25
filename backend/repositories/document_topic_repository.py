@@ -91,7 +91,9 @@ async def list_by_document_id(document_id: int) -> list[dict]:
         .select(
             "document_topic_id,document_id,topic_id,"
             "topics(topic_id,topic_name,class_subject_id,"
-            "class_subjects(class_subject_id,class_id,subject_id,assigned_teacher_id,classes(class_id,class_name),subjects(subject_id,subject_name)))"
+            "class_subjects(class_subject_id,class_id,subject_id,assigned_teacher_id,"
+            "classes(class_id,class_code,class_name),"
+            "subjects(subject_id,subject_code,subject_name)))"
         )
         .eq("document_id", document_id)
         .is_("deleted_at", None)

@@ -56,7 +56,12 @@ export interface TeacherDashboardRecentAiRequest {
   document_title: string | null;
   topic_id: number | null;
   topic_name: string | null;
+  class_subject_id?: number | null;
+  class_id?: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
   subject_id: number | null;
+  subject_code?: string | null;
   subject_name: string | null;
   num_questions: number;
   difficulty: string;
@@ -75,7 +80,12 @@ export interface TeacherDashboardRecentDocument {
   file_size: number | null;
   created_at: string | null;
   updated_at: string | null;
+  class_subject_id?: number | null;
+  class_id?: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
   subject_id: number | null;
+  subject_code?: string | null;
   subject_name: string | null;
   topic_ids: number[];
   topic_names: string[];
@@ -96,7 +106,12 @@ export interface TeacherDashboardRecentApprovedQuestion {
   document_title: string | null;
   topic_id: number | null;
   topic_name: string | null;
+  class_subject_id?: number | null;
+  class_id?: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
   subject_id: number | null;
+  subject_code?: string | null;
   subject_name: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -108,9 +123,26 @@ export interface TeacherDashboardUploadTopic {
 }
 
 export interface TeacherDashboardUploadSubject {
+  class_subject_id?: number | null;
+  class_id?: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
   subject_id: number;
+  subject_code?: string | null;
   subject_name: string;
   topics: TeacherDashboardUploadTopic[];
+}
+
+export interface TeachingAssignmentOption {
+  classSubjectId: number;
+  classId: number | null;
+  classCode: string | null;
+  className: string | null;
+  subjectId: number;
+  subjectCode: string | null;
+  subjectName: string;
+  topics: TeacherDashboardUploadTopic[];
+  isLegacyFallback: boolean;
 }
 
 export interface TeacherDashboardData {
@@ -132,6 +164,27 @@ export interface UploadTeacherDashboardDocumentPayload {
   description?: string;
   file: File;
 }
+
+export const normalizeTeacherDashboardUploadSubjects = (
+  subjects: TeacherDashboardUploadSubject[],
+): TeachingAssignmentOption[] =>
+  subjects.map((subject) => {
+    const normalizedSubjectId = Number(subject.subject_id);
+    const normalizedClassSubjectId = subject.class_subject_id ?? null;
+
+    return {
+      // Legacy fallback only for old dashboard responses that still group by subject_id.
+      classSubjectId: normalizedClassSubjectId ?? normalizedSubjectId,
+      classId: subject.class_id ?? null,
+      classCode: subject.class_code ?? null,
+      className: subject.class_name ?? null,
+      subjectId: normalizedSubjectId,
+      subjectCode: subject.subject_code ?? null,
+      subjectName: subject.subject_name,
+      topics: subject.topics || [],
+      isLegacyFallback: normalizedClassSubjectId == null,
+    };
+  });
 
 export const getTeacherDashboardStats = async (recentLimit = 5): Promise<TeacherDashboardData> => {
   const response = await api.get<ApiEnvelope<TeacherDashboardData>>('/teacher/dashboard/stats', {

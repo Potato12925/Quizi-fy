@@ -10,28 +10,40 @@ async def list_assigned_subjects_for_teacher(teacher_id: int) -> list[dict]:
     response = await asyncio.to_thread(
         lambda: supabase.table("class_subjects")
         .select(
-            "subject_id,subjects!inner(subject_id,subject_name,status,deleted_at)"
+            "class_subject_id,class_id,subject_id,"
+            "classes!inner(class_id,class_code,class_name,status,deleted_at),"
+            "subjects!inner(subject_id,subject_code,subject_name,status,deleted_at)"
         )
         .eq("assigned_teacher_id", teacher_id)
         .eq("status", "active")
         .is_("deleted_at", None)
+        .eq("classes.status", "active")
+        .is_("classes.deleted_at", None)
         .eq("subjects.status", "active")
         .is_("subjects.deleted_at", None)
+        .order("class_subject_id")
         .execute()
     )
     rows = response.data or []
-    subject_map: dict[int, dict] = {}
+    assignments: list[dict] = []
     for row in rows:
         subject = row.get("subjects") or {}
-        subject_id = subject.get("subject_id")
-        if subject_id is None:
+        class_ref = row.get("classes") or {}
+        class_subject_id = row.get("class_subject_id")
+        subject_id = row.get("subject_id") or subject.get("subject_id")
+        class_id = row.get("class_id") or class_ref.get("class_id")
+        if class_subject_id is None or subject_id is None or class_id is None:
             continue
-        sid = int(subject_id)
-        subject_map[sid] = {
-            "subject_id": sid,
+        assignments.append({
+            "class_subject_id": int(class_subject_id),
+            "class_id": int(class_id),
+            "class_code": class_ref.get("class_code"),
+            "class_name": class_ref.get("class_name"),
+            "subject_id": int(subject_id),
+            "subject_code": subject.get("subject_code"),
             "subject_name": subject.get("subject_name") or "Unknown subject",
-        }
-    return list(subject_map.values())
+        })
+    return assignments
 
 
 async def _list_topic_ids_by_document_topic_ids(
@@ -69,39 +81,39 @@ async def _list_topic_ids_by_document_topic_ids(
     )
 
 
-async def count_active_topics_by_subject_ids(teacher_id: int, subject_ids: list[int]) -> int:
-    if not subject_ids:
+async def count_active_topics_by_class_subject_ids(class_subject_ids: list[int]) -> int:
+    if not class_subject_ids:
         return 0
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("topics")
-        .select("topic_id,class_subjects!inner(subject_id,status,deleted_at,subjects!inner(subject_id,status,deleted_at))", count="exact")
-        .eq("class_subjects.assigned_teacher_id", teacher_id)
-        .in_("class_subjects.subject_id", subject_ids)
+        .select("topic_id,class_subjects!inner(class_subject_id,status,deleted_at)", count="exact")
+        .in_("class_subjects.class_subject_id", class_subject_ids)
         .eq("class_subjects.status", "active")
         .is_("class_subjects.deleted_at", None)
-        .eq("class_subjects.subjects.status", "active")
-        .is_("class_subjects.subjects.deleted_at", None)
         .is_("deleted_at", None)
         .execute()
     )
     return int(response.count or 0)
 
 
-async def list_active_topics_by_subject_ids(teacher_id: int, subject_ids: list[int]) -> list[dict]:
-    if not subject_ids:
+async def list_active_topics_by_class_subject_ids(class_subject_ids: list[int]) -> list[dict]:
+    if not class_subject_ids:
         return []
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
         lambda: supabase.table("topics")
         .select(
             "topic_id,topic_name,class_subject_id,"
-            "class_subjects!inner(subject_id,status,deleted_at,subjects!inner(subject_id,status,deleted_at))"
+            "class_subjects!inner(class_subject_id,class_id,subject_id,status,deleted_at,"
+            "classes!inner(class_id,class_code,class_name,status,deleted_at),"
+            "subjects!inner(subject_id,subject_code,subject_name,status,deleted_at))"
         )
-        .eq("class_subjects.assigned_teacher_id", teacher_id)
-        .in_("class_subjects.subject_id", subject_ids)
+        .in_("class_subjects.class_subject_id", class_subject_ids)
         .eq("class_subjects.status", "active")
         .is_("class_subjects.deleted_at", None)
+        .eq("class_subjects.classes.status", "active")
+        .is_("class_subjects.classes.deleted_at", None)
         .eq("class_subjects.subjects.status", "active")
         .is_("class_subjects.subjects.deleted_at", None)
         .is_("deleted_at", None)
@@ -134,8 +146,8 @@ async def list_teacher_document_topic_context(teacher_id: int) -> list[dict]:
             "topics(topic_id,topic_name,class_subject_id,deleted_at,"
             "class_subjects!topics_class_subject_id_fkey("
             "class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
-            "classes(class_id,class_name,status,deleted_at),"
-            "subjects!class_subjects_subject_id_fkey(subject_id,subject_name,status,deleted_at)"
+            "classes(class_id,class_code,class_name,status,deleted_at),"
+            "subjects!class_subjects_subject_id_fkey(subject_id,subject_code,subject_name,status,deleted_at)"
             "))"
         )
         .eq("documents.teacher_id", teacher_id)
@@ -306,8 +318,8 @@ async def list_recent_approved_questions_by_teacher(teacher_id: int, limit: int)
             "topics(topic_id,topic_name,class_subject_id,deleted_at,"
             "class_subjects!topics_class_subject_id_fkey("
             "class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
-            "classes(class_id,class_name,status,deleted_at),"
-            "subjects!class_subjects_subject_id_fkey(subject_id,subject_name,status,deleted_at)"
+            "classes(class_id,class_code,class_name,status,deleted_at),"
+            "subjects!class_subjects_subject_id_fkey(subject_id,subject_code,subject_name,status,deleted_at)"
             "))"
         )
         .eq("teacher_id", teacher_id)

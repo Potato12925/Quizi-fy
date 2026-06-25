@@ -9,7 +9,8 @@ export type ResourcePreviewKind = 'pdf' | 'txt' | 'docx' | 'unsupported' | 'empt
 
 export interface ResourceFormState {
   title: string;
-  subjectId: string;
+  classId: string;
+  classSubjectId: string;
   topicIds: number[];
   description: string;
 }
@@ -22,6 +23,7 @@ export interface ResourceCardProps {
 
 export interface ResourceFormProps {
   fileInputRef: React.RefObject<HTMLInputElement | null>;
+  classOptions: TeacherSubjectItem[];
   formData: ResourceFormState;
   formError: string;
   isModalTopicsLoading: boolean;
@@ -30,15 +32,17 @@ export interface ResourceFormProps {
   selectedFile: File | null;
   subjects: TeacherSubjectItem[];
   onDescriptionChange: (value: string) => void;
+  onClassChange: (classIdValue: string) => void;
+  onClassSubjectChange: (classSubjectIdValue: string) => void | Promise<void>;
   onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onOpenFilePicker: () => void;
-  onSubjectChange: (subjectIdValue: string, resetTopics: boolean) => void | Promise<void>;
   onTitleChange: (value: string) => void;
   onTopicToggle: (topicId: number, checked: boolean) => void;
 }
 
 export interface ResourceFormModalProps {
   fileInputRef: React.RefObject<HTMLInputElement | null>;
+  classOptions: TeacherSubjectItem[];
   formData: ResourceFormState;
   formError: string;
   isModalOpen: boolean;
@@ -52,9 +56,10 @@ export interface ResourceFormModalProps {
   subjects: TeacherSubjectItem[];
   onClose: () => void;
   onDescriptionChange: (value: string) => void;
+  onClassChange: (classIdValue: string) => void;
+  onClassSubjectChange: (classSubjectIdValue: string) => void | Promise<void>;
   onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onOpenFilePicker: () => void;
-  onSubjectChange: (subjectIdValue: string, resetTopics: boolean) => void | Promise<void>;
   onSubmit: (event: React.FormEvent) => void | Promise<void>;
   onTitleChange: (value: string) => void;
   onTopicToggle: (topicId: number, checked: boolean) => void;

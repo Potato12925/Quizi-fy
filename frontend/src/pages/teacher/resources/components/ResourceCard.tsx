@@ -2,6 +2,12 @@ import { Link } from 'react-router-dom';
 import { formatResourceDate, formatResourceFileSize } from '../utils/resourcePreview';
 import type { ResourceCardProps } from '../types';
 
+const getClassSubjectLabel = (
+  classCode?: string | null,
+  subjectCode?: string | null,
+  subjectName?: string | null,
+) => [classCode, subjectCode, subjectName].filter(Boolean).join(' - ');
+
 export default function ResourceCard({
   resource,
   onDelete,
@@ -15,8 +21,21 @@ export default function ResourceCard({
             {resource.title}
           </h4>
           <div className="flex flex-wrap gap-2">
+            {!!getClassSubjectLabel(
+              resource.class_code,
+              resource.subject_code,
+              resource.subject_name,
+            ) && (
+              <span className="bg-slate-50 text-slate-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">
+                {getClassSubjectLabel(
+                  resource.class_code,
+                  resource.subject_code,
+                  resource.subject_name,
+                )}
+              </span>
+            )}
             <span className="bg-slate-50 text-slate-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">
-              {resource.subject?.subject_name}
+              {resource.class_name || resource.subject?.subject_name}
             </span>
             <span className="bg-slate-50 text-slate-400 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">
               {formatResourceFileSize(resource.file_size)}

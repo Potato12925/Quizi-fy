@@ -11,7 +11,12 @@ export interface TeacherDocument {
   document_id: number;
   teacher_id: number;
   class_subject_id: number | null;
+  class_id: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
   subject_id: number | null;
+  subject_code?: string | null;
+  subject_name?: string | null;
   title: string;
   description?: string;
   file_url: string;
@@ -20,8 +25,22 @@ export interface TeacherDocument {
   status: string;
   created_at: string;
   updated_at?: string;
-  subject: { subject_id: number | null; subject_name: string };
-  topics: { topic_id: number; topic_name: string }[];
+  subject: {
+    subject_id: number | null;
+    subject_name: string;
+    subject_code?: string | null;
+  };
+  topics: Array<{
+    topic_id: number;
+    topic_name: string;
+    class_subject_id: number | null;
+    class_id: number | null;
+    class_code?: string | null;
+    class_name?: string | null;
+    subject_id: number | null;
+    subject_code?: string | null;
+    subject_name?: string | null;
+  }>;
   ai_request_count?: number;
   question_count?: number;
   warning?: { has_related_history: boolean; message: string };
@@ -32,7 +51,6 @@ export interface TeacherDocumentListParams {
   limit?: number;
   search?: string;
   class_subject_id?: number;
-  subject_id?: number;
   topic_id?: number;
   uploaded_from?: string;
   uploaded_to?: string;
@@ -61,7 +79,6 @@ export const getTeacherDocuments = async (params: TeacherDocumentListParams = {}
   };
   if (params.search) query.search = params.search;
   if (params.class_subject_id) query.class_subject_id = String(params.class_subject_id);
-  if (params.subject_id) query.subject_id = String(params.subject_id);
   if (params.topic_id) query.topic_id = String(params.topic_id);
   if (params.uploaded_from) query.uploaded_from = params.uploaded_from;
   if (params.uploaded_to) query.uploaded_to = params.uploaded_to;

@@ -1,8 +1,19 @@
 import { formatResourceFileSize } from '../utils/resourcePreview';
 import type { ResourceFormProps } from '../types';
 
+const getClassLabel = (classCode?: string | null, className?: string | null) =>
+  classCode || className || 'Lop chua xac dinh';
+
+const getSubjectLabel = (
+  classCode?: string | null,
+  subjectCode?: string | null,
+  subjectName?: string | null,
+) =>
+  [classCode, subjectCode, subjectName].filter(Boolean).join(' - ') || 'Mon hoc chua xac dinh';
+
 export default function ResourceForm({
   fileInputRef,
+  classOptions,
   formData,
   formError,
   isModalTopicsLoading,
@@ -11,9 +22,10 @@ export default function ResourceForm({
   selectedFile,
   subjects,
   onDescriptionChange,
+  onClassChange,
+  onClassSubjectChange,
   onFileChange,
   onOpenFilePicker,
-  onSubjectChange,
   onTitleChange,
   onTopicToggle,
 }: ResourceFormProps) {
@@ -33,7 +45,7 @@ export default function ResourceForm({
         <p className="text-xs font-black tracking-widest uppercase text-slate-400">
           {selectedFile
             ? `${selectedFile.name} (${formatResourceFileSize(selectedFile.size)})`
-            : 'Chọn file PDF, DOCX, TXT (max 20MB)'}
+            : 'Chon file PDF, DOCX, TXT (max 20MB)'}
         </p>
       </div>
 
@@ -41,28 +53,50 @@ export default function ResourceForm({
         type="text"
         value={formData.title}
         onChange={(event) => onTitleChange(event.target.value)}
-        placeholder="Tên tài liệu"
+        placeholder="Ten tai lieu"
         className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50"
       />
 
       <select
-        value={formData.subjectId}
-        onChange={(event) => onSubjectChange(event.target.value, true)}
+        value={formData.classId}
+        onChange={(event) => onClassChange(event.target.value)}
         className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50"
       >
-        <option value="">Chọn môn học</option>
+        <option value="">Chon lop</option>
+        {classOptions.map((classOption) => (
+          <option
+            key={classOption.class_id ?? classOption.class_subject_id ?? classOption.subject_id}
+            value={String(classOption.class_id ?? '')}
+          >
+            {getClassLabel(classOption.class_code, classOption.class_name)}
+          </option>
+        ))}
+      </select>
+
+      <select
+        value={formData.classSubjectId}
+        onChange={(event) => onClassSubjectChange(event.target.value)}
+        disabled={!formData.classId}
+        className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <option value="">Chon mon hoc</option>
         {subjects.map((subject) => (
-          <option key={subject.subject_id} value={String(subject.subject_id)}>
-            {subject.subject_name}
+          <option
+            key={subject.class_subject_id ?? `${subject.class_id}-${subject.subject_id}`}
+            value={String(subject.class_subject_id ?? '')}
+          >
+            {getSubjectLabel(subject.class_code, subject.subject_code, subject.subject_name)}
           </option>
         ))}
       </select>
 
       <div className="w-full p-4 border rounded-2xl bg-slate-50 border-slate-100 min-h-28">
-        {!formData.subjectId ? (
-          <p className="text-xs font-bold text-slate-400">Vui lòng chọn môn học trước</p>
+        {!formData.classId ? (
+          <p className="text-xs font-bold text-slate-400">Vui long chon lop truoc</p>
+        ) : !formData.classSubjectId ? (
+          <p className="text-xs font-bold text-slate-400">Vui long chon mon hoc truoc</p>
         ) : modalTopics.length === 0 ? (
-          <p className="text-xs font-bold text-slate-400">Không có topic</p>
+          <p className="text-xs font-bold text-slate-400">Khong co topic</p>
         ) : (
           <div className="pr-1 space-y-2 overflow-y-auto max-h-44">
             {modalTopics.map((topic) => {
@@ -85,7 +119,7 @@ export default function ResourceForm({
                   >
                     <input
                       type="checkbox"
-                      disabled={!formData.subjectId || isModalTopicsLoading}
+                      disabled={!formData.classSubjectId || isModalTopicsLoading}
                       checked={checked}
                       onChange={(event) => onTopicToggle(topic.topic_id, event.target.checked)}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -106,14 +140,19 @@ export default function ResourceForm({
         )}
       </div>
 
-      {!formData.subjectId && (
+      {!formData.classId && (
         <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-          Chọn môn học để hiển thị topic
+          Chon lop de hien thi mon hoc
+        </p>
+      )}
+      {formData.classId && !formData.classSubjectId && (
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+          Chon mon hoc de hien thi topic
         </p>
       )}
       {isModalTopicsLoading && (
         <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-          Đang tải topic...
+          Dang tai topic...
         </p>
       )}
       {modalTopicError && (
@@ -126,7 +165,7 @@ export default function ResourceForm({
         rows={3}
         value={formData.description}
         onChange={(event) => onDescriptionChange(event.target.value)}
-        placeholder="Mô tả"
+        placeholder="Mo ta"
         className="w-full p-4 text-xs font-bold border-none rounded-2xl bg-slate-50"
       />
 

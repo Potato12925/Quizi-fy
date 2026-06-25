@@ -66,7 +66,12 @@ class TeacherDashboardTopicOption(BaseModel):
 
 
 class TeacherDashboardUploadSubject(BaseModel):
+    class_subject_id: int | None = None
+    class_id: int | None = None
+    class_code: str | None = None
+    class_name: str | None = None
     subject_id: int
+    subject_code: str | None = None
     subject_name: str
     topics: list[TeacherDashboardTopicOption]
 
@@ -78,7 +83,12 @@ class TeacherDashboardRecentAiRequest(BaseModel):
     document_title: str | None = None
     topic_id: int | None = None
     topic_name: str | None = None
+    class_subject_id: int | None = None
+    class_id: int | None = None
+    class_code: str | None = None
+    class_name: str | None = None
     subject_id: int | None = None
+    subject_code: str | None = None
     subject_name: str | None = None
     num_questions: int
     difficulty_distribution: list[TeacherDashboardDifficultyDistributionItem] = Field(default_factory=list)
@@ -97,7 +107,12 @@ class TeacherDashboardRecentDocument(BaseModel):
     file_size: int | None = None
     created_at: str | None = None
     updated_at: str | None = None
+    class_subject_id: int | None = None
+    class_id: int | None = None
+    class_code: str | None = None
+    class_name: str | None = None
     subject_id: int | None = None
+    subject_code: str | None = None
     subject_name: str | None = None
     topic_ids: list[int] = Field(default_factory=list)
     topic_names: list[str] = Field(default_factory=list)
@@ -118,7 +133,12 @@ class TeacherDashboardRecentApprovedQuestion(BaseModel):
     document_title: str | None = None
     topic_id: int | None = None
     topic_name: str | None = None
+    class_subject_id: int | None = None
+    class_id: int | None = None
+    class_code: str | None = None
+    class_name: str | None = None
     subject_id: int | None = None
+    subject_code: str | None = None
     subject_name: str | None = None
     created_at: str | None = None
     updated_at: str | None = None

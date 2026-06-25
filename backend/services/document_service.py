@@ -103,7 +103,11 @@ async def _serialize_document(document: dict) -> dict:
     topic_rows = await list_by_document_id(document_id)
     topics = []
     class_subject_id: int | None = None
+    class_id: int | None = None
+    class_code: str | None = None
+    class_name: str | None = None
     subject_id: int | None = None
+    subject_code: str | None = None
     subject_name = "Unknown"
 
     for row in topic_rows:
@@ -111,14 +115,30 @@ async def _serialize_document(document: dict) -> dict:
         if class_subject_id is None and topic.get("class_subject_id"):
             class_subject_id = int(topic["class_subject_id"])
         class_subject = topic.get("class_subjects") or {}
+        class_ref = class_subject.get("classes") or {}
         subject_ref = class_subject.get("subjects") or {}
+        if class_id is None and class_subject.get("class_id") is not None:
+            class_id = int(class_subject["class_id"])
+        if class_code is None and class_ref.get("class_code"):
+            class_code = class_ref["class_code"]
+        if class_name is None and class_ref.get("class_name"):
+            class_name = class_ref["class_name"]
         if subject_id is None and class_subject.get("subject_id") is not None:
             subject_id = int(class_subject["subject_id"])
+        if subject_code is None and subject_ref.get("subject_code"):
+            subject_code = subject_ref["subject_code"]
         if subject_ref.get("subject_name"):
             subject_name = subject_ref["subject_name"]
         topics.append({
             "topic_id": int(row["topic_id"]),
             "topic_name": topic.get("topic_name"),
+            "class_subject_id": int(topic["class_subject_id"]) if topic.get("class_subject_id") is not None else None,
+            "class_id": int(class_subject["class_id"]) if class_subject.get("class_id") is not None else None,
+            "class_code": class_ref.get("class_code"),
+            "class_name": class_ref.get("class_name"),
+            "subject_id": int(class_subject["subject_id"]) if class_subject.get("subject_id") is not None else None,
+            "subject_code": subject_ref.get("subject_code"),
+            "subject_name": subject_ref.get("subject_name"),
         })
 
     ai_request_count, question_count = await _get_document_usage_counts(document_id)
@@ -127,10 +147,16 @@ async def _serialize_document(document: dict) -> dict:
         "document_id": document_id,
         "teacher_id": int(document["teacher_id"]),
         "class_subject_id": class_subject_id,
+        "class_id": class_id,
+        "class_code": class_code,
+        "class_name": class_name,
         "subject_id": subject_id,
+        "subject_code": subject_code,
+        "subject_name": subject_name,
         "subject": {
             "subject_id": subject_id,
             "subject_name": subject_name,
+            "subject_code": subject_code,
         },
         "title": document.get("title"),
         "description": document.get("description"),

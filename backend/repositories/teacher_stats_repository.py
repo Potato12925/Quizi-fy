@@ -3,6 +3,19 @@ import asyncio
 from core.supabase import SupabaseManager
 
 
+async def list_teacher_assigned_class_subjects(teacher_id: int) -> list[dict]:
+    supabase = SupabaseManager.get_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("class_subjects")
+        .select("class_subject_id,class_id,subject_id")
+        .eq("assigned_teacher_id", teacher_id)
+        .eq("status", "active")
+        .is_("deleted_at", None)
+        .execute()
+    )
+    return response.data or []
+
+
 async def list_teacher_assigned_topics_scope(teacher_id: int) -> list[dict]:
     supabase = SupabaseManager.get_client()
     response = await asyncio.to_thread(
@@ -58,10 +71,10 @@ async def list_teacher_document_topics_scope(teacher_id: int) -> list[dict]:
 
 async def list_scoped_practice_sets(
     teacher_id: int,
-    assigned_subject_ids: list[int],
+    scoped_class_subject_ids: list[int],
     scoped_topic_ids: list[int],
 ) -> list[dict]:
-    if not assigned_subject_ids:
+    if not scoped_class_subject_ids:
         return []
     supabase = SupabaseManager.get_client()
 
@@ -71,7 +84,7 @@ async def list_scoped_practice_sets(
         .eq("assigned_teacher_id", teacher_id)
         .eq("status", "active")
         .is_("deleted_at", None)
-        .in_("subject_id", assigned_subject_ids)
+        .in_("class_subject_id", scoped_class_subject_ids)
         .execute()
     )
     class_subjects = class_subject_rows.data or []
@@ -97,11 +110,15 @@ async def list_scoped_practice_sets(
     if not student_ids:
         return []
 
+    subject_ids = sorted({int(item["subject_id"]) for item in class_subjects if item.get("subject_id") is not None})
+    if not subject_ids:
+        return []
+
     practice_set_rows = await asyncio.to_thread(
         lambda: supabase.table("practice_sets")
         .select("practice_set_id,student_id,subject_id,topic_id")
         .in_("student_id", student_ids)
-        .in_("subject_id", assigned_subject_ids)
+        .in_("subject_id", subject_ids)
         .is_("deleted_at", None)
         .execute()
     )

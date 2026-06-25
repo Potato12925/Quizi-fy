@@ -3,6 +3,7 @@ from math import ceil
 
 from middlewares.auth_middleware import CurrentUser
 from repositories.teacher_stats_repository import (
+    list_teacher_assigned_class_subjects,
     list_practice_attempts_by_practice_set_ids,
     list_question_topic_rows,
     list_scoped_practice_sets,
@@ -86,25 +87,36 @@ def _empty_stats_response() -> dict:
 
 async def get_teacher_stats(
     current_user: CurrentUser,
+    class_subject_id: int | None = None,
     subject_id: int | None = None,
     topic_id: int | None = None,
     debug: bool = False,
 ) -> dict:
     debug_info: dict[str, object] = {"teacher_id": current_user.user_id}
 
+    assigned_class_subject_rows = await list_teacher_assigned_class_subjects(current_user.user_id)
     assigned_topic_rows = await list_teacher_assigned_topics_scope(current_user.user_id)
     assigned_topic_context = _build_assigned_topic_context(assigned_topic_rows)
     teacher_subject_ids = sorted(
         {
-            item["subject_id"]
-            for item in assigned_topic_context.values()
-            if item["subject_id"] > 0
+            _safe_int(item.get("subject_id"))
+            for item in assigned_class_subject_rows
+            if _safe_int(item.get("subject_id")) > 0
+        }
+    )
+    teacher_class_subject_ids = sorted(
+        {
+            _safe_int(item.get("class_subject_id"))
+            for item in assigned_class_subject_rows
+            if _safe_int(item.get("class_subject_id")) > 0
         }
     )
     teacher_topic_ids = sorted(assigned_topic_context.keys())
+    teacher_class_subject_id_set = set(teacher_class_subject_ids)
     teacher_subject_id_set = set(teacher_subject_ids)
     teacher_topic_id_set = set(teacher_topic_ids)
 
+    debug_info["assigned_class_subject_ids"] = teacher_class_subject_ids
     debug_info["assigned_subject_ids"] = teacher_subject_ids
     debug_info["assigned_topic_ids"] = teacher_topic_ids
 
@@ -124,10 +136,28 @@ async def get_teacher_stats(
             response["debug"] = debug_info
         return response
 
+    if class_subject_id is not None and class_subject_id not in teacher_class_subject_id_set:
+        raise TeacherStatsAuthorizationError("You can only view stats for your assigned class subjects")
     if subject_id is not None and subject_id not in teacher_subject_id_set:
         raise TeacherStatsAuthorizationError("You can only view stats for your assigned subjects")
     if topic_id is not None and topic_id not in teacher_topic_id_set:
         raise TeacherStatsAuthorizationError("You can only view stats for your assigned topics")
+    if class_subject_id is not None and subject_id is not None:
+        subject_ids_of_class_subject = {
+            _safe_int(item.get("subject_id"))
+            for item in assigned_class_subject_rows
+            if _safe_int(item.get("class_subject_id")) == class_subject_id
+        }
+        if subject_id not in subject_ids_of_class_subject:
+            raise ValueError("class_subject_id does not belong to subject_id")
+    if class_subject_id is not None and topic_id is not None:
+        class_subject_ids_of_topic = {
+            item["class_subject_id"]
+            for item in assigned_topic_context.values()
+            if item["topic_id"] == topic_id
+        }
+        if class_subject_id not in class_subject_ids_of_topic:
+            raise ValueError("topic_id does not belong to class_subject_id")
     if subject_id is not None and topic_id is not None:
         subject_ids_of_topic = {
             item["subject_id"]
@@ -137,10 +167,20 @@ async def get_teacher_stats(
         if subject_id not in subject_ids_of_topic:
             raise ValueError("topic_id does not belong to subject_id")
 
+    filtered_class_subject_ids = sorted(
+        {
+            _safe_int(item.get("class_subject_id"))
+            for item in assigned_class_subject_rows
+            if _safe_int(item.get("class_subject_id")) > 0
+            and (class_subject_id is None or _safe_int(item.get("class_subject_id")) == class_subject_id)
+            and (subject_id is None or _safe_int(item.get("subject_id")) == subject_id)
+        }
+    )
     filtered_topic_ids = sorted(
         topic_key
         for topic_key, item in assigned_topic_context.items()
-        if (subject_id is None or item["subject_id"] == subject_id)
+        if (class_subject_id is None or item["class_subject_id"] == class_subject_id)
+        and (subject_id is None or item["subject_id"] == subject_id)
         and (topic_id is None or item["topic_id"] == topic_id)
     )
 
@@ -148,6 +188,7 @@ async def get_teacher_stats(
         response = _empty_stats_response()
         if debug:
             debug_info["filtered_topic_ids"] = []
+            debug_info["filtered_class_subject_ids"] = []
             debug_info["scoped_practice_sets_count"] = 0
             debug_info["practice_sets_with_null_topic_count"] = 0
             debug_info["attempts_count"] = 0
@@ -160,11 +201,27 @@ async def get_teacher_stats(
             response["debug"] = debug_info
         return response
 
+    debug_info["filtered_class_subject_ids"] = filtered_class_subject_ids
     debug_info["filtered_topic_ids"] = filtered_topic_ids
+
+    if not filtered_class_subject_ids:
+        response = _empty_stats_response()
+        if debug:
+            debug_info["scoped_practice_sets_count"] = 0
+            debug_info["practice_sets_with_null_topic_count"] = 0
+            debug_info["attempts_count"] = 0
+            debug_info["submitted_attempts_count"] = 0
+            debug_info["answers_raw_count"] = 0
+            debug_info["answers_selected_count"] = 0
+            debug_info["mapped_questions_count"] = 0
+            debug_info["weak_topics_count"] = 0
+            debug_info["students_with_scores_count"] = 0
+            response["debug"] = debug_info
+        return response
 
     practice_sets = await list_scoped_practice_sets(
         teacher_id=current_user.user_id,
-        assigned_subject_ids=teacher_subject_ids if subject_id is None else [subject_id],
+        scoped_class_subject_ids=filtered_class_subject_ids,
         scoped_topic_ids=filtered_topic_ids if topic_id is not None else [],
     )
     debug_info["scoped_practice_sets_count"] = len(practice_sets)
@@ -268,6 +325,8 @@ async def get_teacher_stats(
             continue
         scope_info = assigned_topic_context.get(current_topic_id)
         if not scope_info:
+            continue
+        if class_subject_id is not None and _safe_int(scope_info.get("class_subject_id")) != class_subject_id:
             continue
         if subject_id is not None and _safe_int(scope_info.get("subject_id")) != subject_id:
             continue

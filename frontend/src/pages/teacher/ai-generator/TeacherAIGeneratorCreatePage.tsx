@@ -3,10 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   createTeacherAiRequest,
   getTeacherAssignedSubjects,
-  getTeacherDocumentsBySubjectTopic,
-  getTeacherTopicsBySubjectId,
+  getTeacherDocumentsByClassSubjectTopic,
+  getTeacherTopicsByClassSubjectId,
   type DifficultyLevel,
-  type TeacherAssignedSubject,
+  type TeacherAssignedClassSubject,
   type TeacherDocumentTopicOption,
   type TeacherTopicItem,
 } from '@/api/teacherAIGeneratorApi';
@@ -19,10 +19,17 @@ import {
   clampNonNegativeInteger,
   DIFFICULTY_LABELS,
   formatDateTime,
+  formatDocumentTopicContext,
   formatFileSize,
   inputClass,
   pageCardClass,
 } from './utils';
+
+const buildClassSubjectLabel = (item: TeacherAssignedClassSubject) => {
+  const classLabel = [item.class_code, item.class_name].filter(Boolean).join(' - ');
+  const subjectLabel = [item.subject_code, item.subject_name].filter(Boolean).join(' - ');
+  return [classLabel, subjectLabel].filter(Boolean).join(' | ');
+};
 
 export default function TeacherAIGeneratorCreatePage() {
   const location = useLocation();
@@ -37,7 +44,7 @@ export default function TeacherAIGeneratorCreatePage() {
   } = useTeacherAIGeneratorContext();
   const preselectedDocumentId = Number(location.state?.documentId || 0) || null;
 
-  const [subjects, setSubjects] = useState<TeacherAssignedSubject[]>([]);
+  const [classSubjects, setClassSubjects] = useState<TeacherAssignedClassSubject[]>([]);
   const [topics, setTopics] = useState<TeacherTopicItem[]>([]);
   const [documents, setDocuments] = useState<TeacherDocumentTopicOption[]>([]);
 
@@ -46,9 +53,9 @@ export default function TeacherAIGeneratorCreatePage() {
   const [loadingDocuments, setLoadingDocuments] = useState(false);
   const [submittingRequest, setSubmittingRequest] = useState(false);
 
-  const [subjectId, setSubjectId] = useState<number | null>(null);
+  const [classSubjectId, setClassSubjectId] = useState<number | null>(null);
   const [topicId, setTopicId] = useState<number | null>(null);
-  const [documentId, setDocumentId] = useState<number | null>(null);
+  const [documentTopicId, setDocumentTopicId] = useState<number | null>(null);
   const [numQuestions, setNumQuestions] = useState(10);
   const [distributionInputMode, setDistributionInputMode] = useState<DistributionInputMode>('question_count');
   const [difficultyDistribution, setDifficultyDistribution] = useState<DifficultyDistributionDraftItem[]>(
@@ -57,8 +64,8 @@ export default function TeacherAIGeneratorCreatePage() {
   const [contentScope, setContentScope] = useState('');
 
   const selectedDocumentTopic = useMemo(
-    () => documents.find((item) => item.document_id === documentId) || null,
-    [documentId, documents],
+    () => documents.find((item) => item.document_topic_id === documentTopicId) || null,
+    [documentTopicId, documents],
   );
   const hasGeneratingRequest = activeRequests.length > 0;
   const contextHasActiveRequest = useMemo(() => {
@@ -107,7 +114,7 @@ export default function TeacherAIGeneratorCreatePage() {
   ]);
 
   const isCreateRequestDisabled = !selectedDocumentTopic
-    || !subjectId
+    || !classSubjectId
     || !topicId
     || hasInvalidQuestionCount
     || !!distributionValidationError
@@ -120,50 +127,66 @@ export default function TeacherAIGeneratorCreatePage() {
       setLoadingInitial(true);
       clearMessages();
       try {
-        const assignedSubjects = await getTeacherAssignedSubjects();
-        setSubjects(assignedSubjects);
+        const assignedClassSubjects = await getTeacherAssignedSubjects();
+        setClassSubjects(assignedClassSubjects);
 
-        if (!assignedSubjects.length) {
-          setSubjectId(null);
+        if (!assignedClassSubjects.length) {
+          setClassSubjectId(null);
           setTopicId(null);
-          setDocumentId(null);
+          setDocumentTopicId(null);
           return;
         }
 
-        const initialSubjectId = assignedSubjects[0].subject_id;
-        setSubjectId(initialSubjectId);
-
-        const subjectTopics = await getTeacherTopicsBySubjectId(initialSubjectId);
-        setTopics(subjectTopics);
-
-        if (!subjectTopics.length) {
-          setTopicId(null);
-          setDocumentId(null);
-          return;
-        }
-
-        let resolvedTopicId: number | null = subjectTopics[0].topic_id;
-        let resolvedDocuments = await getTeacherDocumentsBySubjectTopic(initialSubjectId, resolvedTopicId);
+        let resolvedClassSubjectId = assignedClassSubjects[0].class_subject_id;
+        let resolvedTopics: TeacherTopicItem[] = [];
+        let resolvedTopicId: number | null = null;
+        let resolvedDocuments: TeacherDocumentTopicOption[] = [];
 
         if (preselectedDocumentId) {
-          const matchedRows = await Promise.all(
-            subjectTopics.map(async (topic) => ({
-              topic_id: topic.topic_id,
-              rows: await getTeacherDocumentsBySubjectTopic(initialSubjectId, topic.topic_id),
-            })),
-          );
-          const hit = matchedRows.find((item) => item.rows.some((row) => row.document_id === preselectedDocumentId));
-          if (hit) {
-            resolvedTopicId = hit.topic_id;
-            resolvedDocuments = hit.rows;
+          for (const item of assignedClassSubjects) {
+            const candidateTopics = await getTeacherTopicsByClassSubjectId(item.class_subject_id);
+            for (const topic of candidateTopics) {
+              const candidateDocuments = await getTeacherDocumentsByClassSubjectTopic(item.class_subject_id, topic.topic_id);
+              if (candidateDocuments.some((row) => row.document_id === preselectedDocumentId)) {
+                resolvedClassSubjectId = item.class_subject_id;
+                resolvedTopics = candidateTopics;
+                resolvedTopicId = topic.topic_id;
+                resolvedDocuments = candidateDocuments;
+                break;
+              }
+            }
+            if (resolvedTopicId) break;
           }
+        }
+
+        if (!resolvedTopics.length) {
+          resolvedTopics = await getTeacherTopicsByClassSubjectId(resolvedClassSubjectId);
+        }
+
+        setClassSubjectId(resolvedClassSubjectId);
+        setTopics(resolvedTopics);
+
+        if (!resolvedTopics.length) {
+          setTopicId(null);
+          setDocumentTopicId(null);
+          return;
+        }
+
+        if (!resolvedTopicId) {
+          resolvedTopicId = resolvedTopics[0].topic_id;
+        }
+
+        if (!resolvedDocuments.length && resolvedTopicId) {
+          resolvedDocuments = await getTeacherDocumentsByClassSubjectTopic(resolvedClassSubjectId, resolvedTopicId);
         }
 
         setTopicId(resolvedTopicId);
         setDocuments(resolvedDocuments);
-        setDocumentId(resolvedDocuments.find((item) => item.document_id === preselectedDocumentId)?.document_id
-          ?? resolvedDocuments[0]?.document_id
-          ?? null);
+        setDocumentTopicId(
+          resolvedDocuments.find((item) => item.document_id === preselectedDocumentId)?.document_topic_id
+            ?? resolvedDocuments[0]?.document_topic_id
+            ?? null,
+        );
       } catch (caught: unknown) {
         setError(caught instanceof Error ? caught.message : 'Không thể tải dữ liệu AI Generator.');
       } finally {
@@ -182,10 +205,10 @@ export default function TeacherAIGeneratorCreatePage() {
     ));
   }, [distributionInputMode, numQuestions]);
 
-  const loadTopicsBySubject = async (nextSubjectId: number) => {
+  const loadTopicsByClassSubject = async (nextClassSubjectId: number) => {
     setLoadingTopics(true);
     try {
-      const rows = await getTeacherTopicsBySubjectId(nextSubjectId);
+      const rows = await getTeacherTopicsByClassSubjectId(nextClassSubjectId);
       setTopics(rows);
       return rows;
     } finally {
@@ -193,10 +216,10 @@ export default function TeacherAIGeneratorCreatePage() {
     }
   };
 
-  const loadDocumentsByTopic = async (nextSubjectId: number, nextTopicId: number) => {
+  const loadDocumentsByTopic = async (nextClassSubjectId: number, nextTopicId: number) => {
     setLoadingDocuments(true);
     try {
-      const rows = await getTeacherDocumentsBySubjectTopic(nextSubjectId, nextTopicId);
+      const rows = await getTeacherDocumentsByClassSubjectTopic(nextClassSubjectId, nextTopicId);
       setDocuments(rows);
       return rows;
     } finally {
@@ -204,30 +227,32 @@ export default function TeacherAIGeneratorCreatePage() {
     }
   };
 
-  const handleSubjectChange = async (nextSubjectId: number) => {
+  const handleClassSubjectChange = async (nextClassSubjectId: number) => {
     clearMessages();
-    setSubjectId(nextSubjectId);
+    setClassSubjectId(nextClassSubjectId);
     setTopicId(null);
-    setDocumentId(null);
+    setDocumentTopicId(null);
     setTopics([]);
     setDocuments([]);
-    const nextTopics = await loadTopicsBySubject(nextSubjectId);
+
+    const nextTopics = await loadTopicsByClassSubject(nextClassSubjectId);
     const defaultTopicId = nextTopics[0]?.topic_id ?? null;
     setTopicId(defaultTopicId);
     if (!defaultTopicId) return;
 
-    const nextDocuments = await loadDocumentsByTopic(nextSubjectId, defaultTopicId);
-    setDocumentId(nextDocuments[0]?.document_id ?? null);
+    const nextDocuments = await loadDocumentsByTopic(nextClassSubjectId, defaultTopicId);
+    setDocumentTopicId(nextDocuments[0]?.document_topic_id ?? null);
   };
 
   const handleTopicChange = async (nextTopicId: number) => {
     clearMessages();
     setTopicId(nextTopicId);
-    setDocumentId(null);
+    setDocumentTopicId(null);
     setDocuments([]);
-    if (!subjectId) return;
-    const nextDocuments = await loadDocumentsByTopic(subjectId, nextTopicId);
-    setDocumentId(nextDocuments[0]?.document_id ?? null);
+    if (!classSubjectId) return;
+
+    const nextDocuments = await loadDocumentsByTopic(classSubjectId, nextTopicId);
+    setDocumentTopicId(nextDocuments[0]?.document_topic_id ?? null);
   };
 
   const handleDistributionCountChange = (difficulty: DifficultyLevel, value: number) => {
@@ -256,12 +281,12 @@ export default function TeacherAIGeneratorCreatePage() {
     event.preventDefault();
     clearMessages();
 
-    if (!selectedDocumentTopic || !subjectId || !topicId) {
-      setError('Vui lòng chọn đủ môn học, chủ đề và tài liệu trước khi tạo yêu cầu.');
+    if (!selectedDocumentTopic || !classSubjectId || !topicId) {
+      setError('Vui lòng chọn đủ lớp / môn học, chủ đề và tài liệu trước khi tạo yêu cầu.');
       return;
     }
     if (hasGeneratingRequest) {
-      setError('Đang có job AI pending/processing. Vui lòng chờ hoàn tất trước khi tạo job mới.');
+      setError('Đang có công việc AI pending/processing. Vui lòng chờ hoàn tất trước khi tạo công việc mới.');
       return;
     }
     if (distributionValidationError) {
@@ -311,17 +336,17 @@ export default function TeacherAIGeneratorCreatePage() {
       <form className="mt-8 space-y-6" onSubmit={handleCreateRequest}>
         <div className="grid gap-5">
           <div>
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Môn học</label>
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Lớp / Môn học</label>
             <select
               className={inputClass}
-              value={subjectId ?? ''}
-              onChange={(event) => handleSubjectChange(Number(event.target.value))}
-              disabled={!subjects.length || hasGeneratingRequest}
+              value={classSubjectId ?? ''}
+              onChange={(event) => handleClassSubjectChange(Number(event.target.value))}
+              disabled={!classSubjects.length || hasGeneratingRequest}
             >
-              {!subjects.length && <option value="">Không có môn học được phân công</option>}
-              {subjects.map((item) => (
-                <option key={item.subject_id} value={item.subject_id}>
-                  {item.subject_name} ({item.subject_code})
+              {!classSubjects.length && <option value="">Không có lớp / môn học được phân công</option>}
+              {classSubjects.map((item) => (
+                <option key={item.class_subject_id} value={item.class_subject_id}>
+                  {buildClassSubjectLabel(item)}
                 </option>
               ))}
             </select>
@@ -333,10 +358,10 @@ export default function TeacherAIGeneratorCreatePage() {
               className={inputClass}
               value={topicId ?? ''}
               onChange={(event) => handleTopicChange(Number(event.target.value))}
-              disabled={!subjectId || loadingTopics || !topics.length || hasGeneratingRequest}
+              disabled={!classSubjectId || loadingTopics || !topics.length || hasGeneratingRequest}
             >
-              {!subjectId && <option value="">Vui lòng chọn môn học trước</option>}
-              {subjectId && !topics.length && <option value="">Không có chủ đề cho môn học này</option>}
+              {!classSubjectId && <option value="">Vui lòng chọn lớp / môn học trước</option>}
+              {classSubjectId && !topics.length && <option value="">Không có chủ đề cho lớp / môn học này</option>}
               {topics.map((item) => (
                 <option key={item.topic_id} value={item.topic_id}>
                   {item.topic_name}
@@ -349,14 +374,14 @@ export default function TeacherAIGeneratorCreatePage() {
             <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Tài liệu</label>
             <select
               className={inputClass}
-              value={documentId ?? ''}
-              onChange={(event) => setDocumentId(Number(event.target.value))}
+              value={documentTopicId ?? ''}
+              onChange={(event) => setDocumentTopicId(Number(event.target.value))}
               disabled={!topicId || loadingDocuments || !documents.length || hasGeneratingRequest}
             >
               {!topicId && <option value="">Vui lòng chọn chủ đề trước</option>}
               {topicId && !documents.length && <option value="">Không có tài liệu phù hợp</option>}
               {documents.map((item) => (
-                <option key={item.document_topic_id} value={item.document_id}>
+                <option key={item.document_topic_id} value={item.document_topic_id}>
                   {item.document_title}
                 </option>
               ))}
@@ -380,7 +405,7 @@ export default function TeacherAIGeneratorCreatePage() {
 
           <div>
             <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Chế độ nhập phân phối</label>
-            <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-2">
+            <div className="grid grid-cols-2 gap-2 p-2 mt-2 border rounded-2xl border-slate-100 bg-slate-50">
               <button
                 type="button"
                 disabled={hasGeneratingRequest}
@@ -431,7 +456,7 @@ export default function TeacherAIGeneratorCreatePage() {
                   : 'Nhập tỷ lệ phần trăm cho từng mức, hệ thống sẽ tự tính số câu tương ứng.'}
               </p>
             </div>
-            <div className="rounded-2xl bg-white px-4 py-3 text-right shadow-sm">
+            <div className="px-4 py-3 text-right bg-white shadow-sm rounded-2xl">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Tổng hiện tại</p>
               <p className="mt-1 text-sm font-black text-slate-800">{totalDistributedQuestions}/{numQuestions} câu</p>
               <p className="text-xs font-bold text-slate-500">{totalDistributedPercentage}%</p>
@@ -482,17 +507,17 @@ export default function TeacherAIGeneratorCreatePage() {
               {distributionValidationError}
             </div>
           ) : (
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
+            <div className="px-4 py-3 text-sm font-bold border rounded-2xl border-emerald-100 bg-emerald-50 text-emerald-700">
               Phân phối hợp lệ và sẵn sàng gửi yêu cầu AI.
             </div>
           )}
         </div>
 
         {selectedDocumentTopic && (
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-5 py-4 text-xs font-bold text-slate-600">
+          <div className="px-5 py-4 text-xs font-bold border rounded-2xl border-slate-100 bg-slate-50 text-slate-600">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Tài liệu đã chọn</p>
             <p className="mt-3 text-sm font-black text-slate-800">{selectedDocumentTopic.document_title}</p>
-            <p className="mt-2">{selectedDocumentTopic.topic_name} | {selectedDocumentTopic.subject_name}</p>
+            <p className="mt-2">{formatDocumentTopicContext(selectedDocumentTopic)}</p>
             <p className="mt-1">
               Định dạng: {selectedDocumentTopic.file_type || '-'} | Dung lượng: {formatFileSize(selectedDocumentTopic.file_size)} | Trạng thái: {selectedDocumentTopic.status || '-'}
             </p>
@@ -512,7 +537,7 @@ export default function TeacherAIGeneratorCreatePage() {
             disabled={isCreateRequestDisabled}
             className="rounded-2xl bg-[var(--color-primary)] px-8 py-4 text-[10px] font-black uppercase tracking-widest text-white shadow-xl shadow-red-900/20 transition-all hover:bg-[var(--color-primary-dark)] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submittingRequest ? 'Đang gửi yêu cầu...' : 'Tạo job AI'}
+            {submittingRequest ? 'Đang gửi yêu cầu...' : 'Tạo tiến trình AI'}
           </button>
         </div>
       </form>

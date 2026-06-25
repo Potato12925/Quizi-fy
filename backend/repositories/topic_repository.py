@@ -7,7 +7,7 @@ from core.supabase import SupabaseManager
 SELECT_FIELDS = (
     "topic_id,topic_name,description,class_subject_id,created_at,updated_at,deleted_at,"
     "class_subjects!inner(class_subject_id,class_id,subject_id,assigned_teacher_id,"
-    "classes!inner(class_id,class_name),subjects!inner(subject_id,subject_name))"
+    "classes!inner(class_id,class_code,class_name),subjects!inner(subject_id,subject_code,subject_name))"
 )
 
 
@@ -82,6 +82,27 @@ async def list_topics_by_class_subject_ids(
         query = query.eq("class_subjects.subject_id", subject_id)
     response = await asyncio.to_thread(lambda: query.order("topic_id").range(start, end).execute())
     return response.data or [], int(response.count or 0)
+
+
+async def list_topics_by_class_subject_ids_unpaginated(
+    class_subject_ids: list[int],
+    subject_id: int | None = None,
+) -> list[dict]:
+    if not class_subject_ids:
+        return []
+
+    supabase = SupabaseManager.get_client()
+    query = (
+        supabase.table("topics")
+        .select(SELECT_FIELDS)
+        .in_("class_subject_id", class_subject_ids)
+        .is_("deleted_at", None)
+    )
+    if subject_id is not None:
+        query = query.eq("class_subjects.subject_id", subject_id)
+
+    response = await asyncio.to_thread(lambda: query.order("topic_id").execute())
+    return response.data or []
 
 
 async def list_assigned_class_subject_ids_by_teacher(teacher_id: int) -> list[int]:

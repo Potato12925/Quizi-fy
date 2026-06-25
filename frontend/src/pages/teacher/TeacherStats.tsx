@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getTeacherStats, type TeacherStatsData } from '@/api/teacherApi';
 import {
   getTeacherAssignedSubjects,
-  getTeacherTopicsBySubjectId,
+  getTeacherTopicsByClassSubjectId,
   type TeacherAssignedSubject,
   type TeacherTopicItem,
 } from '@/api/teacherAIGeneratorApi';
@@ -15,11 +15,19 @@ const formatNumber = (value: number) => new Intl.NumberFormat('vi-VN').format(va
 
 const clampPercent = (value: number) => Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
 
+const formatAssignmentLabel = (subject: TeacherAssignedSubject) =>
+  [
+    [subject.subject_code, subject.subject_name].filter(Boolean).join(' / '),
+    [subject.class_code, subject.class_name].filter(Boolean).join(' / '),
+  ]
+    .filter(Boolean)
+    .join(' - ');
+
 export default function TeacherStatsPage() {
   const [data, setData] = useState<TeacherStatsData | null>(null);
   const [subjects, setSubjects] = useState<TeacherAssignedSubject[]>([]);
   const [topics, setTopics] = useState<TeacherTopicItem[]>([]);
-  const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null);
+  const [selectedClassSubjectId, setSelectedClassSubjectId] = useState<number | null>(null);
   const [selectedTopicId, setSelectedTopicId] = useState<number | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -32,8 +40,8 @@ export default function TeacherStatsPage() {
   const hasBootstrappedRef = useRef(false);
 
   const selectedSubject = useMemo(
-    () => subjects.find((subject) => subject.subject_id === selectedSubjectId) || null,
-    [subjects, selectedSubjectId],
+    () => subjects.find((subject) => subject.class_subject_id === selectedClassSubjectId) || null,
+    [subjects, selectedClassSubjectId],
   );
 
   const selectedTopic = useMemo(
@@ -42,7 +50,7 @@ export default function TeacherStatsPage() {
   );
 
   const loadStats = async (
-    subjectId: number | null,
+    classSubjectId: number | null,
     topicId: number | null,
     showBlockingLoader: boolean,
   ) => {
@@ -54,7 +62,7 @@ export default function TeacherStatsPage() {
 
     try {
       const stats = await getTeacherStats({
-        subjectId: subjectId ?? undefined,
+        classSubjectId: classSubjectId ?? undefined,
         topicId: topicId ?? undefined,
       });
       setData(stats);
@@ -73,13 +81,13 @@ export default function TeacherStatsPage() {
     }
   };
 
-  const loadTopicsBySubject = async (subjectId: number | null) => {
-    if (!subjectId) {
+  const loadTopicsByClassSubject = async (classSubjectId: number | null) => {
+    if (!classSubjectId) {
       setTopics([]);
       return;
     }
     try {
-      const topicItems = await getTeacherTopicsBySubjectId(subjectId);
+      const topicItems = await getTeacherTopicsByClassSubjectId(classSubjectId);
       setTopics(topicItems);
     } catch {
       setTopics([]);
@@ -108,8 +116,8 @@ export default function TeacherStatsPage() {
       hasBootstrappedRef.current = true;
       return;
     }
-    loadStats(selectedSubjectId, selectedTopicId, false);
-  }, [selectedSubjectId, selectedTopicId]);
+    loadStats(selectedClassSubjectId, selectedTopicId, false);
+  }, [selectedClassSubjectId, selectedTopicId]);
 
   useEffect(() => {
     const handleOutsideClick = () => {
@@ -120,12 +128,12 @@ export default function TeacherStatsPage() {
     return () => document.removeEventListener('click', handleOutsideClick);
   }, []);
 
-  const handleSelectSubject = async (subjectId: number | null) => {
-    setSelectedSubjectId(subjectId);
+  const handleSelectSubject = async (classSubjectId: number | null) => {
+    setSelectedClassSubjectId(classSubjectId);
     setSelectedTopicId(null);
     setIsSubjectDropdownOpen(false);
     setIsTopicDropdownOpen(false);
-    await loadTopicsBySubject(subjectId);
+    await loadTopicsByClassSubject(classSubjectId);
   };
 
   const handleSelectTopic = (topicId: number | null) => {
@@ -205,7 +213,7 @@ export default function TeacherStatsPage() {
               }}
               className="px-6 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2 cursor-pointer hover:bg-slate-800 transition-all animate-in duration-200"
             >
-              {selectedSubject ? selectedSubject.subject_name : 'Tất cả môn học'}
+              {selectedSubject ? formatAssignmentLabel(selectedSubject) : 'Tất cả lớp - môn học'}
               <span className="material-symbols-outlined text-xs">keyboard_arrow_down</span>
             </button>
 
@@ -217,23 +225,23 @@ export default function TeacherStatsPage() {
                     handleSelectSubject(null);
                   }}
                   className={`w-full text-left px-5 py-3 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors cursor-pointer ${
-                    selectedSubjectId === null ? 'text-[#b20112]' : 'text-slate-600'
+                    selectedClassSubjectId === null ? 'text-[#b20112]' : 'text-slate-600'
                   }`}
                 >
-                  Tất cả môn học
+                  Tất cả lớp - môn học
                 </button>
                 {subjects.map((subject) => (
                   <button
-                    key={subject.subject_id}
+                    key={subject.class_subject_id}
                     onClick={(event) => {
                       event.stopPropagation();
-                      handleSelectSubject(subject.subject_id);
+                      handleSelectSubject(subject.class_subject_id);
                     }}
                     className={`w-full text-left px-5 py-3 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors cursor-pointer ${
-                      selectedSubjectId === subject.subject_id ? 'text-[#b20112]' : 'text-slate-600'
+                      selectedClassSubjectId === subject.class_subject_id ? 'text-[#b20112]' : 'text-slate-600'
                     }`}
                   >
-                    {subject.subject_name}
+                    {formatAssignmentLabel(subject)}
                   </button>
                 ))}
               </div>
@@ -244,12 +252,12 @@ export default function TeacherStatsPage() {
             <button
               onClick={(event) => {
                 event.stopPropagation();
-                if (!selectedSubjectId) return;
+                if (!selectedClassSubjectId) return;
                 setIsTopicDropdownOpen(!isTopicDropdownOpen);
                 setIsSubjectDropdownOpen(false);
               }}
               className={`px-6 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all animate-in duration-200 ${
-                selectedSubjectId
+                selectedClassSubjectId
                   ? 'border-slate-100 text-slate-600 cursor-pointer hover:bg-slate-50'
                   : 'border-slate-50 text-slate-300 cursor-not-allowed'
               }`}
@@ -258,7 +266,7 @@ export default function TeacherStatsPage() {
               <span className="material-symbols-outlined text-xs">keyboard_arrow_down</span>
             </button>
 
-            {isTopicDropdownOpen && selectedSubjectId && (
+            {isTopicDropdownOpen && selectedClassSubjectId && (
               <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-100 rounded-2xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2 duration-200">
                 <button
                   onClick={(event) => {

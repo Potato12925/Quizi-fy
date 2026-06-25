@@ -1,6 +1,7 @@
 import type {
   DifficultyLevel,
   QuestionStatus,
+  TeacherDocumentTopicOption,
   TeacherAiRequestDifficultyDistribution,
   TeacherAiRequestItem,
 } from '@/api/teacherAIGeneratorApi';
@@ -186,6 +187,21 @@ export const formatDifficultyDistribution = (
       return `${label}: ${countText}${percentageText}`;
     })
     .join(' | ');
+};
+
+export const formatDocumentTopicContext = (
+  item?: Pick<
+    TeacherDocumentTopicOption,
+    'class_code' | 'class_name' | 'subject_code' | 'subject_name' | 'topic_name'
+  > | null,
+) => {
+  if (!item) return '-';
+
+  const classLabel = [item.class_code, item.class_name].filter(Boolean).join(' - ');
+  const subjectLabel = [item.subject_code, item.subject_name].filter(Boolean).join(' - ');
+  const context = [classLabel, subjectLabel].filter(Boolean).join(' | ');
+
+  return [context, item.topic_name].filter(Boolean).join(' -> ') || '-';
 };
 
 export const getRequestStatusBadge = (status: TeacherAiRequestItem['status']) => {

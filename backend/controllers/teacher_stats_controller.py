@@ -12,6 +12,7 @@ router = APIRouter(prefix="/teacher", tags=["Teacher Stats"])
 
 @router.get("/stats", summary="Get teacher stats")
 async def get_teacher_stats_route(
+    class_subject_id: int | None = Query(default=None, ge=1),
     subject_id: int | None = Query(default=None, ge=1),
     topic_id: int | None = Query(default=None, ge=1),
     debug: bool = Query(default=False),
@@ -20,6 +21,7 @@ async def get_teacher_stats_route(
     try:
         result = await get_teacher_stats(
             current_user=current_user,
+            class_subject_id=class_subject_id,
             subject_id=subject_id,
             topic_id=topic_id,
             debug=debug,

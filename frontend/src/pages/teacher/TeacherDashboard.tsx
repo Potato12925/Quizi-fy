@@ -1,16 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+
+import EmptyState from '@/components/common/EmptyState';
+import ErrorState from '@/components/common/ErrorState';
+import LoadingState from '@/components/common/LoadingState';
 import {
   getTeacherDashboardStats,
+  normalizeTeacherDashboardUploadSubjects,
   uploadTeacherDashboardDocument,
   type TeacherDashboardData,
-  type TeacherDashboardUploadSubject,
+  type TeachingAssignmentOption,
 } from '@/api/teacherDashboardApi';
 import { useAuth } from '@/contexts/AuthContext';
-
-import LoadingState from '@/components/common/LoadingState';
-import ErrorState from '@/components/common/ErrorState';
-import EmptyState from '@/components/common/EmptyState';
 
 const ALLOWED_TYPES = [
   'application/pdf',
@@ -27,6 +28,14 @@ type DashboardStatCard = {
   icon: string;
   color: string;
   bg: string;
+};
+
+type AssignmentClassGroup = {
+  key: string;
+  classId: number | null;
+  classCode: string | null;
+  className: string | null;
+  assignments: TeachingAssignmentOption[];
 };
 
 const formatNumber = (value: number) => new Intl.NumberFormat('vi-VN').format(value);
@@ -51,9 +60,7 @@ const toTimeAgo = (value?: string | null) => {
   return `${days} ngày trước`;
 };
 
-const statusUiByAiStatus = (
-  status: string | null,
-): { label: string; color: string } => {
+const statusUiByAiStatus = (status: string | null): { label: string; color: string } => {
   if (status === 'completed') return { label: 'Đã xử lý AI', color: 'text-emerald-600 bg-emerald-50' };
   if (status === 'processing') return { label: 'Đang xử lý', color: 'text-blue-600 bg-blue-50' };
   if (status === 'pending') return { label: 'Đang chờ', color: 'text-amber-600 bg-amber-50' };
@@ -72,15 +79,55 @@ const cardFromRequestStatus = (status: string): { icon: string; bg: string } => 
 
 const clampPct = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
 
+const formatAssignmentLabel = (assignment: TeachingAssignmentOption) => {
+  const classLabel = [assignment.classCode, assignment.className].filter(Boolean).join(' - ');
+  const subjectLabel = [assignment.subjectCode, assignment.subjectName].filter(Boolean).join(' - ');
+
+  if (classLabel && subjectLabel) return `${classLabel} / ${subjectLabel}`;
+  if (assignment.className && assignment.subjectName) return `${assignment.className} - ${assignment.subjectName}`;
+  return assignment.subjectName;
+};
+
+const formatClassLabel = (group: AssignmentClassGroup) => {
+  const classLabel = [group.classCode, group.className].filter(Boolean).join(' - ');
+  if (classLabel) return classLabel;
+  if (group.className) return group.className;
+  return 'Chưa đồng bộ lớp';
+};
+
+const formatContextLabel = ({
+  classCode,
+  className,
+  subjectCode,
+  subjectName,
+  topicName,
+}: {
+  classCode?: string | null;
+  className?: string | null;
+  subjectCode?: string | null;
+  subjectName?: string | null;
+  topicName?: string | null;
+}) => {
+  const classLabel = [classCode, className].filter(Boolean).join(' - ');
+  const subjectLabel = [subjectCode, subjectName].filter(Boolean).join(' - ');
+  return [classLabel, subjectLabel, topicName].filter(Boolean).join(' / ');
+};
+
 const resolveInitialUploadSelection = (
-  subjects: TeacherDashboardUploadSubject[],
-): { subjectId: number | null; topicId: number | null } => {
-  const firstSubject = subjects[0];
-  if (!firstSubject) return { subjectId: null, topicId: null };
-  const firstTopic = firstSubject.topics[0];
+  assignmentGroups: AssignmentClassGroup[],
+): { classGroupKey: string | null; classSubjectId: number | null; topicId: number | null } => {
+  const firstGroup = assignmentGroups[0];
+  const firstAssignment = firstGroup?.assignments[0];
+  const firstTopic = firstAssignment?.topics[0];
+
+  if (!firstGroup || !firstAssignment) {
+    return { classGroupKey: null, classSubjectId: null, topicId: null };
+  }
+
   return {
-    subjectId: firstSubject.subject_id,
-    topicId: firstTopic ? firstTopic.topic_id : null,
+    classGroupKey: firstGroup.key,
+    classSubjectId: firstAssignment.classSubjectId,
+    topicId: firstTopic?.topic_id ?? null,
   };
 };
 
@@ -97,7 +144,8 @@ export default function TeacherDashboard() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadFormData, setUploadFormData] = useState({
     title: '',
-    subjectId: null as number | null,
+    classGroupKey: null as string | null,
+    classSubjectId: null as number | null,
     topicId: null as number | null,
     description: '',
   });
@@ -117,37 +165,64 @@ export default function TeacherDashboard() {
   };
 
   useEffect(() => {
-    fetchDashboard(true);
+    const timer = window.setTimeout(() => {
+      void fetchDashboard(true);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
-  const uploadSubjects = data?.upload_subjects || [];
-  const selectedSubject = useMemo(
-    () => uploadSubjects.find((subject) => subject.subject_id === uploadFormData.subjectId) || null,
-    [uploadSubjects, uploadFormData.subjectId],
+  const teachingAssignments = useMemo(
+    () => normalizeTeacherDashboardUploadSubjects(data?.upload_subjects || []),
+    [data?.upload_subjects],
   );
-  const currentTopics = selectedSubject?.topics || [];
 
-  useEffect(() => {
-    if (!isUploadModalOpen) return;
-    if (!uploadSubjects.length) return;
-    if (uploadFormData.subjectId && selectedSubject) {
-      const stillHasTopic = currentTopics.some((topic) => topic.topic_id === uploadFormData.topicId);
-      if (!stillHasTopic) {
-        setUploadFormData((prev) => ({
-          ...prev,
-          topicId: currentTopics[0]?.topic_id ?? null,
-        }));
+  const assignmentGroups = useMemo<AssignmentClassGroup[]>(() => {
+    const groups = new Map<string, AssignmentClassGroup>();
+
+    for (const assignment of teachingAssignments) {
+      const key = assignment.classId != null ? `class-${assignment.classId}` : 'legacy-unscoped';
+      const existing = groups.get(key);
+
+      if (existing) {
+        existing.assignments.push(assignment);
+        continue;
       }
-      return;
+
+      groups.set(key, {
+        key,
+        classId: assignment.classId,
+        classCode: assignment.classCode,
+        className: assignment.className,
+        assignments: [assignment],
+      });
     }
 
-    const initial = resolveInitialUploadSelection(uploadSubjects);
-    setUploadFormData((prev) => ({
-      ...prev,
-      subjectId: initial.subjectId,
-      topicId: initial.topicId,
-    }));
-  }, [isUploadModalOpen, uploadSubjects, uploadFormData.subjectId, uploadFormData.topicId, selectedSubject, currentTopics]);
+    return Array.from(groups.values());
+  }, [teachingAssignments]);
+
+  const selectedClassGroup = useMemo(
+    () => assignmentGroups.find((group) => group.key === uploadFormData.classGroupKey) || null,
+    [assignmentGroups, uploadFormData.classGroupKey],
+  );
+
+  const currentAssignments = useMemo(
+    () => selectedClassGroup?.assignments || [],
+    [selectedClassGroup],
+  );
+
+  const selectedAssignment = useMemo(
+    () =>
+      currentAssignments.find((assignment) => assignment.classSubjectId === uploadFormData.classSubjectId) ||
+      teachingAssignments.find((assignment) => assignment.classSubjectId === uploadFormData.classSubjectId) ||
+      null,
+    [currentAssignments, teachingAssignments, uploadFormData.classSubjectId],
+  );
+
+  const currentTopics = useMemo(
+    () => selectedAssignment?.topics || [],
+    [selectedAssignment],
+  );
 
   const statCards: DashboardStatCard[] = useMemo(() => {
     if (!data) return [];
@@ -173,7 +248,7 @@ export default function TeacherDashboard() {
       {
         label: 'Chủ đề giảng dạy',
         value: formatNumber(summary.total_topics),
-        sub: `${formatNumber(summary.total_assigned_subjects)} môn được phân công`,
+        sub: `${formatNumber(summary.total_assigned_subjects)} phân công lớp-môn`,
         icon: 'topic',
         color: 'text-blue-600',
         bg: 'bg-blue-50',
@@ -194,9 +269,17 @@ export default function TeacherDashboard() {
     if (!data) return [];
     return data.recent_ai_requests.map((request) => {
       const iconUi = cardFromRequestStatus(request.status);
+      const context = formatContextLabel({
+        classCode: request.class_code,
+        className: request.class_name,
+        subjectCode: request.subject_code,
+        subjectName: request.subject_name,
+        topicName: request.topic_name,
+      });
+
       return {
         title: request.document_title || `Yêu cầu #${request.request_id}`,
-        info: `${request.num_questions} câu hỏi | ${toTimeAgo(request.created_at)}`,
+        info: [context, `${request.num_questions} câu hỏi`, toTimeAgo(request.created_at)].filter(Boolean).join(' | '),
         icon: iconUi.icon,
         bg: iconUi.bg,
       };
@@ -210,6 +293,13 @@ export default function TeacherDashboard() {
       return {
         id: doc.document_id,
         name: doc.title,
+        context: formatContextLabel({
+          classCode: doc.class_code,
+          className: doc.class_name,
+          subjectCode: doc.subject_code,
+          subjectName: doc.subject_name,
+          topicName: doc.topic_names[0] || null,
+        }),
         date: formatDate(doc.created_at),
         status: statusUi.label,
         statusColor: statusUi.color,
@@ -223,10 +313,11 @@ export default function TeacherDashboard() {
   }, [data]);
 
   const handleOpenUpload = () => {
-    const initial = resolveInitialUploadSelection(uploadSubjects);
+    const initial = resolveInitialUploadSelection(assignmentGroups);
     setUploadFormData({
       title: '',
-      subjectId: initial.subjectId,
+      classGroupKey: initial.classGroupKey,
+      classSubjectId: initial.classSubjectId,
       topicId: initial.topicId,
       description: '',
     });
@@ -314,16 +405,21 @@ export default function TeacherDashboard() {
       data.question_difficulty.advanced,
   );
   const easyPct = clampPct(
-    ((data.question_difficulty.recognition + data.question_difficulty.comprehension) /
-      totalDifficultyQuestions) *
-      100,
+    ((data.question_difficulty.recognition + data.question_difficulty.comprehension) / totalDifficultyQuestions) * 100,
   );
   const hardPct = clampPct(
-    ((data.question_difficulty.application + data.question_difficulty.advanced) /
-      totalDifficultyQuestions) *
-      100,
+    ((data.question_difficulty.application + data.question_difficulty.advanced) / totalDifficultyQuestions) * 100,
   );
   const topApproved = recentApprovedQuestions[0];
+  const topApprovedContext = topApproved
+    ? formatContextLabel({
+        classCode: topApproved.class_code,
+        className: topApproved.class_name,
+        subjectCode: topApproved.subject_code,
+        subjectName: topApproved.subject_name,
+        topicName: topApproved.topic_name,
+      })
+    : '';
 
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700 relative">
@@ -413,7 +509,13 @@ export default function TeacherDashboard() {
                 <div key={item.question_id} className="border border-slate-100 rounded-xl p-3">
                   <p className="text-xs font-black text-slate-800 line-clamp-2">{item.content}</p>
                   <p className="text-[10px] font-bold text-slate-400 uppercase mt-2 tracking-wide">
-                    {item.subject_name || 'N/A'} | {toTimeAgo(item.updated_at)}
+                    {[formatContextLabel({
+                      classCode: item.class_code,
+                      className: item.class_name,
+                      subjectCode: item.subject_code,
+                      subjectName: item.subject_name,
+                      topicName: item.topic_name,
+                    }), toTimeAgo(item.updated_at)].filter(Boolean).join(' | ')}
                   </p>
                 </div>
               ))
@@ -460,7 +562,14 @@ export default function TeacherDashboard() {
                       <td className="py-6">
                         <div className="flex items-center gap-4">
                           <span className="material-symbols-outlined text-slate-300 group-hover:text-[#b20112] transition-colors">description</span>
-                          <span className="font-bold text-slate-700">{m.name}</span>
+                          <div>
+                            <span className="font-bold text-slate-700 block">{m.name}</span>
+                            {m.context && (
+                              <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block mt-1">
+                                {m.context}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="py-6 text-slate-400 text-[11px] font-bold uppercase tracking-tighter">{m.date}</td>
@@ -552,30 +661,57 @@ export default function TeacherDashboard() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Môn học</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Lớp</label>
                     <select
-                      value={uploadFormData.subjectId ?? ''}
+                      value={uploadFormData.classGroupKey ?? ''}
                       onChange={(e) => {
-                        const nextSubjectId = Number(e.target.value);
-                        const nextSubject = uploadSubjects.find((subject) => subject.subject_id === nextSubjectId) || null;
+                        const nextClassGroupKey = e.target.value || null;
+                        const nextClassGroup = assignmentGroups.find((group) => group.key === nextClassGroupKey) || null;
+                        const nextAssignment = nextClassGroup?.assignments[0] || null;
                         setUploadFormData((prev) => ({
                           ...prev,
-                          subjectId: Number.isFinite(nextSubjectId) ? nextSubjectId : null,
-                          topicId: nextSubject?.topics[0]?.topic_id ?? null,
+                          classGroupKey: nextClassGroupKey,
+                          classSubjectId: nextAssignment?.classSubjectId ?? null,
+                          topicId: nextAssignment?.topics[0]?.topic_id ?? null,
                         }));
                       }}
                       className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold focus:ring-2 focus:ring-red-500/20 cursor-pointer"
                     >
-                      {!uploadSubjects.length && <option value="">Không có môn học</option>}
-                      {uploadSubjects.map((subject) => (
-                        <option key={subject.subject_id} value={subject.subject_id}>
-                          {subject.subject_name}
+                      {!assignmentGroups.length && <option value="">Không có lớp</option>}
+                      {assignmentGroups.map((group) => (
+                        <option key={group.key} value={group.key}>
+                          {formatClassLabel(group)}
                         </option>
                       ))}
                     </select>
                   </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Môn học trong lớp</label>
+                    <select
+                      value={uploadFormData.classSubjectId ?? ''}
+                      onChange={(e) => {
+                        const nextClassSubjectId = Number(e.target.value);
+                        const nextAssignment = currentAssignments.find((assignment) => assignment.classSubjectId === nextClassSubjectId) || null;
+                        setUploadFormData((prev) => ({
+                          ...prev,
+                          classSubjectId: Number.isFinite(nextClassSubjectId) ? nextClassSubjectId : null,
+                          topicId: nextAssignment?.topics[0]?.topic_id ?? null,
+                        }));
+                      }}
+                      className="w-full p-4 rounded-2xl bg-slate-50 border-none text-xs font-bold focus:ring-2 focus:ring-red-500/20 cursor-pointer"
+                    >
+                      {!currentAssignments.length && <option value="">Không có môn học</option>}
+                      {currentAssignments.map((assignment) => (
+                        <option key={`${assignment.classSubjectId}-${assignment.subjectId}`} value={assignment.classSubjectId}>
+                          {formatAssignmentLabel(assignment)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Chủ đề (Topic)</label>
                     <select
@@ -592,6 +728,12 @@ export default function TeacherDashboard() {
                     </select>
                   </div>
                 </div>
+
+                {!teachingAssignments.length && (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 text-slate-500 text-[11px] font-bold">
+                    Giáo viên chưa được phân công lớp/môn/chủ đề nào.
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Mô tả (tùy chọn)</label>
@@ -621,7 +763,7 @@ export default function TeacherDashboard() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting || !uploadSubjects.length}
+                    disabled={isSubmitting || !teachingAssignments.length}
                     className="bg-slate-900 text-white px-12 py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-slate-900/20 hover:bg-black transition-all disabled:opacity-50 flex items-center gap-3"
                   >
                     {isSubmitting ? (
@@ -650,7 +792,7 @@ export default function TeacherDashboard() {
           <h2 className="text-4xl font-black text-white leading-[1.1] tracking-tighter">Tối ưu hóa nội dung giảng dạy</h2>
           <p className="text-white/70 font-medium leading-relaxed">
             {topApproved
-              ? `Câu hỏi được duyệt gần nhất thuộc môn ${topApproved.subject_name || 'N/A'} (${topApproved.topic_name || 'N/A'}). Bạn có thể tiếp tục tạo thêm bộ câu hỏi cùng bối cảnh này.`
+              ? `Câu hỏi được duyệt gần nhất thuộc ${topApprovedContext || 'ngữ cảnh hiện tại'}. Bạn có thể tiếp tục tạo thêm bộ câu hỏi cùng bối cảnh này.`
               : 'Hãy tạo bộ câu hỏi AI mới từ tài liệu để hệ thống xây dựng thống kê và gợi ý chi tiết hơn cho lớp học.'}
           </p>
           <div className="flex flex-wrap gap-4 pt-4 justify-center lg:justify-start">

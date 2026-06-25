@@ -4,6 +4,7 @@ import type { ResourceFormModalProps } from '../types';
 
 export default function ResourceFormModal({
   fileInputRef,
+  classOptions,
   formData,
   formError,
   isModalOpen,
@@ -17,9 +18,10 @@ export default function ResourceFormModal({
   subjects,
   onClose,
   onDescriptionChange,
+  onClassChange,
+  onClassSubjectChange,
   onFileChange,
   onOpenFilePicker,
-  onSubjectChange,
   onSubmit,
   onTitleChange,
   onTopicToggle,
@@ -66,6 +68,7 @@ export default function ResourceFormModal({
                 <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.95fr)]">
                   <ResourceForm
                     fileInputRef={fileInputRef}
+                    classOptions={classOptions}
                     formData={formData}
                     formError={formError}
                     isModalTopicsLoading={isModalTopicsLoading}
@@ -74,9 +77,10 @@ export default function ResourceFormModal({
                     selectedFile={selectedFile}
                     subjects={subjects}
                     onDescriptionChange={onDescriptionChange}
+                    onClassChange={onClassChange}
+                    onClassSubjectChange={onClassSubjectChange}
                     onFileChange={onFileChange}
                     onOpenFilePicker={onOpenFilePicker}
-                    onSubjectChange={onSubjectChange}
                     onTitleChange={onTitleChange}
                     onTopicToggle={onTopicToggle}
                   />
@@ -104,6 +108,7 @@ export default function ResourceFormModal({
               <div className="space-y-6">
                 <ResourceForm
                   fileInputRef={fileInputRef}
+                  classOptions={classOptions}
                   formData={formData}
                   formError={formError}
                   isModalTopicsLoading={isModalTopicsLoading}
@@ -112,9 +117,10 @@ export default function ResourceFormModal({
                   selectedFile={selectedFile}
                   subjects={subjects}
                   onDescriptionChange={onDescriptionChange}
+                  onClassChange={onClassChange}
+                  onClassSubjectChange={onClassSubjectChange}
                   onFileChange={onFileChange}
                   onOpenFilePicker={onOpenFilePicker}
-                  onSubjectChange={onSubjectChange}
                   onTitleChange={onTitleChange}
                   onTopicToggle={onTopicToggle}
                 />

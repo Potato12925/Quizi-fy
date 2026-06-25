@@ -48,11 +48,25 @@ async def generate_practice_set(student_id: int, payload: PracticeSetGenerateReq
     if payload.subject_id not in allowed_subject_ids:
         raise ValueError("Student is not enrolled in this subject")
 
+    # --- ĐOẠN SỬA ĐỔI: Tìm class_id phù hợp với môn học được chọn ---
+    class_id = None
+    for item in my_subjects:
+        if item["subject_id"] == payload.subject_id:
+            # Truy cập theo cấu trúc lồng alias của Supabase "class:classes" -> "class_id"
+            class_id = item.get("class", {}).get("class_id")
+            break  # Lấy class_id đầu tiên tìm thấy phù hợp với môn học này
+
+    if not class_id:
+        raise ValueError("No matching class enrollment found for this subject")
+    # -------------------------------------------------------------
+
+    # Truyền thêm tham số class_id vào hàm con
     question_ids = await get_random_question_ids(
         subject_id=payload.subject_id,
         topic_id=payload.topic_id,
         difficulty=payload.difficulty,
-        limit=payload.num_questions
+        limit=payload.num_questions,
+        class_id=class_id  # <- Đã truyền class_id động vào đây
     )
     if not question_ids:
         raise ValueError("Not enough questions in bank for this criteria")

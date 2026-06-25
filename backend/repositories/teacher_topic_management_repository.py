@@ -10,6 +10,7 @@ async def list_teacher_documents_with_subjects(teacher_id: int) -> list[dict]:
         lambda: supabase.table("documents")
         .select("document_id,title")
         .eq("teacher_id", teacher_id)
+        .eq("status", "active")
         .is_("deleted_at", None)
         .order("document_id")
         .execute()
@@ -25,8 +26,8 @@ async def list_document_topics_with_topic(document_ids: list[int]) -> list[dict]
         lambda: supabase.table("document_topics")
         .select(
             "document_topic_id,document_id,topic_id,"
-            "topics(topic_id,topic_name,class_subject_id,"
-            "class_subjects(class_subject_id,class_id,subject_id,assigned_teacher_id,classes(class_id,class_name),subjects(subject_id,subject_name)))"
+            "topics(topic_id,topic_name,class_subject_id,deleted_at,"
+            "class_subjects(class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,classes(class_id,class_name),subjects(subject_id,subject_name)))"
         )
         .in_("document_id", document_ids)
         .is_("deleted_at", None)
@@ -43,6 +44,7 @@ async def find_teacher_document(document_id: int, teacher_id: int) -> dict | Non
         .select("document_id,teacher_id,title")
         .eq("document_id", document_id)
         .eq("teacher_id", teacher_id)
+        .eq("status", "active")
         .is_("deleted_at", None)
         .limit(1)
         .execute()

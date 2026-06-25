@@ -1,6 +1,11 @@
+import logging
 from math import ceil
 
 from middlewares.auth_middleware import CurrentUser
+from repositories.document_chunk_repository import (
+    create_document_chunks,
+    soft_delete_document_chunks_by_document_id,
+)
 from repositories.document_repository import (
     count_ai_requests_by_document,
     count_questions_by_document,
@@ -20,10 +25,15 @@ from repositories.document_topic_repository import (
     list_by_document_id,
     replace_topics_for_document,
 )
+from services.document_chunk_service import backfill_document_chunk_embeddings
 from repositories.subject_repository import find_subject_by_class_subject_id
 from schemas.document_schema import DocumentCreateRequest, DocumentUpdateRequest, DocumentUploadRequest
+from utils.document_chunking_util import build_document_chunks
+from utils.document_extract_util import extract_document_content_from_bytes
 from utils.hash_util import generate_sha256
 from utils.storage_util import upload_document_file
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentValidationError(ValueError):
@@ -93,7 +103,11 @@ async def _serialize_document(document: dict) -> dict:
     topic_rows = await list_by_document_id(document_id)
     topics = []
     class_subject_id: int | None = None
+    class_id: int | None = None
+    class_code: str | None = None
+    class_name: str | None = None
     subject_id: int | None = None
+    subject_code: str | None = None
     subject_name = "Unknown"
 
     for row in topic_rows:
@@ -101,14 +115,30 @@ async def _serialize_document(document: dict) -> dict:
         if class_subject_id is None and topic.get("class_subject_id"):
             class_subject_id = int(topic["class_subject_id"])
         class_subject = topic.get("class_subjects") or {}
+        class_ref = class_subject.get("classes") or {}
         subject_ref = class_subject.get("subjects") or {}
+        if class_id is None and class_subject.get("class_id") is not None:
+            class_id = int(class_subject["class_id"])
+        if class_code is None and class_ref.get("class_code"):
+            class_code = class_ref["class_code"]
+        if class_name is None and class_ref.get("class_name"):
+            class_name = class_ref["class_name"]
         if subject_id is None and class_subject.get("subject_id") is not None:
             subject_id = int(class_subject["subject_id"])
+        if subject_code is None and subject_ref.get("subject_code"):
+            subject_code = subject_ref["subject_code"]
         if subject_ref.get("subject_name"):
             subject_name = subject_ref["subject_name"]
         topics.append({
             "topic_id": int(row["topic_id"]),
             "topic_name": topic.get("topic_name"),
+            "class_subject_id": int(topic["class_subject_id"]) if topic.get("class_subject_id") is not None else None,
+            "class_id": int(class_subject["class_id"]) if class_subject.get("class_id") is not None else None,
+            "class_code": class_ref.get("class_code"),
+            "class_name": class_ref.get("class_name"),
+            "subject_id": int(class_subject["subject_id"]) if class_subject.get("subject_id") is not None else None,
+            "subject_code": subject_ref.get("subject_code"),
+            "subject_name": subject_ref.get("subject_name"),
         })
 
     ai_request_count, question_count = await _get_document_usage_counts(document_id)
@@ -117,10 +147,16 @@ async def _serialize_document(document: dict) -> dict:
         "document_id": document_id,
         "teacher_id": int(document["teacher_id"]),
         "class_subject_id": class_subject_id,
+        "class_id": class_id,
+        "class_code": class_code,
+        "class_name": class_name,
         "subject_id": subject_id,
+        "subject_code": subject_code,
+        "subject_name": subject_name,
         "subject": {
             "subject_id": subject_id,
             "subject_name": subject_name,
+            "subject_code": subject_code,
         },
         "title": document.get("title"),
         "description": document.get("description"),
@@ -140,6 +176,38 @@ async def _get_document_usage_counts(document_id: int) -> tuple[int, int]:
     ai_count = await count_ai_requests_by_document(document_id)
     question_count = await count_questions_by_document(document_id)
     return ai_count, question_count
+
+
+async def _refresh_document_chunks_best_effort(
+    *,
+    document_id: int,
+    file_bytes: bytes,
+    file_type: str,
+    replace_existing: bool,
+) -> None:
+    try:
+        extracted = extract_document_content_from_bytes(raw=file_bytes, file_type=file_type)
+        chunks = build_document_chunks(extracted)
+        if replace_existing:
+            await soft_delete_document_chunks_by_document_id(document_id)
+        if chunks:
+            created_chunks = await create_document_chunks(document_id=document_id, chunks=chunks)
+            if created_chunks:
+                try:
+                    await backfill_document_chunk_embeddings(document_id=document_id)
+                except Exception as embedding_exc:
+                    logger.warning(
+                        "Document chunk embeddings skipped; worker fallback will handle it | document_id=%s | error=%s",
+                        document_id,
+                        str(embedding_exc),
+                    )
+    except Exception as exc:
+        logger.warning(
+            "Document chunk refresh skipped; worker fallback will handle it | document_id=%s | replace_existing=%s | error=%s",
+            document_id,
+            replace_existing,
+            str(exc),
+        )
 
 
 async def create_document(payload: DocumentCreateRequest, current_user: CurrentUser) -> dict:
@@ -260,6 +328,7 @@ async def update_document(
             subject_id=target_class_subject_id,
             file_name=file_name or "document.txt",
             file_bytes=file_bytes,
+            file_content_type=file_content_type or "",
         )
         update_payload.update(
             {
@@ -276,6 +345,13 @@ async def update_document(
             raise ValueError("Document not found")
 
     await replace_topics_for_document(record_id, topic_ids)
+    if file_bytes is not None:
+        await _refresh_document_chunks_best_effort(
+            document_id=record_id,
+            file_bytes=file_bytes,
+            file_type=str(update_payload.get("file_type") or existing.get("file_type") or ""),
+            replace_existing=True,
+        )
 
     result = await get_document_by_id(record_id, current_user=current_user)
     ai_count = int(result.get("ai_request_count") or 0)
@@ -371,6 +447,7 @@ async def upload_teacher_document(
         subject_id=class_subject_id,
         file_name=file_name,
         file_bytes=file_bytes,
+        file_content_type=file_type,
     )
 
     created = await create_document_record(
@@ -387,6 +464,12 @@ async def upload_teacher_document(
     )
 
     await replace_topics_for_document(int(created["document_id"]), payload.topic_ids)
+    await _refresh_document_chunks_best_effort(
+        document_id=int(created["document_id"]),
+        file_bytes=file_bytes,
+        file_type=file_type,
+        replace_existing=False,
+    )
     enriched = await find_document_enriched_by_id(int(created["document_id"]))
     if not enriched:
         raise ValueError("Document not found")

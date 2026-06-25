@@ -23,7 +23,10 @@ async def find_document_enriched_by_id(record_id: int, include_deleted: bool = F
         supabase.table("documents")
         .select(
             "document_id,teacher_id,title,description,file_url,file_hash,file_type,file_size,status,created_at,updated_at,deleted_at,"
-            "document_topics(document_topic_id,topic_id,topics(topic_id,topic_name,class_subject_id,class_subjects(class_subject_id,class_id,subject_id,assigned_teacher_id,classes(class_id,class_name),subjects(subject_id,subject_name))))"
+            "document_topics(document_topic_id,topic_id,topics(topic_id,topic_name,class_subject_id,"
+            "class_subjects(class_subject_id,class_id,subject_id,assigned_teacher_id,"
+            "classes(class_id,class_code,class_name),"
+            "subjects(subject_id,subject_code,subject_name))))"
         )
         .eq("document_id", record_id)
     )

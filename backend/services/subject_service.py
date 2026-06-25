@@ -15,6 +15,7 @@ from repositories.subject_repository import (
     soft_delete_subject_by_id,
     update_subject_by_id,
 )
+from repositories.topic_repository import list_topics_by_class_subject_ids_unpaginated
 from schemas.subject_schema import SubjectCreateRequest, SubjectListQueryParams, SubjectUpdateRequest
 
 
@@ -36,6 +37,25 @@ class SubjectHasPracticeHistoryError(SubjectInUseError):
 
 def _is_admin(current_user: CurrentUser) -> bool:
     return "admin" in current_user.roles
+
+
+def _serialize_assignment_topic(item: dict) -> dict:
+    class_subject = item.get("class_subjects") or {}
+    class_ref = class_subject.get("classes") or {}
+    subject_ref = class_subject.get("subjects") or {}
+    return {
+        "topic_id": int(item["topic_id"]) if item.get("topic_id") is not None else None,
+        "class_subject_id": int(item["class_subject_id"]) if item.get("class_subject_id") is not None else None,
+        "topic_name": item.get("topic_name"),
+        "description": item.get("description"),
+        "class_id": int(class_subject["class_id"]) if class_subject.get("class_id") is not None else None,
+        "class_code": class_ref.get("class_code"),
+        "class_name": class_ref.get("class_name"),
+        "subject_id": int(class_subject["subject_id"]) if class_subject.get("subject_id") is not None else None,
+        "subject_code": subject_ref.get("subject_code"),
+        "subject_name": subject_ref.get("subject_name"),
+        "assigned_teacher_id": int(class_subject["assigned_teacher_id"]) if class_subject.get("assigned_teacher_id") is not None else None,
+    }
 
 
 async def _ensure_subject_access(subject_id: int, current_user: CurrentUser) -> None:
@@ -90,6 +110,31 @@ async def get_subjects(params: SubjectListQueryParams, current_user: CurrentUser
             sort_by=params.sort_by,
             sort_order=params.sort_order,
         )
+        if params.include_topics:
+            class_subject_ids = [
+                int(item["class_subject_id"])
+                for item in items
+                if item.get("class_subject_id") is not None
+            ]
+            topic_rows = await list_topics_by_class_subject_ids_unpaginated(class_subject_ids=class_subject_ids)
+            topics_by_class_subject_id: dict[int, list[dict]] = {}
+            for topic_row in topic_rows:
+                class_subject_id = int(topic_row["class_subject_id"]) if topic_row.get("class_subject_id") is not None else None
+                if class_subject_id is None:
+                    continue
+                topics_by_class_subject_id.setdefault(class_subject_id, []).append(
+                    _serialize_assignment_topic(topic_row)
+                )
+
+            items = [
+                {
+                    **item,
+                    "topics": topics_by_class_subject_id.get(int(item["class_subject_id"]), []),
+                }
+                if item.get("class_subject_id") is not None
+                else {**item, "topics": []}
+                for item in items
+            ]
     total_pages = ceil(total / params.limit) if total > 0 else 1
     return {
         "items": items,

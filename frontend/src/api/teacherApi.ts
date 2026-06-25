@@ -422,6 +422,7 @@ export const deleteResource = async (id: number | string): Promise<{ success: bo
  * GET /teacher/stats
  */
 export interface GetTeacherStatsParams {
+  classSubjectId?: number;
   subjectId?: number;
   topicId?: number;
   debug?: boolean;
@@ -429,6 +430,9 @@ export interface GetTeacherStatsParams {
 
 export const getTeacherStats = async (params: GetTeacherStatsParams = {}): Promise<TeacherStatsData> => {
   const query: Record<string, string> = {};
+  if (params.classSubjectId) {
+    query.class_subject_id = String(params.classSubjectId);
+  }
   if (params.subjectId) {
     query.subject_id = String(params.subjectId);
   }

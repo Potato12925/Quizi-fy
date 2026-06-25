@@ -6,14 +6,32 @@ import {
   createTopicForTeacherSubject,
   getTeacherSubjectsWithTopics,
   softDeleteTeacherSubjectTopic,
-  type SubjectWithTopicsViewModel,
+  type TeacherClassSubjectItem,
   type TeacherTopicItem,
   updateTeacherSubjectTopic,
 } from '@/api/teacherTopicManagementApi';
 
+const formatAssignmentPart = (code?: string | null, name?: string | null) =>
+  [code, name].filter(Boolean).join(' / ');
+
+const formatSubjectAssignment = (subject: TeacherClassSubjectItem) => {
+  const subjectLabel = formatAssignmentPart(subject.subject_code, subject.subject_name);
+  const classLabel = formatAssignmentPart(subject.class_code, subject.class_name);
+
+  if (subjectLabel && classLabel) {
+    return `${subjectLabel} - ${classLabel}`;
+  }
+
+  return subjectLabel || classLabel || subject.subject_name;
+};
+
+const formatSubjectAssignmentDetail = (subject: TeacherClassSubjectItem) =>
+  [subject.subject_name, subject.class_name].filter(Boolean).join(' | ');
+
 export default function TeacherSubjectsPage() {
-  const [subjects, setSubjects] = useState<SubjectWithTopicsViewModel[]>([]);
-  const [activeSubjectId, setActiveSubjectId] = useState<number | null>(null);
+  const [subjects, setSubjects] = useState<TeacherClassSubjectItem[]>([]);
+  const [activeClassSubjectId, setActiveClassSubjectId] = useState<number | null>(null);
+  const [selectedClassId, setSelectedClassId] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -35,14 +53,14 @@ export default function TeacherSubjectsPage() {
     try {
       const data = await getTeacherSubjectsWithTopics();
       setSubjects(data);
-      setActiveSubjectId((prev) => {
+      setActiveClassSubjectId((prev) => {
         if (!data.length) {
           return null;
         }
-        if (prev && data.some((subject) => subject.subject_id === prev)) {
+        if (prev && data.some((subject) => subject.class_subject_id === prev)) {
           return prev;
         }
-        return data[0].subject_id;
+        return data[0].class_subject_id;
       });
     } catch {
       setError('Không thể tải danh sách môn học và chủ đề. Vui lòng thử lại.');
@@ -55,14 +73,53 @@ export default function TeacherSubjectsPage() {
     fetchData();
   }, []);
 
+  const classOptions = useMemo(() => {
+    const classMap = new Map<number, { class_id: number; class_code?: string | null; class_name?: string | null }>();
+
+    for (const subject of subjects) {
+      if (!subject.class_id || classMap.has(subject.class_id)) {
+        continue;
+      }
+
+      classMap.set(subject.class_id, {
+        class_id: subject.class_id,
+        class_code: subject.class_code,
+        class_name: subject.class_name,
+      });
+    }
+
+    return Array.from(classMap.values());
+  }, [subjects]);
+
+  const visibleSubjects = useMemo(() => {
+    if (selectedClassId === 'all') {
+      return subjects;
+    }
+
+    return subjects.filter((subject) => String(subject.class_id) === selectedClassId);
+  }, [selectedClassId, subjects]);
+
+  useEffect(() => {
+    if (!visibleSubjects.length) {
+      setActiveClassSubjectId(null);
+      return;
+    }
+
+    if (activeClassSubjectId && visibleSubjects.some((subject) => subject.class_subject_id === activeClassSubjectId)) {
+      return;
+    }
+
+    setActiveClassSubjectId(visibleSubjects[0].class_subject_id);
+  }, [activeClassSubjectId, visibleSubjects]);
+
   const activeSubject = useMemo(
-    () => subjects.find((subject) => subject.subject_id === activeSubjectId) || null,
-    [subjects, activeSubjectId],
+    () => visibleSubjects.find((subject) => subject.class_subject_id === activeClassSubjectId) || null,
+    [visibleSubjects, activeClassSubjectId],
   );
 
   const totalTopics = useMemo(
-    () => subjects.reduce((sum, subject) => sum + subject.topics.length, 0),
-    [subjects],
+    () => visibleSubjects.reduce((sum, subject) => sum + subject.topics.length, 0),
+    [visibleSubjects],
   );
 
   const handleCreateTopic = async (event: React.FormEvent) => {
@@ -77,8 +134,7 @@ export default function TeacherSubjectsPage() {
       setFormError('Vui lòng chọn môn học trước khi tạo chủ đề.');
       return;
     }
-    const classSubjectId = activeSubject.class_subject_id ?? activeSubject.topics[0]?.class_subject_id;
-    if (!classSubjectId) {
+    if (!activeSubject.class_subject_id) {
       setFormError('Không xác định được lớp-môn cho môn này. Vui lòng liên hệ admin để kiểm tra phân công.');
       return;
     }
@@ -86,7 +142,7 @@ export default function TeacherSubjectsPage() {
     setIsSubmitting(true);
     setFormError('');
     try {
-      await createTopicForTeacherSubject(classSubjectId, {
+      await createTopicForTeacherSubject(activeSubject.class_subject_id, {
         topic_name: trimmedName,
         description: topicDescription.trim() || undefined,
       });
@@ -193,39 +249,70 @@ export default function TeacherSubjectsPage() {
 
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-4">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Môn học của bạn</h3>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Môn học của bạn</h3>
+            <select
+              value={selectedClassId}
+              onChange={(event) => setSelectedClassId(event.target.value)}
+              className="px-4 py-3 rounded-2xl bg-slate-50 border-none text-[10px] font-black uppercase tracking-widest text-slate-500"
+            >
+              <option value="all">Tất cả lớp</option>
+              {classOptions.map((item) => (
+                <option key={item.class_id} value={String(item.class_id)}>
+                  {item.class_code || item.class_name || `Lớp ${item.class_id}`}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="space-y-2">
-            {subjects.map((subject) => (
-              <button
-                key={subject.subject_id}
-                onClick={() => setActiveSubjectId(subject.subject_id)}
-                className={`w-full p-6 rounded-3xl border-2 transition-all text-left flex justify-between items-center group ${
-                  activeSubjectId === subject.subject_id
-                    ? 'border-[#b20112] bg-red-50/20 shadow-lg shadow-red-900/5'
-                    : 'border-slate-50 bg-white hover:border-slate-200'
-                }`}
-              >
-                <div>
-                  <p className={`text-sm font-black transition-colors ${activeSubjectId === subject.subject_id ? 'text-[#b20112]' : 'text-slate-600'}`}>
-                    {subject.subject_name}
-                  </p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{subject.topics.length} chủ đề</p>
-                </div>
-                <span
-                  className={`material-symbols-outlined text-xl transition-all ${
-                    activeSubjectId === subject.subject_id ? 'text-[#b20112] translate-x-1' : 'text-slate-200 opacity-0 group-hover:opacity-100'
-                  }`}
-                >
-                  chevron_right
-                </span>
-              </button>
-            ))}
+            {!visibleSubjects.length ? (
+              <div className="border-2 border-dashed border-slate-100 rounded-3xl p-8 text-center">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Không có môn học nào trong lớp đã chọn
+                </p>
+              </div>
+            ) : (
+              visibleSubjects.map((subject) => {
+                const isActive = activeClassSubjectId === subject.class_subject_id;
+                const detailText = formatSubjectAssignmentDetail(subject);
+
+                return (
+                  <button
+                    key={subject.class_subject_id ?? subject.subject_id}
+                    onClick={() => setActiveClassSubjectId(subject.class_subject_id)}
+                    className={`w-full p-6 rounded-3xl border-2 transition-all text-left flex justify-between items-center group ${
+                      isActive
+                        ? 'border-[#b20112] bg-red-50/20 shadow-lg shadow-red-900/5'
+                        : 'border-slate-50 bg-white hover:border-slate-200'
+                    }`}
+                  >
+                    <div>
+                      <p className={`text-sm font-black transition-colors ${isActive ? 'text-[#b20112]' : 'text-slate-600'}`}>
+                        {formatSubjectAssignment(subject)}
+                      </p>
+                      {detailText && (
+                        <p className="mt-1 text-[10px] font-bold text-slate-400">{detailText}</p>
+                      )}
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{subject.topics.length} chủ đề</p>
+                    </div>
+                    <span
+                      className={`material-symbols-outlined text-xl transition-all ${
+                        isActive ? 'text-[#b20112] translate-x-1' : 'text-slate-200 opacity-0 group-hover:opacity-100'
+                      }`}
+                    >
+                      chevron_right
+                    </span>
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
 
         <div className="space-y-6 lg:col-span-8">
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-            Chủ đề của {activeSubject?.subject_name || 'môn học'}
+            Chủ đề của {activeSubject ? formatSubjectAssignment(activeSubject) : 'môn học'}
           </h3>
 
           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
@@ -272,7 +359,7 @@ export default function TeacherSubjectsPage() {
             <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
               <div className="flex flex-wrap gap-3">
                 {activeSubject.topics.map((topic) => (
-                  <div key={`${activeSubject.subject_id}-${topic.topic_id}`} className="flex items-center gap-2 px-3 py-2 border rounded-xl bg-slate-50 border-slate-100">
+                  <div key={topic.topic_id} className="flex items-center gap-2 px-3 py-2 border rounded-xl bg-slate-50 border-slate-100">
                     <div>
                       <p className="text-xs font-bold text-slate-700">{topic.topic_name}</p>
                       {topic.description && <p className="text-[10px] font-medium text-slate-400 mt-1">{topic.description}</p>}

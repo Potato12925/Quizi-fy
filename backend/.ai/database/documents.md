@@ -25,8 +25,10 @@ Stores uploaded source documents used for AI question generation.
 
 - `teacher_id -> users.user_id`
 - `document_topics.document_id -> documents.document_id`
+- `document_chunks.document_id -> documents.document_id`
 
 ## Notes
 
 - This is a soft-delete table.
 - Topic linkage is many-to-many through `document_topics`.
+- RAG chunk records are versioned in `document_chunks`.

@@ -10,8 +10,8 @@ QUESTION_SELECT = (
     "question_options(option_id,option_label,option_text,is_correct,order_num),"
     "topics!questions_topic_id_fkey(topic_id,topic_name,class_subject_id,deleted_at,"
     "class_subjects!topics_class_subject_id_fkey(class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
-    "classes!class_subjects_class_id_fkey(class_id,class_name,status,deleted_at),"
-    "subjects!class_subjects_subject_id_fkey(subject_id,subject_name,status,deleted_at)"
+    "classes!class_subjects_class_id_fkey(class_id,class_code,class_name,status,deleted_at),"
+    "subjects!class_subjects_subject_id_fkey(subject_id,subject_code,subject_name,status,deleted_at)"
     ")),"
     "ai_requests!questions_ai_request_id_fkey(request_id,document_topic_id,"
     "document_topics!ai_requests_document_topic_id_fkey(document_topic_id,document_id,topic_id,"
@@ -29,8 +29,8 @@ async def list_teacher_topic_options(
         .select(
             "topic_id,topic_name,class_subject_id,deleted_at,"
             "class_subjects!topics_class_subject_id_fkey!inner(class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
-            "classes!class_subjects_class_id_fkey!inner(class_id,class_name,status,deleted_at),"
-            "subjects!class_subjects_subject_id_fkey!inner(subject_id,subject_name,status,deleted_at))"
+            "classes!class_subjects_class_id_fkey!inner(class_id,class_code,class_name,status,deleted_at),"
+            "subjects!class_subjects_subject_id_fkey!inner(subject_id,subject_code,subject_name,status,deleted_at))"
         )
         .eq("class_subjects.assigned_teacher_id", teacher_id)
         .is_("deleted_at", None)
@@ -62,13 +62,18 @@ async def list_teacher_document_topic_options(
             "documents!inner(document_id,title,file_type,file_size,status,created_at,teacher_id,deleted_at),"
             "topics!inner(topic_id,topic_name,class_subject_id,deleted_at,"
             "class_subjects!topics_class_subject_id_fkey!inner(class_subject_id,class_id,subject_id,assigned_teacher_id,status,deleted_at,"
-            "classes!class_subjects_class_id_fkey!inner(class_id,class_name,status,deleted_at),"
-            "subjects!class_subjects_subject_id_fkey!inner(subject_id,subject_name,status,deleted_at)))"
+            "classes!class_subjects_class_id_fkey!inner(class_id,class_code,class_name,status,deleted_at),"
+            "subjects!class_subjects_subject_id_fkey!inner(subject_id,subject_code,subject_name,status,deleted_at)))"
         )
-        .eq("documents.teacher_id", teacher_id)
+        .is_("deleted_at", None)
         .eq("documents.status", "active")
         .is_("documents.deleted_at", None)
         .is_("topics.deleted_at", None)
+        .eq("topics.class_subjects.assigned_teacher_id", teacher_id)
+        .eq("topics.class_subjects.status", "active")
+        .is_("topics.class_subjects.deleted_at", None)
+        .eq("topics.class_subjects.classes.status", "active")
+        .is_("topics.class_subjects.classes.deleted_at", None)
         .eq("topics.class_subjects.subjects.status", "active")
         .is_("topics.class_subjects.subjects.deleted_at", None)
     )
@@ -105,6 +110,10 @@ async def list_teacher_questions(
         .eq("teacher_id", teacher_id)
         .in_("topic_id", topic_ids)
         .is_("deleted_at", None)
+        .eq("topics.class_subjects.assigned_teacher_id", teacher_id)
+        .eq("topics.class_subjects.status", "active")
+        .is_("topics.class_subjects.deleted_at", None)
+        .is_("topics.deleted_at", None)
     )
 
     if difficulty:
@@ -128,6 +137,10 @@ async def find_teacher_question_by_id(question_id: int, teacher_id: int) -> dict
         .eq("question_id", question_id)
         .eq("teacher_id", teacher_id)
         .is_("deleted_at", None)
+        .eq("topics.class_subjects.assigned_teacher_id", teacher_id)
+        .eq("topics.class_subjects.status", "active")
+        .is_("topics.class_subjects.deleted_at", None)
+        .is_("topics.deleted_at", None)
         .limit(1)
         .execute()
     )

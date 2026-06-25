@@ -213,6 +213,7 @@ class AiGeneratedQuestionPayload(BaseModel):
     explanation: str = Field(min_length=1)
     options: list[str] = Field(min_length=4, max_length=4)
     correct_option: Literal["A", "B", "C", "D"]
+    source_chunk_indexes: list[int] = Field(default_factory=list)
 
     @field_validator("content", "explanation")
     @classmethod
@@ -238,6 +239,14 @@ class AiGeneratedQuestionPayload(BaseModel):
         if value not in QUESTION_DIFFICULTIES:
             raise ValueError("difficulty is invalid")
         return value
+
+    @field_validator("source_chunk_indexes")
+    @classmethod
+    def validate_source_chunk_indexes(cls, value: list[int]) -> list[int]:
+        normalized = list(dict.fromkeys(int(item) for item in value if int(item) > 0))
+        if len(normalized) != len(value):
+            raise ValueError("source_chunk_indexes must contain unique positive integers")
+        return normalized
 
 
 class AiGeneratedQuestionsResponsePayload(BaseModel):

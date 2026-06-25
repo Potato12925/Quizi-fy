@@ -7,20 +7,40 @@ interface ApiEnvelope<T> {
   meta?: Record<string, unknown> | null;
 }
 
+interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+}
+
 export type DifficultyLevel = 'recognition' | 'comprehension' | 'application' | 'advanced';
 export type AiRequestStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 export type QuestionStatus = 'draft' | 'approved' | 'inactive' | 'rejected';
 
-export interface TeacherAssignedSubject {
+export interface TeacherAssignedClassSubject {
+  class_subject_id: number;
+  class_id: number;
+  class_code?: string | null;
+  class_name?: string | null;
   subject_id: number;
-  subject_code: string;
+  subject_code?: string | null;
   subject_name: string;
+  status?: string | null;
+  assigned_teacher_id?: number | null;
 }
+
+export type TeacherAssignedSubject = TeacherAssignedClassSubject;
 
 export interface TeacherTopicItem {
   topic_id: number;
   class_subject_id: number;
+  class_id?: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
   subject_id: number;
+  subject_code?: string | null;
+  subject_name?: string | null;
   topic_name: string;
 }
 
@@ -35,7 +55,11 @@ export interface TeacherDocumentTopicOption {
   topic_id: number;
   topic_name: string;
   class_subject_id: number;
+  class_id?: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
   subject_id: number;
+  subject_code?: string | null;
   subject_name: string;
 }
 
@@ -89,7 +113,11 @@ export interface TeacherAiQuestionItem {
   topic_id: number;
   topic_name: string;
   class_subject_id: number;
+  class_id?: number | null;
+  class_code?: string | null;
+  class_name?: string | null;
   subject_id: number;
+  subject_code?: string | null;
   subject_name: string;
   options: TeacherAiQuestionOption[];
 }
@@ -130,16 +158,55 @@ export interface TeacherAiRequestConfirmReviewResult {
   updated_count: number;
 }
 
-export const getTeacherAssignedSubjects = async (): Promise<TeacherAssignedSubject[]> => {
-  const res = await api.get<ApiEnvelope<TeacherAssignedSubject[]>>('/subjects', {
-    params: { page: '1', limit: '100' },
+const fetchAllPaginated = async <T>(
+  endpoint: string,
+  limit: number,
+  params: Record<string, string> = {},
+): Promise<T[]> => {
+  let page = 1;
+  let totalPages = 1;
+  const items: T[] = [];
+
+  while (page <= totalPages) {
+    const res = await api.get<ApiEnvelope<T[]>>(endpoint, {
+      params: {
+        page: String(page),
+        limit: String(limit),
+        ...params,
+      },
+    });
+    items.push(...(res.data || []));
+    totalPages = Math.max(Number((res.meta as PaginationMeta | null | undefined)?.total_pages || 1), 1);
+    page += 1;
+  }
+
+  return items;
+};
+
+export const getTeacherAssignedSubjects = async (): Promise<TeacherAssignedClassSubject[]> => {
+  return fetchAllPaginated<TeacherAssignedClassSubject>('/subjects', 200);
+};
+
+export const getTeacherTopicsByClassSubjectId = async (classSubjectId: number): Promise<TeacherTopicItem[]> => {
+  return fetchAllPaginated<TeacherTopicItem>('/topics', 200, {
+    class_subject_id: String(classSubjectId),
   });
-  return res.data || [];
 };
 
 export const getTeacherTopicsBySubjectId = async (subjectId: number): Promise<TeacherTopicItem[]> => {
-  const res = await api.get<ApiEnvelope<TeacherTopicItem[]>>('/topics', {
-    params: { page: '1', limit: '200', subject_id: String(subjectId) },
+  return fetchAllPaginated<TeacherTopicItem>('/topics', 200, {
+    subject_id: String(subjectId),
+  });
+};
+
+export const getTeacherDocumentsByClassSubjectTopic = async (
+  classSubjectId: number,
+  topicId?: number,
+): Promise<TeacherDocumentTopicOption[]> => {
+  const params: Record<string, string> = { class_subject_id: String(classSubjectId) };
+  if (topicId) params.topic_id = String(topicId);
+  const res = await api.get<ApiEnvelope<TeacherDocumentTopicOption[]>>('/teacher/question-bank/document-topic-options', {
+    params,
   });
   return res.data || [];
 };

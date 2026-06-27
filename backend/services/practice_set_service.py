@@ -76,7 +76,7 @@ async def generate_practice_set(student_id: int, payload: PracticeSetGenerateReq
         "subject_id": payload.subject_id,
         "topic_id": payload.topic_id,
         "difficulty": payload.difficulty if payload.difficulty != "mix" else None,
-        "time_limit_minutes": payload.time_limit_minutes,
+        "time_limit_minutes": len(question_ids),
         "num_questions_requested": payload.num_questions,
         "num_questions_actual": len(question_ids),
         "prioritize_unanswered": payload.prioritize_unanswered

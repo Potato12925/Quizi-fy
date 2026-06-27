@@ -67,8 +67,8 @@ async def send_student_ai_chat_message(student_id: int, message: str) -> dict:
         logger.warning("Student AI chat OpenAI answer generation failed: %s", exc)
         is_fallback = True
         answer = (
-            "M\u00ecnh \u0111\u00e3 l\u1ea5y \u0111\u01b0\u1ee3c d\u1eef li\u1ec7u h\u1ecdc t\u1eadp c\u1ee7a b\u1ea1n nh\u01b0ng hi\u1ec7n ch\u01b0a th\u1ec3 k\u1ebft n\u1ed1i AI \u0111\u1ec3 ph\u00e2n t\u00edch chi ti\u1ebft. "
-            "B\u1ea1n h\u00e3y th\u1eed l\u1ea1i sau \u00edt ph\u00fat nh\u00e9."
+            "Mình đã lấy được dữ liệu học tập của bạn nhưng hiện chưa thể kết nối AI để phân tích chi tiết. "
+            "Bạn hãy thử lại sau ít phút nhé."
         )
 
     if not is_fallback:
